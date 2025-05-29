@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="jumbotron bg-light p-5 rounded">
+            <h1 class="display-4">Welcome to Tender Management System</h1>
+            <p class="lead">Streamline your procurement processes with our comprehensive tender management platform.</p>
+            <hr class="my-4">
+            <p>Manage tenders, track progress, and collaborate with vendors efficiently.</p>
+            {% if not session.user_id %}
+                <a class="btn btn-primary btn-lg" href="{{ url_for('login') }}" role="button">
+                    <i class="fas fa-sign-in-alt"></i> Login to Your Account
+                </a>
+            {% else %}
+                <a class="btn btn-success btn-lg" href="{{ url_for('dashboard') }}" role="button">
+                    <i class="fas fa-tachometer-alt"></i> Go to Dashboard
+                </a>
+            {% endif %}
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-building fa-3x text-primary mb-3"></i>
+                        <h5 class="card-title">Multi-Tenant</h5>
+                        <p class="card-text">Support for multiple companies with isolated data and user management.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-users fa-3x text-success mb-3"></i>
+                        <h5 class="card-title">Role Management</h5>
+                        <p class="card-text">Comprehensive role-based access control for different user types.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-line fa-3x text-info mb-3"></i>
+                        <h5 class="card-title">Progress Tracking</h5>
+                        <p class="card-text">Monitor tender progress and manage procurement workflows.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

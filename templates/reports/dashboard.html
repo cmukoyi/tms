@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Reports & Analytics - Tender Management System{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Reports & Analytics</h2>
+    <div>
+        <a href="{{ url_for('tender_reports') }}" class="btn btn-outline-primary">
+            <i class="fas fa-chart-line"></i> Detailed Reports
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    {% if is_super_admin %}
+    <!-- Super Admin Summary -->
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <i class="fas fa-building fa-2x text-primary mb-2"></i>
+                <h4 class="text-primary">{{ company_count }}</h4>
+                <p class="text-muted mb-0">Total Companies</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-2x text-info mb-2"></i>
+                <h4 class="text-info">{{ user_count }}</h4>
+                <p class="text-muted mb-0">Total Users</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <i class="fas fa-clipboard-list fa-2x text-success mb-2"></i>
+                <h4 class="text-success">{{ tender_stats.total_tenders if tender_stats else 0 }}</h4>
+                <p class="text-muted mb-0">Total Tenders</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-bar fa-2x text-warning mb-2"></i>
+                <h4 class="text-warning">{{ tender_stats.status_breakdown|length if tender_stats and tender_stats.status_breakdown else 0 }}</h4>
+                <p class="text-muted mb-0">Active Statuses</p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Company Admin Summary -->
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-2x text-primary mb-2"></i>
+                <h4 class="text-primary">{{ company_stats.total_users if company_stats else 0 }}</h4>
+                <p class="text-muted mb-0">Company Users</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <i class="fas fa-user-check fa-2x text-success mb-2"></i>
+                <h4 class="text-success">{{ company_stats.active_users if company_stats else 0 }}</h4>
+                <p class="text-muted mb-0">Active Users</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <i class="fas fa-clipboard-list fa-2x text-info mb-2"></i>
+                <h4 class="text-info">{{ tender_stats.total_tenders if tender_stats else 0 }}</h4>
+                <p class="text-muted mb-0">Total Tenders</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <i class="fas fa-tasks fa-2x text-warning mb-2"></i>
+                <h4 class="text-warning">{{ company_stats.admins if company_stats else 0 }}</h4>
+                <p class="text-muted mb-0">Admin Users</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Charts Row -->
+<div class="row">
+    <!-- Tender Status Breakdown -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-pie"></i> Tender Status Breakdown
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if tender_stats and tender_stats.status_breakdown %}
+                <canvas id="statusChart" width="400" height="200"></canvas>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No tender data available</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('create_tender') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create New Tender
+                    </a>
+                    <a href="{{ url_for('tenders') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-list"></i> View All Tenders
+                    </a>
+                    <a href="{{ url_for('tender_reports') }}" class="btn btn-outline-info">
+                        <i class="fas fa-chart-line"></i> Detailed Tender Reports
+                    </a>
+                    {% if session.is_super_admin %}
+                    <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-building"></i> Manage Companies
+                    </a>
+                    <a href="{{ url_for('admin_custom_fields') }}" class="btn btn-outline-warning">
+                        <i class="fas fa-cogs"></i> Manage Custom Fields
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity / Statistics Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-list-alt"></i> Tender Status Summary
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if tender_stats and tender_stats.status_breakdown %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Status</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                                <th>Visual</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for status in tender_stats.status_breakdown %}
+                            <tr>
+                                <td>
+                                    <span class="badge" style="background-color: {{ status.color }}; color: white;">
+                                        {{ status.name }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <strong>{{ status.count }}</strong>
+                                </td>
+                                <td>
+                                    {{ "%.1f"|format((status.count / tender_stats.total_tenders * 100)) }}%
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 8px;">
+                                        <div class="progress-bar" 
+                                             style="width: {{ (status.count / tender_stats.total_tenders * 100) }}%; background-color: {{ status.color }};">
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Tender Data</h5>
+                    <p class="text-muted">Create some tenders to see analytics and reports here.</p>
+                    <a href="{{ url_for('create_tender') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create First Tender
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.border-primary { border-color: #007bff !important; }
+.border-success { border-color: #28a745 !important; }
+.border-info { border-color: #17a2b8 !important; }
+.border-warning { border-color: #ffc107 !important; }
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.progress {
+    background-color: #e9ecef;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-info:hover,
+.btn-outline-secondary:hover,
+.btn-outline-warning:hover {
+    color: white;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% if tender_stats and tender_stats.status_breakdown %}
+    // Status Breakdown Chart
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    const statusData = {
+        labels: [{% for status in tender_stats.status_breakdown %}'{{ status.name }}'{% if not loop.last %},{% endif %}{% endfor %}],
+        datasets: [{
+            data: [{% for status in tender_stats.status_breakdown %}{{ status.count }}{% if not loop.last %},{% endif %}{% endfor %}],
+            backgroundColor: [{% for status in tender_stats.status_breakdown %}'{{ status.color }}'{% if not loop.last %},{% endif %}{% endfor %}],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    };
+
+    new Chart(statusCtx, {
+        type: 'doughnut',
+        data: statusData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+});
+</script>
+{% endblock %}

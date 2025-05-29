@@ -1,0 +1,471 @@
+<!-- Audit Trail Tab Content -->
+<div class="tab-pane fade" id="audit-trail" role="tabpanel" aria-labelledby="audit-trail-tab">
+    <div class="terminal-container">
+        <div class="terminal-header">
+            <div class="terminal-controls">
+                <span class="terminal-control close"></span>
+                <span class="terminal-control minimize"></span>
+                <span class="terminal-control maximize"></span>
+            </div>
+            <div class="terminal-title">
+                <i class="fas fa-terminal"></i> Tender Audit Trail - {{ tender.reference_number }}
+            </div>
+        </div>
+        
+        <div class="terminal-body" id="auditTerminal">
+            <div class="terminal-prompt-line">
+                <span class="terminal-prompt">system@tender-mgmt:~$</span>
+                <span class="terminal-command">tail -f /var/log/tender/{{ tender.reference_number }}.log</span>
+            </div>
+            
+            {% if tender.history_entries %}
+                {% for history in tender.history_entries %}
+                <div class="terminal-log-entry" data-action-type="{{ history.action_type }}">
+                    <span class="log-timestamp">[{{ history.created_at.strftime('%Y-%m-%d %H:%M:%S') }}]</span>
+                    <span class="log-level log-level-{{ history.action_type.split('_')[0].lower() }}">
+                        {% if history.action_type.startswith('TENDER_CREATED') %}INFO{% endif %}
+                        {% if history.action_type.startswith('TENDER_UPDATED') %}WARN{% endif %}
+                        {% if history.action_type.startswith('TENDER_DELETED') %}ERROR{% endif %}
+                        {% if history.action_type.startswith('NOTE_') %}INFO{% endif %}
+                        {% if history.action_type.startswith('DOCUMENT_') %}INFO{% endif %}
+                    </span>
+                    <span class="log-user">[{{ history.performed_by.username if history.performed_by else 'system' }}]</span>
+                    <span class="log-action">{{ history.action_type }}</span>
+                    <span class="log-message">{{ history.action_description }}</span>
+                    {% if history.ip_address %}
+                    <span class="log-ip">from {{ history.ip_address }}</span>
+                    {% endif %}
+                </div>
+                
+                {% if history.details %}
+                <div class="terminal-details">
+                    <span class="details-marker">├─ Details:</span>
+                    {% for key, value in history.details.items() %}
+                    <div class="detail-line">
+                        <span class="details-marker">│  </span>
+                        <span class="detail-key">{{ key }}:</span>
+                        <span class="detail-value">
+                            {% if value is string and value|length > 100 %}
+                                {{ value[:100] }}...
+                            {% else %}
+                                {{ value }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% endfor %}
+                    <div class="detail-separator">
+                        <span class="details-marker">└─</span>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            {% else %}
+                <div class="terminal-log-entry">
+                    <span class="log-timestamp">[{{ tender.created_at.strftime('%Y-%m-%d %H:%M:%S') }}]</span>
+                    <span class="log-level log-level-info">INFO</span>
+                    <span class="log-user">[system]</span>
+                    <span class="log-action">SYSTEM_MESSAGE</span>
+                    <span class="log-message">No audit trail entries found for this tender</span>
+                </div>
+            {% endif %}
+            
+            <!-- Live cursor -->
+            <div class="terminal-cursor-line">
+                <span class="terminal-prompt">system@tender-mgmt:~$</span>
+                <span class="terminal-cursor">█</span>
+            </div>
+        </div>
+        
+        <div class="terminal-footer">
+            <div class="terminal-stats">
+                <span class="stat-item">
+                    <i class="fas fa-list"></i> 
+                    {{ tender.history_entries|length if tender.history_entries else 0 }} entries
+                </span>
+                <span class="stat-item">
+                    <i class="fas fa-clock"></i> 
+                    Last: {{ tender.history_entries[0].created_at.strftime('%H:%M:%S') if tender.history_entries else 'N/A' }}
+                </span>
+                <span class="stat-item">
+                    <i class="fas fa-user"></i> 
+                    {{ tender.history_entries|map(attribute='performed_by.username')|unique|list|length if tender.history_entries else 0 }} users
+                </span>
+            </div>
+            <div class="terminal-controls-right">
+                <button type="button" class="btn btn-terminal btn-sm" onclick="scrollToBottom()">
+                    <i class="fas fa-arrow-down"></i> Scroll to Bottom
+                </button>
+                <button type="button" class="btn btn-terminal btn-sm" onclick="refreshAuditTrail()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button type="button" class="btn btn-terminal btn-sm" onclick="exportAuditLog()">
+                    <i class="fas fa-download"></i> Export Log
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.terminal-container {
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    font-family: 'Courier New', 'Monaco', 'Lucida Console', monospace;
+    margin: 20px 0;
+}
+
+.terminal-header {
+    background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #333;
+}
+
+.terminal-controls {
+    display: flex;
+    gap: 8px;
+    margin-right: 16px;
+}
+
+.terminal-control {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.terminal-control.close {
+    background-color: #ff5f57;
+}
+
+.terminal-control.minimize {
+    background-color: #ffbd2e;
+}
+
+.terminal-control.maximize {
+    background-color: #28ca42;
+}
+
+.terminal-title {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.terminal-body {
+    background-color: #000000;
+    color: #00ff00;
+    padding: 20px;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.terminal-prompt-line {
+    margin-bottom: 15px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+}
+
+.terminal-prompt {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+.terminal-command {
+    color: #ffffff;
+    margin-left: 8px;
+}
+
+.terminal-log-entry {
+    margin-bottom: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    padding: 2px 0;
+    transition: background-color 0.2s ease;
+}
+
+.terminal-log-entry:hover {
+    background-color: rgba(0, 255, 0, 0.05);
+    border-radius: 3px;
+}
+
+.log-timestamp {
+    color: #666666;
+    margin-right: 8px;
+    min-width: 150px;
+    flex-shrink: 0;
+}
+
+.log-level {
+    margin-right: 8px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 11px;
+    min-width: 45px;
+    text-align: center;
+}
+
+.log-level-info {
+    background-color: #0066cc;
+    color: #ffffff;
+}
+
+.log-level-warn {
+    background-color: #ff8c00;
+    color: #ffffff;
+}
+
+.log-level-error {
+    background-color: #dc3545;
+    color: #ffffff;
+}
+
+.log-user {
+    color: #ffff00;
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+.log-action {
+    color: #ff6b6b;
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+.log-message {
+    color: #ffffff;
+    flex: 1;
+}
+
+.log-ip {
+    color: #888888;
+    font-style: italic;
+    margin-left: 8px;
+    font-size: 11px;
+}
+
+.terminal-details {
+    margin-left: 160px;
+    margin-bottom: 8px;
+    color: #888888;
+    font-size: 12px;
+}
+
+.details-marker {
+    color: #666666;
+    margin-right: 6px;
+}
+
+.detail-line {
+    margin-left: 10px;
+}
+
+.detail-key {
+    color: #00ccff;
+    margin-right: 6px;
+}
+
+.detail-value {
+    color: #cccccc;
+}
+
+.detail-separator {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.terminal-cursor-line {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+}
+
+.terminal-cursor {
+    color: #00ff00;
+    animation: blink 1s infinite;
+    margin-left: 8px;
+}
+
+@keyframes blink {
+    0%, 50% {
+        opacity: 1;
+    }
+    51%, 100% {
+        opacity: 0;
+    }
+}
+
+.terminal-footer {
+    background-color: #1a1a1a;
+    padding: 10px 16px;
+    border-top: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.terminal-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    color: #888888;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.terminal-controls-right {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-terminal {
+    background-color: #333333;
+    color: #ffffff;
+    border: 1px solid #555555;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+
+.btn-terminal:hover {
+    background-color: #444444;
+    color: #00ff00;
+    border-color: #00ff00;
+}
+
+/* Scrollbar styling for terminal */
+.terminal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.terminal-body::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.terminal-body::-webkit-scrollbar-thumb {
+    background: #333333;
+    border-radius: 4px;
+}
+
+.terminal-body::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .terminal-log-entry {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .log-timestamp {
+        min-width: auto;
+        margin-bottom: 4px;
+    }
+    
+    .terminal-details {
+        margin-left: 0;
+        margin-top: 8px;
+    }
+    
+    .terminal-footer {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .terminal-stats {
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+
+/* Action type specific colors */
+.terminal-log-entry[data-action-type^="TENDER_CREATED"] .log-action {
+    color: #28a745;
+}
+
+.terminal-log-entry[data-action-type^="TENDER_UPDATED"] .log-action {
+    color: #ffc107;
+}
+
+.terminal-log-entry[data-action-type^="TENDER_DELETED"] .log-action {
+    color: #dc3545;
+}
+
+.terminal-log-entry[data-action-type^="NOTE_"] .log-action {
+    color: #17a2b8;
+}
+
+.terminal-log-entry[data-action-type^="DOCUMENT_"] .log-action {
+    color: #6f42c1;
+}
+</style>
+
+<script>
+function scrollToBottom() {
+    const terminal = document.getElementById('auditTerminal');
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function refreshAuditTrail() {
+    // Add refresh functionality - typically would reload the page or make an AJAX call
+    location.reload();
+}
+
+function exportAuditLog() {
+    // Create a text version of the audit log
+    const entries = document.querySelectorAll('.terminal-log-entry');
+    let logText = `Audit Trail for Tender: {{ tender.reference_number }}\n`;
+    logText += `Generated: ${new Date().toISOString()}\n`;
+    logText += '=' + '='.repeat(60) + '\n\n';
+    
+    entries.forEach(entry => {
+        const timestamp = entry.querySelector('.log-timestamp')?.textContent || '';
+        const level = entry.querySelector('.log-level')?.textContent || '';
+        const user = entry.querySelector('.log-user')?.textContent || '';
+        const action = entry.querySelector('.log-action')?.textContent || '';
+        const message = entry.querySelector('.log-message')?.textContent || '';
+        const ip = entry.querySelector('.log-ip')?.textContent || '';
+        
+        logText += `${timestamp} ${level} ${user} ${action} ${message} ${ip}\n`;
+    });
+    
+    // Download the log file
+    const blob = new Blob([logText], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_trail_{{ tender.reference_number }}_${new Date().toISOString().split('T')[0]}.log`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+
+// Auto-scroll to bottom when tab is shown
+document.addEventListener('DOMContentLoaded', function() {
+    const auditTab = document.getElementById('audit-trail-tab');
+    if (auditTab) {
+        auditTab.addEventListener('shown.bs.tab', function() {
+            setTimeout(scrollToBottom, 100);
+        });
+    }
+});
+</script>

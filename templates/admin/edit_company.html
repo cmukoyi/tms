@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Edit Company - Admin{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4><i class="fas fa-edit"></i> Edit Company</h4>
+                <div class="d-flex align-items-center">
+                    {% if company.is_active %}
+                        <span class="badge bg-success me-2">Active</span>
+                    {% else %}
+                        <span class="badge bg-danger me-2">Inactive</span>
+                    {% endif %}
+                    <small class="text-muted">ID: {{ company.id }}</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Company Name *</label>
+                                <input type="text" class="form-control" id="name" name="name" 
+                                       value="{{ company.name }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Company Email *</label>
+                                <input type="email" class="form-control" id="email" name="email" 
+                                       value="{{ company.email }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" id="phone" name="phone" 
+                                       value="{{ company.phone or '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_active" 
+                                           name="is_active" {% if company.is_active %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_active">
+                                        Company is Active
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Inactive companies cannot access the system
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Address</label>
+                        <textarea class="form-control" id="address" name="address" rows="3">{{ company.address or '' }}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Created</label>
+                                <p class="form-control-plaintext">
+                                    <i class="fas fa-calendar-alt text-muted me-1"></i>
+                                    {{ company.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Last Updated</label>
+                                <p class="form-control-plaintext">
+                                    <i class="fas fa-clock text-muted me-1"></i>
+                                        {% if company.updated_at %}
+                                          {{ company.updated_at.strftime('%B %d, %Y at %I:%M %p') }}
+                                     {% else %}
+                                        <em class="text-muted">Not yet updated</em>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <a href="{{ url_for('admin_companies') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to Companies
+                            </a>
+                            <a href="{{ url_for('view_company', company_id=company.id) }}" class="btn btn-info">
+                                <i class="fas fa-eye"></i> View Details
+                            </a>
+                        </div>
+                        <div>
+                            {% if company.is_active %}
+                                <button type="button" class="btn btn-warning me-2" data-bs-toggle="modal" data-bs-target="#deactivateModal">
+                                    <i class="fas fa-ban"></i> Deactivate
+                                </button>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Company
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Company Statistics Card -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> Company Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h3 class="text-primary">{{ company.stats.total_users if company.stats else 0 }}</h3>
+                            <p class="text-muted mb-0">Total Users</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h3 class="text-success">{{ company.stats.active_users if company.stats else 0 }}</h3>
+                            <p class="text-muted mb-0">Active Users</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h3 class="text-info">{{ company.stats.admins if company.stats else 0 }}</h3>
+                            <p class="text-muted mb-0">Administrators</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Deactivate Confirmation Modal -->
+{% if company.is_active %}
+<div class="modal fade" id="deactivateModal" tabindex="-1" aria-labelledby="deactivateModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deactivateModalLabel">
+                    <i class="fas fa-exclamation-triangle text-warning"></i> Confirm Deactivation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to deactivate <strong>{{ company.name }}</strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Warning:</strong> Deactivating this company will:
+                    <ul class="mb-0 mt-2">
+                        <li>Prevent all company users from logging in</li>
+                        <li>Disable access to all company data</li>
+                        <li>Stop all ongoing processes for this company</li>
+                    </ul>
+                </div>
+                <p class="mb-0">This action can be reversed by reactivating the company later.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('deactivate_company', company_id=company.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-ban"></i> Deactivate Company
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Auto-focus on the first input field
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('name').focus();
+});
+
+// Form validation
+document.querySelector('form').addEventListener('submit', function(e) {
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    
+    if (!name || !email) {
+        e.preventDefault();
+        alert('Company name and email are required.');
+        return false;
+    }
+    
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        e.preventDefault();
+        alert('Please enter a valid email address.');
+        return false;
+    }
+});
+</script>
+{% endblock %}
