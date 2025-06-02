@@ -6,6 +6,13 @@ from dotenv import load_dotenv
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
+# Detect if running on PythonAnywhere by checking their special env var
+if 'PYTHONANYWHERE_DOMAIN' in os.environ:
+    # On PythonAnywhere: load production env vars
+    load_dotenv(os.path.join(basedir, '.env.production'))
+else:
+    # Local or other environment: load default .env
+    load_dotenv(os.path.join(basedir, '.env'))
 class Config:
     # Secret Key
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-default-secret')

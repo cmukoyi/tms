@@ -18,9 +18,9 @@ from services import (
 
 from dotenv import load_dotenv
 load_dotenv()
+print(f"Loaded environment variables from: {' .env.production' if 'PYTHONANYWHERE_DOMAIN' in os.environ else '.env'}")
 
-# Load configuration from environment variables
-config_name = os.getenv('FLASK_ENV', 'default')
+
 
 # Initialize Flask app
 app = Flask(__name__)
