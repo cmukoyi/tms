@@ -11,74 +11,369 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            font-size: 16px; /* Improved readability on mobile */
         }
+        
         main.container {
             flex: 1;
+            padding: 1rem; /* Better mobile spacing */
         }
+        
+        /* Mobile-optimized navigation */
+        .navbar-brand {
+            font-size: 1.1rem;
+        }
+        
+        .navbar-brand i {
+            margin-right: 0.5rem;
+        }
+        
+        /* Responsive navigation adjustments */
+        @media (max-width: 768px) {
+            .navbar-brand {
+                font-size: 1rem;
+            }
+            
+            .navbar-nav {
+                margin-top: 0.5rem;
+            }
+            
+            .nav-link {
+                padding: 0.5rem 0;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            .dropdown-menu {
+                position: static !important;
+                float: none;
+                width: 100%;
+                margin-top: 0;
+                background-color: rgba(255,255,255,0.1);
+                border: none;
+            }
+            
+            .dropdown-item {
+                color: white;
+                padding: 0.5rem 1rem;
+            }
+            
+            .dropdown-item:hover {
+                background-color: rgba(255,255,255,0.1);
+                color: white;
+            }
+        }
+        
+        /* Mobile-friendly alerts */
+        .alert {
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+        }
+        
+        .alert .btn-close {
+            padding: 0.75rem;
+        }
+        
+        /* Footer styling */
         footer.footer-banner {
-            background-color: #0d6efd; /* Bootstrap primary color */
+            background-color: #0d6efd;
             color: white;
-            padding: 2rem 0;  /* Increased height */
+            padding: 1.5rem 0;
             text-align: center;
+            margin-top: auto;
+        }
+        
+        /* Mobile footer adjustments */
+        @media (max-width: 576px) {
+            footer.footer-banner {
+                padding: 1rem 0;
+                font-size: 0.9rem;
+            }
+        }
+        
+        /* Touch-friendly button sizing */
+        .btn {
+            min-height: 44px; /* Apple's recommended touch target size */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Mobile table improvements */
+        @media (max-width: 768px) {
+            .table-responsive {
+                border: none;
+            }
+            
+            .table {
+                font-size: 0.9rem;
+            }
+            
+            .table th,
+            .table td {
+                padding: 0.5rem 0.25rem;
+                vertical-align: middle;
+            }
+        }
+        
+        /* Form improvements for mobile */
+        @media (max-width: 576px) {
+            .form-control,
+            .form-select {
+                font-size: 16px; /* Prevents zoom on iOS */
+                min-height: 44px;
+            }
+            
+            .input-group-text {
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+            }
+        }
+        
+        /* Card improvements for mobile */
+        .card {
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+        }
+        
+        @media (max-width: 576px) {
+            .card-body {
+                padding: 1rem;
+            }
+            
+            .card-title {
+                font-size: 1.1rem;
+            }
+        }
+        
+        /* Pagination mobile-friendly */
+        @media (max-width: 576px) {
+            .pagination {
+                justify-content: center;
+            }
+            
+            .page-link {
+                padding: 0.5rem 0.75rem;
+                min-width: 44px;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+        
+        /* Modal improvements for mobile */
+        @media (max-width: 576px) {
+            .modal-dialog {
+                margin: 0.5rem;
+                max-width: calc(100% - 1rem);
+            }
+            
+            .modal-header,
+            .modal-body,
+            .modal-footer {
+                padding: 1rem;
+            }
+        }
+        
+        /* Utility classes for mobile spacing */
+        @media (max-width: 576px) {
+            .mobile-text-center {
+                text-align: center !important;
+            }
+            
+            .mobile-mb-3 {
+                margin-bottom: 1rem !important;
+            }
+            
+            .mobile-mt-3 {
+                margin-top: 1rem !important;
+            }
+        }
+        
+        /* Improved readability */
+        @media (max-width: 576px) {
+            h1 { font-size: 1.5rem; }
+            h2 { font-size: 1.25rem; }
+            h3 { font-size: 1.1rem; }
+            h4 { font-size: 1rem; }
+            h5 { font-size: 0.9rem; }
+            h6 { font-size: 0.8rem; }
+        }
+        
+        /* Status badges mobile-friendly */
+        .badge {
+            font-size: 0.8rem;
+            padding: 0.35em 0.65em;
+        }
+        
+        /* Loading states */
+        .btn.loading {
+            position: relative;
+            pointer-events: none;
+        }
+        
+        .btn.loading::after {
+            content: "";
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            margin: auto;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: button-loading-spinner 1s ease infinite;
+        }
+        
+        @keyframes button-loading-spinner {
+            from { transform: rotate(0turn); }
+            to { transform: rotate(1turn); }
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
+        <div class="container-fluid px-3">
             <a class="navbar-brand" href="{{ url_for('home') }}">
-                <i class="fas fa-clipboard-list"></i> ViTen Management System 
+                <i class="fas fa-clipboard-list"></i>
+                <span class="d-none d-sm-inline">ViTen Management System</span>
+                <span class="d-inline d-sm-none">ViTen</span>
             </a>
-            <div class="navbar-nav ms-auto">
-                {% if session.user_id %}
-                    <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-                    {% if session.is_super_admin %}
-                        <div class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                Admin
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{{ url_for('admin_companies') }}">Companies</a></li>
-                                <li><a class="dropdown-item" href="{{ url_for('admin_users') }}">Users</a></li>
-                                <li><a class="dropdown-item" href="{{ url_for('admin_roles') }}">Roles</a></li>
-                            </ul>
-                        </div>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    {% if session.user_id %}
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+                        </a>
+                        {% if session.is_super_admin %}
+                            <div class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-cog me-1"></i>Admin
+                                </a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_companies') }}">
+                                        <i class="fas fa-building me-2"></i>Companies
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_users') }}">
+                                        <i class="fas fa-users me-2"></i>Users
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('admin_roles') }}">
+                                        <i class="fas fa-user-tag me-2"></i>Roles
+                                    </a></li>
+                                </ul>
+                            </div>
+                        {% endif %}
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt me-1"></i>
+                            <span class="d-none d-sm-inline">Logout ({{ session.username }})</span>
+                            <span class="d-inline d-sm-none">Logout</span>
+                        </a>
+                    {% else %}
+                        <a class="nav-link" href="{{ url_for('login') }}">
+                            <i class="fas fa-sign-in-alt me-1"></i>Login
+                        </a>
                     {% endif %}
-                    <a class="nav-link" href="{{ url_for('logout') }}">Logout ({{ session.username }})</a>
-                {% else %}
-                    <a class="nav-link" href="{{ url_for('login') }}">Login</a>
-                {% endif %}
+                </div>
             </div>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" title="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+    <main class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'info-circle' if category == 'info' else 'check-circle' }} me-2"></i>
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
 
-        {% block content %}{% endblock %}
+                {% block content %}{% endblock %}
+            </div>
+        </div>
     </main>
 
     <!-- Footer -->
-    <footer class="footer-banner">
+    <footer class="footer-banner mt-auto">
         <div class="container">
-            <p class="mb-0">
-                &copy; {{ current_year }} ViSight Tender Management System. All rights reserved.
-            </p>
+            <div class="row">
+                <div class="col-12">
+                    <p class="mb-0">
+                        <i class="fas fa-copyright me-1"></i>
+                        {{ current_year }} ViSight Tender Management System. All rights reserved.
+                    </p>
+                </div>
+            </div>
         </div>
     </footer>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Mobile-friendly JavaScript enhancements -->
+    <script>
+        // Improve mobile navigation experience
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-collapse navbar when clicking on nav links (mobile)
+            const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+            const navbarCollapse = document.querySelector('.navbar-collapse');
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    if (navbarCollapse.classList.contains('show')) {
+                        const bsCollapse = new bootstrap.Collapse(navbarCollapse);
+                        bsCollapse.hide();
+                    }
+                });
+            });
+            
+            // Add loading state to buttons on form submission
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function() {
+                    const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+                    if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.classList.add('loading');
+                        submitBtn.disabled = true;
+                        
+                        // Re-enable after 10 seconds as fallback
+                        setTimeout(() => {
+                            submitBtn.classList.remove('loading');
+                            submitBtn.disabled = false;
+                        }, 10000);
+                    }
+                });
+            });
+            
+            // Improve table responsiveness on mobile
+            const tables = document.querySelectorAll('.table');
+            tables.forEach(table => {
+                if (!table.closest('.table-responsive')) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'table-responsive';
+                    table.parentNode.insertBefore(wrapper, table);
+                    wrapper.appendChild(table);
+                }
+            });
+        });
+        
+        // Add touch feedback for better mobile experience
+        document.addEventListener('touchstart', function() {}, {passive: true});
+    </script>
+    
+    {% block extra_js %}{% endblock %}
 </body>
 </html>
