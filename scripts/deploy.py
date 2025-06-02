@@ -114,7 +114,7 @@ def main():
         deployer.deploy()
         
         logger.info("\n" + "="*50)
-        logger.info("DEPLOYMENT NOTES:")
+        logger.info("DEPLOYMENT NOTES1:")
         logger.info("="*50)
         logger.info("This deployment only reloads your web app.")
         logger.info("For code updates, you need to either:")
