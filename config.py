@@ -3,19 +3,15 @@ from datetime import timedelta
 
 class Config:
     SECRET_KEY = 'SE0391f521c022d28675ac7d9d2a367cf51c1c6e404a69746cface6170efdacd6e'
-
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://carlos:Mukoyi@localhost/tender_management'
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # Flask settings
-    DEBUG = True
-    
-    # Session settings
-    PERMANENT_SESSION_LIFETIME = 3600  # 1 hour
-    
-    # Database Configuration
+    # PRODUCTION DATABASE - PythonAnywhere settings
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://CarlosMukoyi:admin123!!@CarlosMukoyi.mysql.pythonanywhere-services.com/CarlosMukoyi$tender_management'
+    DEBUG = False
+    SESSION_COOKIE_SECURE = True
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Database Engine Options
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_recycle': 3600,
         'pool_pre_ping': True
@@ -23,7 +19,6 @@ class Config:
     
     # Session Configuration
     PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
-    SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     
@@ -33,7 +28,7 @@ class Config:
     
     # Allowed file extensions for uploads
     ALLOWED_EXTENSIONS = {
-        'pdf', 'doc', 'docx', 'xls', 'xlsx', 
+        'pdf', 'doc', 'docx', 'xls', 'xlsx',
         'ppt', 'pptx', 'txt', 'jpg', 'jpeg', 'png', 'gif'
     }
     
@@ -46,7 +41,7 @@ class Config:
     APP_NAME = "Tender Management System"
     APP_VERSION = "1.0.0"
     
-    # Email Configuration (for future use)
+    # Email Configuration
     MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.gmail.com'
     MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
@@ -58,28 +53,30 @@ class Config:
     
     @staticmethod
     def init_app(app):
-        pass
+        # Create upload folder if it doesn't exist
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DEV_DATABASE_URL') or \
-        'mysql://root:password@localhost/tender_management_dev'
+    SESSION_COOKIE_SECURE = False
+    # This won't be used in production branch
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://localhost/placeholder'
 
 class ProductionConfig(Config):
     DEBUG = False
     SESSION_COOKIE_SECURE = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'mysql://username:password@localhost/tender_management'
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://CarlosMukoyi:admin123!!@CarlosMukoyi.mysql.pythonanywhere-services.com/CarlosMukoyi$tender_management'
 
 class TestingConfig(Config):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL') or \
-        'mysql://root:password@localhost/tender_management_test'
+    DEBUG = False
     WTF_CSRF_ENABLED = False
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://localhost/placeholder_test'
 
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
     'testing': TestingConfig,
-    'default': DevelopmentConfig
+    'default': ProductionConfig  # Default to production on main branch
 }
