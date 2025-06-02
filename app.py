@@ -152,34 +152,64 @@ def dashboard():
 @app.route('/tenders', methods=['GET', 'POST'])
 @login_required
 def tenders():
-    """View tenders"""
+    """View tenders with simple pagination"""
     user = AuthService.get_user_by_id(session['user_id'])
     
-    # Get filter parameters
-    status_filter = request.args.get('status')
-    category_filter = request.args.get('category')
+    # Get parameters with defaults
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    status_filter = request.args.get('status', type=int)
+    category_filter = request.args.get('category', type=int)
     
+    # Validate per_page values
+    if per_page not in [10, 20, 50]:
+        per_page = 10
+    
+    # Build base query
     if user.is_super_admin:
-        # Super admin sees all tenders
-        tenders = TenderService.get_all_tenders()
+        query = Tender.query
     else:
-        # Company users see only their company's tenders
-        tenders = TenderService.get_tenders_by_company(
-            user.company_id, 
-            status_filter=status_filter, 
-            category_filter=category_filter
-        )
+        query = Tender.query.filter_by(company_id=user.company_id)
+    
+    # Apply filters
+    if status_filter:
+        query = query.filter_by(status_id=status_filter)
+    if category_filter:
+        query = query.filter_by(category_id=category_filter)
+    
+    # Order by newest first
+    query = query.order_by(Tender.created_at.desc())
+    
+    # Get paginated results
+    pagination_result = query.paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
+    
+    # Create simple pagination object
+    pagination = {
+        'current_page': page,
+        'total_pages': pagination_result.pages,
+        'total': pagination_result.total,
+        'has_prev': pagination_result.has_prev,
+        'has_next': pagination_result.has_next,
+        'start_item': ((page - 1) * per_page) + 1 if pagination_result.total > 0 else 0,
+        'end_item': min(page * per_page, pagination_result.total)
+    }
     
     # Get filter options
     categories = TenderCategoryService.get_all_categories()
     statuses = TenderStatusService.get_all_statuses()
     
     return render_template('tenders/list.html', 
-                         tenders=tenders, 
+                         tenders=pagination_result.items,
+                         pagination=pagination,
                          categories=categories, 
                          statuses=statuses,
                          current_status=status_filter,
-                         current_category=category_filter)
+                         current_category=category_filter,
+                         per_page=per_page)
 
 @app.route('/tenders/create', methods=['GET', 'POST'])
 @login_required

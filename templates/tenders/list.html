@@ -12,8 +12,8 @@
 <!-- Filters -->
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" class="row g-3">
-            <div class="col-md-4">
+        <form method="GET" class="row g-3" id="filterForm">
+            <div class="col-md-3">
                 <label for="status" class="form-label">Filter by Status</label>
                 <select class="form-select" id="status" name="status">
                     <option value="">All Statuses</option>
@@ -25,7 +25,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label for="category" class="form-label">Filter by Category</label>
                 <select class="form-select" id="category" name="category">
                     <option value="">All Categories</option>
@@ -37,7 +37,15 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4 d-flex align-items-end">
+            <div class="col-md-3">
+                <label for="per_page" class="form-label">Items per page</label>
+                <select class="form-select" id="per_page" name="per_page">
+                    <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
+                    <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                    <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-outline-primary me-2">
                     <i class="fas fa-filter"></i> Filter
                 </button>
@@ -45,6 +53,7 @@
                     <i class="fas fa-times"></i> Clear
                 </a>
             </div>
+            <input type="hidden" name="page" value="1" id="pageInput">
         </form>
     </div>
 </div>
@@ -63,12 +72,28 @@
     </div>
 </div>
 
+<!-- Pagination Info -->
+{% if pagination %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <span class="text-muted">
+        Showing {{ pagination.start_item }} to {{ pagination.end_item }} of {{ pagination.total }} tenders
+    </span>
+    <span class="text-muted">
+        Page {{ pagination.current_page }} of {{ pagination.total_pages }}
+    </span>
+</div>
+{% endif %}
+
 <!-- Tenders List -->
 <div class="card">
     <div class="card-header">
         <h5 class="mb-0">
             Tenders List 
+            {% if pagination %}
+            <span class="badge bg-secondary">{{ pagination.total }} total</span>
+            {% else %}
             <span class="badge bg-secondary">{{ tenders|length }} total</span>
+            {% endif %}
         </h5>
     </div>
     <div class="card-body p-0">
@@ -177,6 +202,60 @@
     </div>
 </div>
 
+<!-- Simple Pagination Controls -->
+{% if pagination and pagination.total_pages > 1 %}
+<div class="d-flex justify-content-center mt-4">
+    <nav aria-label="Tenders pagination">
+        <ul class="pagination">
+            <!-- Previous -->
+            {% if pagination.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('tenders', page=pagination.current_page-1, status=current_status, category=current_category, per_page=per_page) }}">
+                    Previous
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Previous</span>
+            </li>
+            {% endif %}
+            
+            <!-- Page Numbers -->
+            {% for page_num in range(1, pagination.total_pages + 1) %}
+                {% if page_num == pagination.current_page %}
+                <li class="page-item active">
+                    <span class="page-link">{{ page_num }}</span>
+                </li>
+                {% elif page_num == 1 or page_num == pagination.total_pages or (page_num >= pagination.current_page - 2 and page_num <= pagination.current_page + 2) %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('tenders', page=page_num, status=current_status, category=current_category, per_page=per_page) }}">
+                        {{ page_num }}
+                    </a>
+                </li>
+                {% elif page_num == pagination.current_page - 3 or page_num == pagination.current_page + 3 %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Next -->
+            {% if pagination.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('tenders', page=pagination.current_page+1, status=current_status, category=current_category, per_page=per_page) }}">
+                    Next
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Next</span>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+
 <!-- Delete Modals for each tender -->
 {% for tender in tenders %}
 <div class="modal fade" id="deleteModal{{ tender.id }}" tabindex="-1">
@@ -233,6 +312,12 @@
     border-bottom: 1px solid #dee2e6;
 }
 
+[data-theme="dark"] .card-header {
+    background-color: #2d2d2d;
+    border-bottom-color: var(--card-border);
+    color: var(--text-color);
+}
+
 .text-decoration-none:hover {
     text-decoration: underline !important;
 }
@@ -244,6 +329,41 @@
 .card {
     box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
     border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+/* Simple pagination styling */
+.pagination .page-link {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: var(--text-color);
+}
+
+.pagination .page-link:hover {
+    background-color: var(--alert-bg);
+    color: var(--text-color);
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #ffffff;
+}
+
+.pagination .page-item.disabled .page-link {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: #6c757d;
+}
+
+[data-theme="dark"] .pagination .page-link {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .pagination .page-link:hover {
+    background-color: var(--alert-bg);
+    color: var(--text-color);
 }
 </style>
 
@@ -261,6 +381,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 5000);
         }
     });
+    
+    // Reset to page 1 when changing filters
+    const filterInputs = document.querySelectorAll('#status, #category');
+    filterInputs.forEach(function(input) {
+        input.addEventListener('change', function() {
+            document.getElementById('pageInput').value = '1';
+        });
+    });
+    
+    // Auto-submit when changing items per page
+    const perPageSelect = document.getElementById('per_page');
+    if (perPageSelect) {
+        perPageSelect.addEventListener('change', function() {
+            document.getElementById('pageInput').value = '1'; // Reset to first page
+            document.getElementById('filterForm').submit(); // Auto-submit the form
+        });
+    }
 });
 </script>
 {% endblock %}
