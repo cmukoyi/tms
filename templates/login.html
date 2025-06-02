@@ -8,6 +8,138 @@
                 <div class="card-header text-center">
                     <h4 class="mb-0"><i class="fas fa-sign-in-alt"></i> Company Login</h4>
                 </div>
+
+<script>
+// Remember Me functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const rememberMeCheckbox = document.getElementById('rememberMe');
+    const loginForm = document.querySelector('form');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
+    
+    // Password visibility toggle functionality
+    passwordToggle.addEventListener('click', function() {
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        
+        // Toggle icon
+        if (type === 'password') {
+            passwordToggleIcon.classList.remove('fa-eye-slash');
+            passwordToggleIcon.classList.add('fa-eye');
+            this.setAttribute('aria-label', 'Show password');
+        } else {
+            passwordToggleIcon.classList.remove('fa-eye');
+            passwordToggleIcon.classList.add('fa-eye-slash');
+            this.setAttribute('aria-label', 'Hide password');
+        }
+        
+        // Add visual feedback
+        this.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            this.style.transform = 'scale(1)';
+        }, 100);
+    });
+    
+    // Load saved credentials on page load
+    loadSavedCredentials();
+    
+    // Save credentials when form is submitted and remember me is checked
+    loginForm.addEventListener('submit', function(e) {
+        if (rememberMeCheckbox.checked) {
+            saveCredentials();
+        } else {
+            clearSavedCredentials();
+        }
+        
+        // Add loading state to button
+        const submitBtn = this.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.classList.add('loading');
+            submitBtn.disabled = true;
+            
+            // Re-enable after 10 seconds as fallback
+            setTimeout(() => {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = false;
+            }, 10000);
+        }
+    });
+    
+    // Check remember me if credentials are loaded
+    rememberMeCheckbox.addEventListener('change', function() {
+        if (!this.checked) {
+            clearSavedCredentials();
+        }
+    });
+    
+    function saveCredentials() {
+        try {
+            const credentials = {
+                username: usernameInput.value,
+                password: passwordInput.value,
+                timestamp: Date.now()
+            };
+            
+            // Encrypt the data (basic encoding - for demo purposes)
+            const encodedData = btoa(JSON.stringify(credentials));
+            localStorage.setItem('loginCredentials', encodedData);
+            
+            console.log('Credentials saved successfully');
+        } catch (error) {
+            console.error('Error saving credentials:', error);
+        }
+    }
+    
+    function loadSavedCredentials() {
+        try {
+            const savedData = localStorage.getItem('loginCredentials');
+            if (savedData) {
+                const credentials = JSON.parse(atob(savedData));
+                
+                // Check if credentials are not too old (30 days)
+                const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+                if (Date.now() - credentials.timestamp < thirtyDaysInMs) {
+                    usernameInput.value = credentials.username || '';
+                    passwordInput.value = credentials.password || '';
+                    rememberMeCheckbox.checked = true;
+                    
+                    console.log('Credentials loaded successfully');
+                } else {
+                    // Credentials too old, clear them
+                    clearSavedCredentials();
+                }
+            }
+        } catch (error) {
+            console.error('Error loading credentials:', error);
+            clearSavedCredentials();
+        }
+    }
+    
+    function clearSavedCredentials() {
+        try {
+            localStorage.removeItem('loginCredentials');
+            console.log('Credentials cleared');
+        } catch (error) {
+            console.error('Error clearing credentials:', error);
+        }
+    }
+    
+    // Clear credentials if user manually clears the form
+    usernameInput.addEventListener('input', function() {
+        if (this.value === '' && passwordInput.value === '') {
+            rememberMeCheckbox.checked = false;
+        }
+    });
+    
+    passwordInput.addEventListener('input', function() {
+        if (this.value === '' && usernameInput.value === '') {
+            rememberMeCheckbox.checked = false;
+        }
+    });
+});
+</script>
                 <div class="card-body">
                     <form method="POST">
                         <div class="mb-3">
@@ -16,7 +148,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-user"></i>
                                 </span>
-                                <input type="text" class="form-control" id="username" name="username" required>
+                                <input type="text" class="form-control" id="username" name="username" required autocomplete="username">
                             </div>
                         </div>
                         
@@ -26,8 +158,18 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-lock"></i>
                                 </span>
-                                <input type="password" class="form-control" id="password" name="password" required>
+                                <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+                                <button type="button" class="btn btn-outline-secondary password-toggle" id="passwordToggle" aria-label="Toggle password visibility">
+                                    <i class="fas fa-eye" id="passwordToggleIcon"></i>
+                                </button>
                             </div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="rememberMe" name="remember_me">
+                            <label class="form-check-label" for="rememberMe">
+                                Remember my password
+                            </label>
                         </div>
                         
                         <button type="submit" class="btn btn-primary w-100 btn-lg">
@@ -39,7 +181,7 @@
                     <div class="text-center">
                         <div class="demo-credentials">
                             <small class="demo-text">
-                               <strong> ViSight Tender Management System</strong><br>
+                                <strong> ViSight Tender Management System</strong><br>
                                 Email: <strong>carlos@visightsolutions.co.za</strong> | Version: 1.0
                             </small>
                         </div>
@@ -114,9 +256,102 @@
     margin-bottom: 0.5rem;
 }
 
+.form-check {
+    margin-bottom: 1rem;
+}
+
+.form-check-input {
+    background-color: var(--form-bg);
+    border-color: var(--form-border);
+    border-radius: 0.25rem;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.form-check-label {
+    color: var(--text-color);
+    font-size: 0.9rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+}
+
+/* Dark mode checkbox fixes */
+[data-theme="dark"] .form-check-input {
+    background-color: var(--form-bg);
+    border-color: var(--form-border);
+}
+
+[data-theme="dark"] .form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+[data-theme="dark"] .form-check-label {
+    color: var(--text-color);
+}
+
 .input-group-text {
     background-color: var(--form-bg);
     border-color: var(--form-border);
+    color: var(--text-color);
+}
+
+/* Password toggle button styling */
+.password-toggle {
+    background-color: var(--form-bg);
+    border-color: var(--form-border);
+    color: var(--text-color);
+    border-left: none;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.password-toggle:hover {
+    background-color: var(--alert-bg);
+    border-color: var(--form-border);
+    color: var(--text-color);
+}
+
+.password-toggle:focus {
+    background-color: var(--form-bg);
+    border-color: #86b7fe;
+    color: var(--text-color);
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.password-toggle:active {
+    background-color: var(--alert-bg);
+    border-color: var(--form-border);
+    color: var(--text-color);
+}
+
+/* Dark mode password toggle fixes */
+[data-theme="dark"] .password-toggle {
+    background-color: var(--form-bg);
+    border-color: var(--form-border);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .password-toggle:hover {
+    background-color: var(--alert-bg);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .password-toggle:focus {
+    background-color: var(--form-bg);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .password-toggle:active {
+    background-color: var(--alert-bg);
     color: var(--text-color);
 }
 
@@ -226,6 +461,11 @@ hr {
     .login-card .card-header {
         padding: 1.25rem;
     }
+    
+    .password-toggle {
+        padding: 0.75rem 0.75rem;
+        font-size: 0.9rem;
+    }
 }
 
 @media (max-width: 576px) {
@@ -239,6 +479,11 @@ hr {
     
     .demo-text {
         font-size: 0.8rem;
+    }
+    
+    .password-toggle {
+        padding: 0.75rem 0.6rem;
+        font-size: 0.85rem;
     }
 }
 
