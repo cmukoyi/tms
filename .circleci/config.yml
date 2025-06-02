@@ -1,0 +1,84 @@
+# .circleci/config.yml
+version: 2.1
+
+orbs:
+  python: circleci/python@2.0.3
+
+jobs:
+  test:
+    docker:
+      - image: cimg/python:3.9
+      - image: cimg/mysql:8.0
+        environment:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: tender_management_test
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: testpass
+    
+    working_directory: ~/project
+    
+    steps:
+      - checkout
+      
+      - python/install-packages:
+          pkg-manager: pip
+          pip-dependency-file: requirements.txt
+      
+      - run:
+          name: Wait for MySQL
+          command: |
+            for i in `seq 1 30`; do
+              nc -z 127.0.0.1 3306 && echo Success && exit 0
+              echo -n .
+              sleep 1
+            done
+            echo Failed waiting for MySQL && exit 1
+      
+      - run:
+          name: Setup Test Database
+          command: |
+            mysql -h 127.0.0.1 -u root -ptestpassword -e "CREATE DATABASE IF NOT EXISTS tender_management_test;"
+            mysql -h 127.0.0.1 -u root -ptestpassword -e "GRANT ALL PRIVILEGES ON tender_management_test.* TO 'testuser'@'%';"
+      
+      - run:
+          name: Run Tests
+          command: |
+            export DATABASE_URL="mysql://testuser:testpass@127.0.0.1:3306/tender_management_test"
+            export FLASK_ENV=testing
+            python -m pytest tests/ -v --tb=short
+      
+      - run:
+          name: Run Linting
+          command: |
+            pip install flake8
+            flake8 app/ --max-line-length=120 --ignore=E501,W503
+
+  deploy:
+    docker:
+      - image: cimg/python:3.9
+    
+    working_directory: ~/project
+    
+    steps:
+      - checkout
+      
+      - run:
+          name: Install deployment dependencies
+          command: |
+            pip install requests paramiko
+      
+      - run:
+          name: Deploy to PythonAnywhere
+          command: |
+            python scripts/deploy.py
+
+workflows:
+  test_and_deploy:
+    jobs:
+      - test
+      - deploy:
+          requires:
+            - test
+          filters:
+            branches:
+              only: main
