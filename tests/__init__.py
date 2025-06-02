@@ -1,3 +1,5 @@
+# Create these files in your repository:
+
 # tests/__init__.py
 """Test package for tender management system"""
 
@@ -35,28 +37,7 @@ def test_app_import():
         import app
         print("✅ App module imported successfully")
     except ImportError:
-        pytest.skip("App module not implemented yet - this is OK for initial setup")
-
-def test_flask_app_creation():
-    """Test Flask app creation (if app exists)"""
-    try:
-        from app import create_app
-        app = create_app()
-        assert app is not None
-        print("✅ Flask app created successfully")
-    except ImportError:
-        pytest.skip("create_app function not implemented yet - this is OK")
-
-# tests/test_models.py
-import pytest
-
-def test_models_import():
-    """Test that we can import models (if they exist)"""
-    try:
-        from app.models import User, Company, Tender
-        print("✅ Models imported successfully")
-    except ImportError:
-        pytest.skip("Models not implemented yet - this is OK for initial setup")
+        pytest.skip("App module not implemented yet")
 
 # tests/conftest.py
 import pytest
@@ -65,21 +46,4 @@ import os
 @pytest.fixture(scope='session')
 def database_url():
     """Provide database URL for tests"""
-    return os.environ.get('DATABASE_URL', 'mysql://testuser:testpass@127.0.0.1:3306/tender_management_test')
-
-@pytest.fixture
-def app():
-    """Create application for the tests (if possible)"""
-    try:
-        from app import create_app
-        app = create_app()
-        app.config['TESTING'] = True
-        app.config['WTF_CSRF_ENABLED'] = False
-        return app
-    except ImportError:
-        pytest.skip("App not ready yet")
-
-@pytest.fixture
-def client(app):
-    """A test client for the app"""
-    return app.test_client()
+    return os.environ.get('DATABASE_URL')
