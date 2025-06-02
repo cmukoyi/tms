@@ -1,0 +1,26 @@
+# Git attributes for Tender Management System
+# Protect config.py from automatic merging
+
+# Never automatically merge config.py - always require manual resolution
+config.py merge=ours
+
+# Allow normal merging for all other Python files
+*.py diff=python
+
+# Handle different line endings
+*.py text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binary files
+*.pdf binary
+*.doc binary
+*.docx binary
+*.xls binary
+*.xlsx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
