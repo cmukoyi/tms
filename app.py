@@ -16,8 +16,15 @@ from services import (
     DocumentTypeService, TenderDocumentService, CustomFieldService, TenderHistoryService
 )
 
+from dotenv import load_dotenv
+load_dotenv()
+
+# Load configuration from environment variables
+config_name = os.getenv('FLASK_ENV', 'default')
+
 # Initialize Flask app
 app = Flask(__name__)
+
 app.config.from_object(Config)
 
 @app.context_processor
