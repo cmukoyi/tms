@@ -214,19 +214,39 @@
 </div>
 
 <style>
-.dashboard-card {
-    transition: all 0.3s ease;
-    cursor: pointer;
+/* Equal height dashboard cards */
+.row {
+    display: flex;
+    flex-wrap: wrap;
 }
 
-.dashboard-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+.row > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    min-height: 140px; /* Set minimum height for consistency */
 }
 
 .dashboard-card .card-body {
     position: relative;
     overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Center content vertically */
+    padding: 1.5rem; /* Ensure consistent padding */
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
 
 .dashboard-card .card-body::before {
@@ -244,6 +264,108 @@
     left: 100%;
 }
 
+/* Ensure text content is properly spaced */
+.dashboard-card h5 {
+    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.dashboard-card p {
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.dashboard-card small {
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+/* Ensure icons are properly positioned */
+.dashboard-card .fa-2x {
+    font-size: 2rem !important;
+    line-height: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .dashboard-card {
+        min-height: 120px;
+        margin-bottom: 1rem;
+    }
+    
+    .dashboard-card .card-body {
+        padding: 1.25rem;
+    }
+    
+    .dashboard-card h5 {
+        font-size: 1.1rem;
+    }
+    
+    .dashboard-card p {
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .dashboard-card {
+        min-height: 100px;
+    }
+    
+    .dashboard-card .card-body {
+        padding: 1rem;
+    }
+    
+    .dashboard-card .fa-2x {
+        font-size: 1.5rem !important;
+    }
+}
+
+/* Statistics cards equal height fix */
+.row.mt-4 > .col-md-3 {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+
+.row.mt-4 > .col-md-3 .card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.row.mt-4 > .col-md-3 .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 120px;
+}
+
+/* Dark mode compatibility */
+[data-theme="dark"] .dashboard-card.bg-primary {
+    background-color: #0d6efd !important;
+}
+
+[data-theme="dark"] .dashboard-card.bg-success {
+    background-color: #198754 !important;
+}
+
+[data-theme="dark"] .dashboard-card.bg-info {
+    background-color: #0dcaf0 !important;
+}
+
+[data-theme="dark"] .dashboard-card.bg-warning {
+    background-color: #ffc107 !important;
+    color: #000 !important;
+}
+
+[data-theme="dark"] .dashboard-card.bg-warning * {
+    color: #000 !important;
+}
+
+/* Ensure links don't interfere with card styling */
 a.text-decoration-none:hover {
     text-decoration: none !important;
 }
@@ -260,6 +382,12 @@ a.text-decoration-none:hover .card {
 .card-header {
     background-color: #f8f9fa;
     border-bottom: 1px solid #dee2e6;
+}
+
+[data-theme="dark"] .card-header {
+    background-color: #2d2d2d;
+    border-bottom-color: var(--card-border);
+    color: var(--text-color);
 }
 
 .badge {

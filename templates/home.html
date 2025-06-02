@@ -2,7 +2,7 @@
 {% block content %}
 <div class="row">
     <div class="col-md-8 mx-auto">
-        <div class="jumbotron bg-light p-5 rounded">
+        <div class="jumbotron-custom p-5 rounded">
             <h1 class="display-4">Welcome to Tender Management System</h1>
             <p class="lead">Streamline your procurement processes with our comprehensive tender management platform.</p>
             <hr class="my-4">
@@ -18,7 +18,7 @@
             {% endif %}
         </div>
 
-        <div class="row mt-4">
+        <div class="row mt-4 feature-cards">
             <div class="col-md-4">
                 <div class="card">
                     <div class="card-body text-center">
@@ -49,5 +49,189 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
+<style>
+/* Custom jumbotron that adapts to theme */
+.jumbotron-custom {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-color);
+    box-shadow: 0 0.125rem 0.25rem var(--shadow);
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Ensure proper text contrast in both themes */
+.jumbotron-custom h1 {
+    color: var(--text-color);
+    font-weight: 700;
+}
+
+.jumbotron-custom .lead {
+    color: var(--text-color);
+    opacity: 0.9;
+}
+
+.jumbotron-custom p {
+    color: var(--text-color);
+    opacity: 0.8;
+}
+
+.jumbotron-custom hr {
+    border-color: var(--card-border);
+    opacity: 0.5;
+}
+
+/* Feature cards equal height */
+.feature-cards {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.feature-cards > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+
+.feature-cards .card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: var(--text-color);
+}
+
+.feature-cards .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 16px var(--shadow);
+}
+
+.feature-cards .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+}
+
+.feature-cards .card-title {
+    color: var(--text-color);
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.feature-cards .card-text {
+    color: var(--text-color);
+    opacity: 0.8;
+    flex: 1;
+}
+
+/* Icon colors that work in both themes */
+.feature-cards .text-primary {
+    color: #0d6efd !important;
+}
+
+.feature-cards .text-success {
+    color: #198754 !important;
+}
+
+.feature-cards .text-info {
+    color: #0dcaf0 !important;
+}
+
+/* Dark mode specific adjustments */
+[data-theme="dark"] .jumbotron-custom {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+}
+
+[data-theme="dark"] .jumbotron-custom h1,
+[data-theme="dark"] .jumbotron-custom .lead,
+[data-theme="dark"] .jumbotron-custom p {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .feature-cards .card {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+}
+
+[data-theme="dark"] .feature-cards .card-title,
+[data-theme="dark"] .feature-cards .card-text {
+    color: var(--text-color);
+}
+
+/* Button improvements for dark mode */
+[data-theme="dark"] .btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+[data-theme="dark"] .btn-success {
+    background-color: #198754;
+    border-color: #198754;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .btn-success:hover {
+    background-color: #157347;
+    border-color: #146c43;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .jumbotron-custom {
+        padding: 2rem !important;
+        text-align: center;
+    }
+    
+    .jumbotron-custom h1 {
+        font-size: 2rem;
+    }
+    
+    .jumbotron-custom .lead {
+        font-size: 1.1rem;
+    }
+    
+    .feature-cards .card-body {
+        padding: 1.5rem 1rem;
+    }
+    
+    .feature-cards .fa-3x {
+        font-size: 2.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .jumbotron-custom {
+        padding: 1.5rem !important;
+    }
+    
+    .jumbotron-custom h1 {
+        font-size: 1.75rem;
+    }
+    
+    .jumbotron-custom .btn-lg {
+        font-size: 1rem;
+        padding: 0.75rem 1.5rem;
+    }
+    
+    .feature-cards .fa-3x {
+        font-size: 2rem;
+    }
+}
+
+/* Smooth transitions for theme switching */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+</style>
+{% endblock %}
