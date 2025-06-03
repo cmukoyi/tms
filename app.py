@@ -1220,6 +1220,8 @@ def internal_error(error):
     db.session.rollback()
     return render_template('errors/500.html'), 500
 
+
+
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")
