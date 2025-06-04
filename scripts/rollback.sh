@@ -94,11 +94,17 @@ if [[ ! $confirm =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Remove current tms directory
-echo -e "${YELLOW}🗑️  Removing current tms directory...${NC}"
+# Rename current tms directory instead of removing it
+RENAMED_DIR="${PROJECT_DIR}_old_$(date +"%Y%m%d_%H%M%S")"
+echo -e "${YELLOW}📁 Renaming current tms directory...${NC}"
+
 if [ -d "$PROJECT_DIR" ]; then
-    rm -rf "$PROJECT_DIR"
-    echo -e "${GREEN}✅ Current tms directory removed${NC}"
+    if mv "$PROJECT_DIR" "$RENAMED_DIR"; then
+        echo -e "${GREEN}✅ Current tms directory renamed to: $(basename "$RENAMED_DIR")${NC}"
+    else
+        echo -e "${RED}❌ Error: Failed to rename current tms directory!${NC}"
+        exit 1
+    fi
 fi
 
 # Restore from backup
@@ -106,8 +112,17 @@ echo -e "${YELLOW}📦 Restoring from backup...${NC}"
 
 if cp -r "$BACKUP_PATH" "$PROJECT_DIR"; then
     echo -e "${GREEN}✅ Backup restored successfully!${NC}"
+    echo -e "${BLUE}ℹ️  Old directory saved as: $(basename "$RENAMED_DIR")${NC}"
+    echo -e "${YELLOW}💡 You can delete the old directory later: rm -rf \"$RENAMED_DIR\"${NC}"
 else
     echo -e "${RED}❌ Error: Failed to restore from backup!${NC}"
+    echo "Restoring original directory..."
+    if mv "$RENAMED_DIR" "$PROJECT_DIR"; then
+        echo -e "${YELLOW}⚠️  Original directory restored${NC}"
+    else
+        echo -e "${RED}❌ Critical error: Could not restore original directory!${NC}"
+        echo "Your original directory is at: $RENAMED_DIR"
+    fi
     exit 1
 fi
 
@@ -139,10 +154,12 @@ fi
 echo ""
 echo -e "${GREEN}🎉 Rollback completed successfully!${NC}"
 echo "Project restored from: $BACKUP_PATH"
+echo "Old project saved as: $(basename "$RENAMED_DIR")"
 echo ""
 echo -e "${YELLOW}📝 Next steps:${NC}"
 echo "1. Test your application"
 echo "2. Reload your web app in PythonAnywhere"
+echo "3. If everything works, delete the old directory: rm -rf \"$RENAMED_DIR\""
 
 # Show restore info
 echo ""
