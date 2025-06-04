@@ -45,14 +45,18 @@
                 <i class="fas fa-clipboard-list fa-2x text-primary mb-2"></i>
                 <h4 class="text-primary">
                     {% if grouped_by_category %}
-                        {{ categories|length }}
+                        {% set total_tenders = namespace(count=0) %}
+                        {% for category_tenders in categories.values() %}
+                            {% set total_tenders.count = total_tenders.count + (category_tenders|length) %}
+                        {% endfor %}
+                        {{ total_tenders.count }}
                     {% else %}
                         {{ tenders|length }}
                     {% endif %}
                 </h4>
                 <p class="text-muted mb-0">
                     {% if grouped_by_category %}
-                        Categories
+                        Total Tenders
                     {% else %}
                         Total Tenders
                     {% endif %}
@@ -321,7 +325,11 @@
                     <li><strong>Generated:</strong> {{ current_date.strftime('%Y-%m-%d %H:%M:%S') }}</li>
                     <li><strong>Total Records:</strong> 
                         {% if grouped_by_category %}
-                            {{ categories.values()|sum(attribute='length') }} tenders in {{ categories|length }} categories
+                            {% set total_tenders = namespace(count=0) %}
+                            {% for category_tenders in categories.values() %}
+                                {% set total_tenders.count = total_tenders.count + (category_tenders|length) %}
+                            {% endfor %}
+                            {{ total_tenders.count }} tenders in {{ categories|length }} categories
                         {% else %}
                             {{ tenders|length }} tenders
                         {% endif %}
