@@ -7,13 +7,15 @@ set -e  # Exit on any error
 
 # Configuration - can be overridden with environment variables
 PROJECT_DIR="${TMS_PROJECT_DIR:-$HOME/tms}"
-BACKUP_DIR="${TMS_BACKUP_DIR:-$HOME}"
+BACKUP_BASE_DIR="${TMS_BACKUP_DIR:-$HOME}"
+BACKUP_DIR="$BACKUP_BASE_DIR/tms_backups"
 
 # Auto-detect if we're running from within the project directory
 if [[ "$(basename "$PWD")" == "tms" ]] && [[ -f "app.py" ]]; then
     PROJECT_DIR="$PWD"
     echo -e "${BLUE}ℹ️  Auto-detected project directory: $PROJECT_DIR${NC}"
 fi
+
 DATE=$(date +"%Y%m%d_%H%M%S")
 BACKUP_NAME="tms_backup_$DATE"
 
@@ -21,6 +23,7 @@ BACKUP_NAME="tms_backup_$DATE"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${YELLOW}🚀 Starting deployment process...${NC}"
@@ -46,7 +49,6 @@ fi
 
 # Step 2: Create new backup
 echo -e "${YELLOW}📦 Creating backup...${NC}"
-cd "$(dirname "$BACKUP_DIR")"
 
 if cp -r "$PROJECT_DIR" "$BACKUP_DIR/$BACKUP_NAME"; then
     echo -e "${GREEN}✅ Backup created successfully: $BACKUP_DIR/$BACKUP_NAME${NC}"
@@ -80,7 +82,6 @@ echo -e "${YELLOW}🔍 Checking git status...${NC}"
 if ! git status > /dev/null 2>&1; then
     echo -e "${RED}❌ Error: Not a git repository or git not available!${NC}"
     echo "Rolling back..."
-    cd "$(dirname "$BACKUP_DIR")"
     rm -rf "$PROJECT_DIR"
     # Restore from the latest backup
     LATEST_BACKUP=$(ls -1t "$BACKUP_DIR" | grep "tms_backup_" | head -n 1)
@@ -111,7 +112,6 @@ if git pull origin main; then
 else
     echo -e "${RED}❌ Error: Git pull failed!${NC}"
     echo "Rolling back..."
-    cd "$(dirname "$BACKUP_DIR")"
     rm -rf "$PROJECT_DIR"
     # Restore from the latest backup
     LATEST_BACKUP=$(ls -1t "$BACKUP_DIR" | grep "tms_backup_" | head -n 1)
@@ -148,9 +148,36 @@ echo "2. Reload your web app in PythonAnywhere"
 echo "3. If everything works, you can delete old backups to save space"
 
 # Create rollback command file for easy access
-echo "#!/bin/bash" > rollback_$DATE.sh
-echo "# Rollback to backup created on $DATE" >> rollback_$DATE.sh
-echo "./rollback.sh" >> rollback_$DATE.sh
-chmod +x rollback_$DATE.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROLLBACK_SCRIPT="$SCRIPT_DIR/rollback_$DATE.sh"
 
-echo "Quick rollback script created: rollback_$DATE.sh"
+echo "#!/bin/bash" > "$ROLLBACK_SCRIPT"
+echo "# Rollback to backup created on $DATE" >> "$ROLLBACK_SCRIPT"
+echo "# This script will restore from: $BACKUP_DIR/$BACKUP_NAME" >> "$ROLLBACK_SCRIPT"
+echo "" >> "$ROLLBACK_SCRIPT"
+echo "echo \"🔄 Rolling back to backup from $DATE...\"" >> "$ROLLBACK_SCRIPT"
+echo "" >> "$ROLLBACK_SCRIPT"
+echo "# Remove current tms directory" >> "$ROLLBACK_SCRIPT"
+echo "if [ -d \"$PROJECT_DIR\" ]; then" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"🗑️  Removing current tms directory...\"" >> "$ROLLBACK_SCRIPT"
+echo "    rm -rf \"$PROJECT_DIR\"" >> "$ROLLBACK_SCRIPT"
+echo "fi" >> "$ROLLBACK_SCRIPT"
+echo "" >> "$ROLLBACK_SCRIPT"
+echo "# Restore from backup" >> "$ROLLBACK_SCRIPT"
+echo "if [ -d \"$BACKUP_DIR/$BACKUP_NAME\" ]; then" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"📦 Restoring from backup...\"" >> "$ROLLBACK_SCRIPT"
+echo "    cp -r \"$BACKUP_DIR/$BACKUP_NAME\" \"$PROJECT_DIR\"" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"✅ Rollback completed successfully!\"" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"Project restored from: $BACKUP_DIR/$BACKUP_NAME\"" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"\"" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"📝 Next steps:\"" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"1. Test your application\"" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"2. Reload your web app in PythonAnywhere\"" >> "$ROLLBACK_SCRIPT"
+echo "else" >> "$ROLLBACK_SCRIPT"
+echo "    echo \"❌ Error: Backup not found at $BACKUP_DIR/$BACKUP_NAME\"" >> "$ROLLBACK_SCRIPT"
+echo "    exit 1" >> "$ROLLBACK_SCRIPT"
+echo "fi" >> "$ROLLBACK_SCRIPT"
+
+chmod +x "$ROLLBACK_SCRIPT"
+
+echo "Quick rollback script created: $ROLLBACK_SCRIPT"

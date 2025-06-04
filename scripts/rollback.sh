@@ -94,22 +94,6 @@ if [[ ! $confirm =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Create emergency backup of current state
-EMERGENCY_BACKUP="tms_emergency_$(date +"%Y%m%d_%H%M%S")"
-echo -e "${YELLOW}💾 Creating emergency backup of current state...${NC}"
-
-if [ -d "$PROJECT_DIR" ]; then
-    # Ensure backup directory exists
-    mkdir -p "$BACKUP_DIR"
-    
-    if cp -r "$PROJECT_DIR" "$BACKUP_DIR/$EMERGENCY_BACKUP"; then
-        echo -e "${GREEN}✅ Emergency backup created: $EMERGENCY_BACKUP${NC}"
-    else
-        echo -e "${RED}❌ Error: Failed to create emergency backup!${NC}"
-        exit 1
-    fi
-fi
-
 # Remove current tms directory
 echo -e "${YELLOW}🗑️  Removing current tms directory...${NC}"
 if [ -d "$PROJECT_DIR" ]; then
@@ -124,12 +108,6 @@ if cp -r "$BACKUP_PATH" "$PROJECT_DIR"; then
     echo -e "${GREEN}✅ Backup restored successfully!${NC}"
 else
     echo -e "${RED}❌ Error: Failed to restore from backup!${NC}"
-    echo "Attempting to restore emergency backup..."
-    
-    if [ -d "$BACKUP_DIR/$EMERGENCY_BACKUP" ]; then
-        cp -r "$BACKUP_DIR/$EMERGENCY_BACKUP" "$PROJECT_DIR"
-        echo -e "${YELLOW}⚠️  Emergency backup restored${NC}"
-    fi
     exit 1
 fi
 
@@ -161,14 +139,10 @@ fi
 echo ""
 echo -e "${GREEN}🎉 Rollback completed successfully!${NC}"
 echo "Project restored from: $BACKUP_PATH"
-echo "Emergency backup created: $EMERGENCY_BACKUP"
 echo ""
 echo -e "${YELLOW}📝 Next steps:${NC}"
 echo "1. Test your application"
 echo "2. Reload your web app in PythonAnywhere"
-echo "3. If everything works, you can delete the emergency backup"
-echo ""
-echo -e "${BLUE}ℹ️  Emergency backup location: $BACKUP_DIR/$EMERGENCY_BACKUP${NC}"
 
 # Show restore info
 echo ""
