@@ -20,6 +20,15 @@ from dotenv import load_dotenv
 load_dotenv()
 print(f"Loaded environment variables from: {' .env.production' if 'PYTHONANYWHERE_DOMAIN' in os.environ else '.env'}")
 
+from flask import make_response, request
+from datetime import datetime
+import io
+import xlsxwriter
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.units import inch
 
 
 # Initialize Flask app
@@ -749,6 +758,497 @@ def tender_reports():
                          monthly_breakdown=monthly_breakdown,
                          start_date=request.args.get('start_date'),
                          end_date=request.args.get('end_date'))
+# Update your report routes to include current_date in the context
+
+@app.route('/active_tenders_report')
+@login_required
+def active_tenders_report():
+    """Report of all active (non-closed) tenders"""
+    user = AuthService.get_user_by_id(session['user_id'])
+    current_date = datetime.utcnow()
+    
+    # Get closed status ID to exclude
+    closed_status = TenderStatus.query.filter_by(name='Closed').first()
+    closed_status_id = closed_status.id if closed_status else None
+    
+    if user.is_super_admin:
+        # Super admin sees all active tenders
+        if closed_status_id:
+            tenders = Tender.query.filter(Tender.status_id != closed_status_id).order_by(Tender.created_at.desc()).all()
+        else:
+            tenders = Tender.query.order_by(Tender.created_at.desc()).all()
+    else:
+        # Company users see only their company's active tenders
+        if closed_status_id:
+            tenders = Tender.query.filter(
+                Tender.company_id == user.company_id,
+                Tender.status_id != closed_status_id
+            ).order_by(Tender.created_at.desc()).all()
+        else:
+            tenders = Tender.query.filter_by(company_id=user.company_id).order_by(Tender.created_at.desc()).all()
+    
+    # Handle export
+    export_format = request.args.get('export')
+    if export_format == 'pdf':
+        return export_tenders_pdf(tenders, 'Active Tenders Report', user)
+    elif export_format == 'excel':
+        return export_tenders_excel(tenders, 'Active Tenders Report', user)
+    
+    context = {
+        'tenders': tenders,
+        'report_title': 'Active Tenders Report',
+        'report_description': 'All tenders that are not closed',
+        'user': user,
+        'is_super_admin': user.is_super_admin,
+        'current_date': current_date
+    }
+    
+    return render_template('reports/tender_list.html', **context)
+
+@app.route('/closed_tenders_report')
+@login_required
+def closed_tenders_report():
+    """Report of all closed tenders"""
+    user = AuthService.get_user_by_id(session['user_id'])
+    current_date = datetime.utcnow()
+    
+    # Get closed status
+    closed_status = TenderStatus.query.filter_by(name='Closed').first()
+    if not closed_status:
+        flash('No closed status found in system', 'warning')
+        return redirect(url_for('reports'))
+    
+    if user.is_super_admin:
+        # Super admin sees all closed tenders
+        tenders = Tender.query.filter_by(status_id=closed_status.id).order_by(Tender.updated_at.desc()).all()
+    else:
+        # Company users see only their company's closed tenders
+        tenders = Tender.query.filter(
+            Tender.company_id == user.company_id,
+            Tender.status_id == closed_status.id
+        ).order_by(Tender.updated_at.desc()).all()
+    
+    # Handle export
+    export_format = request.args.get('export')
+    if export_format == 'pdf':
+        return export_tenders_pdf(tenders, 'Closed Tenders Report', user)
+    elif export_format == 'excel':
+        return export_tenders_excel(tenders, 'Closed Tenders Report', user)
+    
+    context = {
+        'tenders': tenders,
+        'report_title': 'Closed Tenders Report',
+        'report_description': 'All tenders with closed status',
+        'user': user,
+        'is_super_admin': user.is_super_admin,
+        'current_date': current_date
+    }
+    
+    return render_template('reports/tender_list.html', **context)
+
+@app.route('/overdue_tenders_report')
+@login_required
+def overdue_tenders_report():
+    """Report of overdue tenders (past submission deadline)"""
+    user = AuthService.get_user_by_id(session['user_id'])
+    current_date = datetime.utcnow()
+    
+    if user.is_super_admin:
+        # Super admin sees all overdue tenders
+        tenders = Tender.query.filter(
+            Tender.submission_deadline < current_date,
+            Tender.submission_deadline.isnot(None)
+        ).order_by(Tender.submission_deadline.desc()).all()
+    else:
+        # Company users see only their company's overdue tenders
+        tenders = Tender.query.filter(
+            Tender.company_id == user.company_id,
+            Tender.submission_deadline < current_date,
+            Tender.submission_deadline.isnot(None)
+        ).order_by(Tender.submission_deadline.desc()).all()
+    
+    # Handle export
+    export_format = request.args.get('export')
+    if export_format == 'pdf':
+        return export_tenders_pdf(tenders, 'Overdue Tenders Report', user)
+    elif export_format == 'excel':
+        return export_tenders_excel(tenders, 'Overdue Tenders Report', user)
+    
+    context = {
+        'tenders': tenders,
+        'report_title': 'Overdue Tenders Report',
+        'report_description': 'Tenders past their submission deadline',
+        'user': user,
+        'is_super_admin': user.is_super_admin,
+        'show_overdue_info': True,
+        'current_date': current_date
+    }
+    
+    return render_template('reports/tender_list.html', **context)
+
+@app.route('/tenders_by_category_report')
+@login_required
+def tenders_by_category_report():
+    """Report of tenders grouped by category"""
+    user = AuthService.get_user_by_id(session['user_id'])
+    current_date = datetime.utcnow()
+    
+    if user.is_super_admin:
+        # Super admin sees all tenders
+        tenders = Tender.query.order_by(Tender.category_id, Tender.created_at.desc()).all()
+    else:
+        # Company users see only their company's tenders
+        tenders = Tender.query.filter_by(company_id=user.company_id).order_by(Tender.category_id, Tender.created_at.desc()).all()
+    
+    # Group tenders by category
+    categories = {}
+    for tender in tenders:
+        category_name = tender.category.name if tender.category else 'Uncategorized'
+        if category_name not in categories:
+            categories[category_name] = []
+        categories[category_name].append(tender)
+    
+    # Handle export
+    export_format = request.args.get('export')
+    if export_format == 'pdf':
+        return export_tenders_by_category_pdf(categories, user)
+    elif export_format == 'excel':
+        return export_tenders_by_category_excel(categories, user)
+    
+    context = {
+        'categories': categories,
+        'tenders': tenders,
+        'report_title': 'Tenders by Category Report',
+        'report_description': 'Tenders organized by category',
+        'user': user,
+        'is_super_admin': user.is_super_admin,
+        'grouped_by_category': True,
+        'current_date': current_date
+    }
+    
+    return render_template('reports/tender_list.html', **context)
+
+@app.route('/profile')
+@login_required
+def profile():
+    """User profile page"""
+    user = AuthService.get_user_by_id(session['user_id'])
+    
+    context = {
+        'user': user,
+        'company': user.company if user.company else None
+    }
+    
+    return render_template('user/profile.html', **context)
+
+@app.route('/profile/edit', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    """Edit user profile"""
+    user = AuthService.get_user_by_id(session['user_id'])
+    
+    if request.method == 'POST':
+        try:
+            # Update user information
+            user.first_name = request.form.get('first_name', '').strip()
+            user.last_name = request.form.get('last_name', '').strip()
+            user.email = request.form.get('email', '').strip()
+            user.phone = request.form.get('phone', '').strip()
+            
+            # Handle profile image upload
+            if 'profile_image' in request.files:
+                file = request.files['profile_image']
+                if file and file.filename:
+                    # Save the uploaded file
+                    filename = secure_filename(file.filename)
+                    upload_path = os.path.join(app.config['UPLOAD_FOLDER'], 'profiles')
+                    os.makedirs(upload_path, exist_ok=True)
+                    
+                    # Generate unique filename
+                    file_extension = filename.rsplit('.', 1)[1].lower()
+                    unique_filename = f"profile_{user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_extension}"
+                    file_path = os.path.join(upload_path, unique_filename)
+                    
+                    file.save(file_path)
+                    user.profile_image = unique_filename
+            
+            # Update password if provided
+            new_password = request.form.get('new_password', '').strip()
+            if new_password:
+                current_password = request.form.get('current_password', '').strip()
+                if not AuthService.verify_password(user, current_password):
+                    flash('Current password is incorrect', 'error')
+                    return redirect(url_for('edit_profile'))
+                
+                user.password_hash = AuthService.hash_password(new_password)
+            
+            db.session.commit()
+            flash('Profile updated successfully', 'success')
+            return redirect(url_for('profile'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating profile: {str(e)}', 'error')
+    
+    return render_template('user/edit_profile.html', user=user)
+
+# Export helper functions
+def export_tenders_pdf(tenders, title, user):
+    """Export tenders to PDF"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.black,
+        spaceAfter=30,
+        alignment=1  # Center alignment
+    )
+    story.append(Paragraph(title, title_style))
+    
+    # Company info
+    if not user.is_super_admin:
+        company_info = f"Company: {user.company.name}"
+        story.append(Paragraph(company_info, styles['Normal']))
+    
+    # Export date
+    export_date = f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    story.append(Paragraph(export_date, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    if not tenders:
+        story.append(Paragraph("No tenders found for this report.", styles['Normal']))
+    else:
+        # Table headers
+        headers = ['Reference', 'Title', 'Category', 'Status', 'Created Date', 'Deadline']
+        data = [headers]
+        
+        # Table data
+        for tender in tenders:
+            row = [
+                tender.reference_number,
+                tender.title[:30] + '...' if len(tender.title) > 30 else tender.title,
+                tender.category.name if tender.category else 'N/A',
+                tender.status.name if tender.status else 'N/A',
+                tender.created_at.strftime('%Y-%m-%d') if tender.created_at else 'N/A',
+                tender.submission_deadline.strftime('%Y-%m-%d') if tender.submission_deadline else 'N/A'
+            ]
+            data.append(row)
+        
+        # Create table
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+    
+    doc.build(story)
+    buffer.seek(0)
+    
+    response = make_response(buffer.getvalue())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{title.replace(" ", "_")}.pdf"'
+    return response
+
+def export_tenders_excel(tenders, title, user):
+    """Export tenders to Excel"""
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet(title[:31])  # Excel sheet name limit
+    
+    # Formats
+    header_format = workbook.add_format({
+        'bold': True,
+        'font_color': 'white',
+        'bg_color': '#366092',
+        'border': 1
+    })
+    
+    cell_format = workbook.add_format({
+        'border': 1,
+        'text_wrap': True
+    })
+    
+    # Headers
+    headers = ['Reference Number', 'Title', 'Category', 'Status', 'Company', 'Created Date', 'Deadline', 'Days Overdue']
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+    
+    # Data
+    for row, tender in enumerate(tenders, 1):
+        days_overdue = ''
+        if tender.submission_deadline and tender.submission_deadline < datetime.utcnow():
+            days_overdue = (datetime.utcnow() - tender.submission_deadline).days
+        
+        worksheet.write(row, 0, tender.reference_number, cell_format)
+        worksheet.write(row, 1, tender.title, cell_format)
+        worksheet.write(row, 2, tender.category.name if tender.category else 'N/A', cell_format)
+        worksheet.write(row, 3, tender.status.name if tender.status else 'N/A', cell_format)
+        worksheet.write(row, 4, tender.company.name if tender.company else 'N/A', cell_format)
+        worksheet.write(row, 5, tender.created_at.strftime('%Y-%m-%d') if tender.created_at else 'N/A', cell_format)
+        worksheet.write(row, 6, tender.submission_deadline.strftime('%Y-%m-%d') if tender.submission_deadline else 'N/A', cell_format)
+        worksheet.write(row, 7, str(days_overdue) if days_overdue else 'N/A', cell_format)
+    
+    # Adjust column widths
+    worksheet.set_column('A:A', 15)  # Reference
+    worksheet.set_column('B:B', 30)  # Title
+    worksheet.set_column('C:C', 15)  # Category
+    worksheet.set_column('D:D', 12)  # Status
+    worksheet.set_column('E:E', 20)  # Company
+    worksheet.set_column('F:F', 12)  # Created
+    worksheet.set_column('G:G', 12)  # Deadline
+    worksheet.set_column('H:H', 12)  # Days Overdue
+    
+    workbook.close()
+    output.seek(0)
+    
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename="{title.replace(" ", "_")}.xlsx"'
+    return response
+
+def export_tenders_by_category_pdf(categories, user):
+    """Export tenders by category to PDF"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.black,
+        spaceAfter=30,
+        alignment=1
+    )
+    story.append(Paragraph("Tenders by Category Report", title_style))
+    
+    # Company info
+    if not user.is_super_admin:
+        company_info = f"Company: {user.company.name}"
+        story.append(Paragraph(company_info, styles['Normal']))
+    
+    # Export date
+    export_date = f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    story.append(Paragraph(export_date, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    for category_name, tenders in categories.items():
+        # Category header
+        story.append(Paragraph(f"Category: {category_name} ({len(tenders)} tenders)", styles['Heading2']))
+        
+        # Table for this category
+        headers = ['Reference', 'Title', 'Status', 'Created Date']
+        data = [headers]
+        
+        for tender in tenders:
+            row = [
+                tender.reference_number,
+                tender.title[:40] + '...' if len(tender.title) > 40 else tender.title,
+                tender.status.name if tender.status else 'N/A',
+                tender.created_at.strftime('%Y-%m-%d') if tender.created_at else 'N/A'
+            ]
+            data.append(row)
+        
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+        story.append(Spacer(1, 20))
+    
+    doc.build(story)
+    buffer.seek(0)
+    
+    response = make_response(buffer.getvalue())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = 'attachment; filename="Tenders_by_Category_Report.pdf"'
+    return response
+
+def export_tenders_by_category_excel(categories, user):
+    """Export tenders by category to Excel"""
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    
+    # Formats
+    header_format = workbook.add_format({
+        'bold': True,
+        'font_color': 'white',
+        'bg_color': '#366092',
+        'border': 1
+    })
+    
+    category_format = workbook.add_format({
+        'bold': True,
+        'font_color': 'white',
+        'bg_color': '#5B9BD5',
+        'border': 1
+    })
+    
+    cell_format = workbook.add_format({
+        'border': 1,
+        'text_wrap': True
+    })
+    
+    # Create a worksheet for each category
+    for category_name, tenders in categories.items():
+        # Clean sheet name (Excel limitations)
+        sheet_name = category_name[:31].replace('/', '_').replace('\\', '_')
+        worksheet = workbook.add_worksheet(sheet_name)
+        
+        # Category header
+        worksheet.merge_range('A1:E1', f'Category: {category_name}', category_format)
+        
+        # Headers
+        headers = ['Reference Number', 'Title', 'Status', 'Created Date', 'Deadline']
+        for col, header in enumerate(headers):
+            worksheet.write(2, col, header, header_format)
+        
+        # Data
+        for row, tender in enumerate(tenders, 3):
+            worksheet.write(row, 0, tender.reference_number, cell_format)
+            worksheet.write(row, 1, tender.title, cell_format)
+            worksheet.write(row, 2, tender.status.name if tender.status else 'N/A', cell_format)
+            worksheet.write(row, 3, tender.created_at.strftime('%Y-%m-%d') if tender.created_at else 'N/A', cell_format)
+            worksheet.write(row, 4, tender.submission_deadline.strftime('%Y-%m-%d') if tender.submission_deadline else 'N/A', cell_format)
+        
+        # Adjust column widths
+        worksheet.set_column('A:A', 15)
+        worksheet.set_column('B:B', 40)
+        worksheet.set_column('C:C', 15)
+        worksheet.set_column('D:D', 12)
+        worksheet.set_column('E:E', 12)
+    
+    workbook.close()
+    output.seek(0)
+    
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = 'attachment; filename="Tenders_by_Category_Report.xlsx"'
+    return response
 
 # SUPER ADMIN CUSTOM FIELDS MANAGEMENT
 @app.route('/admin/custom-fields')

@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}My Profile - Tender Management System{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>My Profile</h2>
+    <div>
+        <a href="{{ url_for('edit_profile') }}" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Edit Profile
+        </a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-4">
+        <!-- Profile Picture and Basic Info -->
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="profile-image-container mb-3">
+                    {% if user.profile_image %}
+                    <img src="{{ url_for('static', filename='uploads/profiles/' + user.profile_image) }}" 
+                         alt="Profile Picture" class="profile-image">
+                    {% else %}
+                    <div class="profile-image-placeholder">
+                        <i class="fas fa-user fa-4x text-muted"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <h4 class="mb-1">{{ user.first_name }} {{ user.last_name }}</h4>
+                <p class="text-muted mb-2">{{ user.email }}</p>
+                
+                {% if user.phone %}
+                <p class="text-muted mb-2">
+                    <i class="fas fa-phone"></i> {{ user.phone }}
+                </p>
+                {% endif %}
+                
+                <div class="mt-3">
+                    {% if user.is_super_admin %}
+                    <span class="badge bg-danger">Super Administrator</span>
+                    {% elif user.is_admin %}
+                    <span class="badge bg-warning">Administrator</span>
+                    {% else %}
+                    <span class="badge bg-primary">User</span>
+                    {% endif %}
+                    
+                    {% if user.is_active %}
+                    <span class="badge bg-success ms-1">Active</span>
+                    {% else %}
+                    <span class="badge bg-secondary ms-1">Inactive</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Stats -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-bar"></i> My Statistics
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="stat-item">
+                            <h4 class="text-primary mb-0">{{ user.tenders_created.count() if user.tenders_created else 0 }}</h4>
+                            <small class="text-muted">Tenders Created</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stat-item">
+                            <h4 class="text-success mb-0">{{ user.notes_created.count() if user.notes_created else 0 }}</h4>
+                            <small class="text-muted">Notes Added</small>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="stat-item">
+                            <h4 class="text-info mb-0">{{ user.documents_uploaded.count() if user.documents_uploaded else 0 }}</h4>
+                            <small class="text-muted">Documents Uploaded</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stat-item">
+                            <h4 class="text-warning mb-0">
+                                {% if user.last_login %}
+                                {{ (moment().utcnow() - user.last_login).days }}
+                                {% else %}
+                                N/A
+                                {% endif %}
+                            </h4>
+                            <small class="text-muted">Days Since Login</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-8">
+        <!-- Account Information -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-user"></i> Account Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">First Name</label>
+                        <p class="mb-0">{{ user.first_name }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Last Name</label>
+                        <p class="mb-0">{{ user.last_name }}</p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Email Address</label>
+                        <p class="mb-0">{{ user.email }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Phone Number</label>
+                        <p class="mb-0">{{ user.phone if user.phone else 'Not provided' }}</p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">User ID</label>
+                        <p class="mb-0"><code>{{ user.id }}</code></p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Account Status</label>
+                        <p class="mb-0">
+                            {% if user.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Company Information -->
+        {% if company %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-building"></i> Company Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Company Name</label>
+                        <p class="mb-0">{{ company.name }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Company ID</label>
+                        <p class="mb-0"><code>{{ company.id }}</code></p>
+                    </div>
+                </div>
+                
+                {% if company.address %}
+                <div class="mb-3">
+                    <label class="form-label text-muted">Address</label>
+                    <p class="mb-0">{{ company.address }}</p>
+                </div>
+                {% endif %}
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Member Since</label>
+                        <p class="mb-0">{{ company.created_at.strftime('%B %d, %Y') if company.created_at else 'Unknown' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Role in Company</label>
+                        <p class="mb-0">
+                            {% if user.is_super_admin %}
+                            System Administrator
+                            {% elif user.is_admin %}
+                            Company Administrator
+                            {% else %}
+                            User
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Account Activity -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock"></i> Account Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Account Created</label>
+                        <p class="mb-0">{{ user.created_at.strftime('%B %d, %Y at %I:%M %p') if user.created_at else 'Unknown' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Last Updated</label>
+                        <p class="mb-0">{{ user.updated_at.strftime('%B %d, %Y at %I:%M %p') if user.updated_at else 'Never' }}</p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Last Login</label>
+                        <p class="mb-0">
+                            {% if user.last_login %}
+                            {{ user.last_login.strftime('%B %d, %Y at %I:%M %p') }}
+                            <br><small class="text-muted">{{ moment(user.last_login).fromNow() }}</small>
+                            {% else %}
+                            Never logged in
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted">Password Last Changed</label>
+                        <p class="mb-0">
+                            {% if user.password_changed_at %}
+                            {{ user.password_changed_at.strftime('%B %d, %Y') }}
+                            {% else %}
+                            Not available
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-history"></i> Recent Activity
+                </h5>
+                <small class="text-muted">Last 5 actions</small>
+            </div>
+            <div class="card-body">
+                {% if user.recent_activities %}
+                <div class="timeline">
+                    {% for activity in user.recent_activities[:5] %}
+                    <div class="timeline-item">
+                        <div class="timeline-marker bg-primary"></div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">{{ activity.action }}</h6>
+                            <p class="timeline-description text-muted">{{ activity.description }}</p>
+                            <small class="text-muted">
+                                <i class="fas fa-clock"></i> {{ activity.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-history fa-2x text-muted mb-2"></i>
+                    <p class="text-muted">No recent activity recorded</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.profile-image-container {
+    position: relative;
+    display: inline-block;
+}
+
+.profile-image {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 4px solid #e9ecef;
+}
+
+.profile-image-placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background-color: #f8f9fa;
+    border: 4px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.stat-item {
+    padding: 1rem 0;
+}
+
+.stat-item h4 {
+    font-weight: bold;
+}
+
+.timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 2rem;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -2rem;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+    z-index: 1;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    border: 1px solid #e9ecef;
+}
+
+.timeline-title {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.timeline-description {
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+code {
+    color: #e83e8c;
+    background-color: #f1f3f4;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+}
+</style>
+{% endblock %}

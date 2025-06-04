@@ -3,7 +3,14 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Reports & Analytics</h2>
+    <div>
+        <h2>Reports & Analytics</h2>
+        {% if not is_super_admin and company_stats %}
+        <p class="text-muted mb-0">
+            <i class="fas fa-building"></i> {{ company_stats.company_name }} - Company Dashboard
+        </p>
+        {% endif %}
+    </div>
     <div>
         <a href="{{ url_for('tender_reports') }}" class="btn btn-outline-primary">
             <i class="fas fa-chart-line"></i> Detailed Reports
@@ -52,7 +59,7 @@
         </div>
     </div>
     {% else %}
-    <!-- Company Admin Summary -->
+    <!-- Company User Summary -->
     <div class="col-lg-3 col-md-6 mb-3">
         <div class="card border-primary">
             <div class="card-body text-center">
@@ -76,7 +83,7 @@
             <div class="card-body text-center">
                 <i class="fas fa-clipboard-list fa-2x text-info mb-2"></i>
                 <h4 class="text-info">{{ tender_stats.total_tenders if tender_stats else 0 }}</h4>
-                <p class="text-muted mb-0">Total Tenders</p>
+                <p class="text-muted mb-0">Company Tenders</p>
             </div>
         </div>
     </div>
@@ -99,7 +106,12 @@
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0">
-                    <i class="fas fa-chart-pie"></i> Tender Status Breakdown
+                    <i class="fas fa-chart-pie"></i> 
+                    {% if is_super_admin %}
+                    System-wide Tender Status
+                    {% else %}
+                    Company Tender Status
+                    {% endif %}
                 </h5>
             </div>
             <div class="card-body">
@@ -109,6 +121,9 @@
                 <div class="text-center py-4">
                     <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
                     <p class="text-muted">No tender data available</p>
+                    {% if not is_super_admin %}
+                    <p class="text-muted small">Create tenders to see analytics</p>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
@@ -129,12 +144,17 @@
                         <i class="fas fa-plus"></i> Create New Tender
                     </a>
                     <a href="{{ url_for('tenders') }}" class="btn btn-outline-primary">
-                        <i class="fas fa-list"></i> View All Tenders
+                        <i class="fas fa-list"></i> 
+                        {% if is_super_admin %}
+                        View All Tenders
+                        {% else %}
+                        View Company Tenders
+                        {% endif %}
                     </a>
                     <a href="{{ url_for('tender_reports') }}" class="btn btn-outline-info">
-                        <i class="fas fa-chart-line"></i> Detailed Tender Reports
+                        <i class="fas fa-chart-line"></i> Detailed Reports
                     </a>
-                    {% if session.is_super_admin %}
+                    {% if is_super_admin %}
                     <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-building"></i> Manage Companies
                     </a>
@@ -148,13 +168,18 @@
     </div>
 </div>
 
-<!-- Recent Activity / Statistics Table -->
+<!-- Tender Status Summary Table -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0">
-                    <i class="fas fa-list-alt"></i> Tender Status Summary
+                    <i class="fas fa-list-alt"></i> 
+                    {% if is_super_admin %}
+                    System Tender Status Summary
+                    {% else %}
+                    Company Tender Status Summary
+                    {% endif %}
                 </h5>
             </div>
             <div class="card-body">
@@ -199,7 +224,11 @@
                 <div class="text-center py-4">
                     <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
                     <h5 class="text-muted">No Tender Data</h5>
-                    <p class="text-muted">Create some tenders to see analytics and reports here.</p>
+                    {% if is_super_admin %}
+                    <p class="text-muted">No tenders have been created in the system yet.</p>
+                    {% else %}
+                    <p class="text-muted">Your company hasn't created any tenders yet.</p>
+                    {% endif %}
                     <a href="{{ url_for('create_tender') }}" class="btn btn-primary">
                         <i class="fas fa-plus"></i> Create First Tender
                     </a>
@@ -209,6 +238,63 @@
         </div>
     </div>
 </div>
+
+<!-- Recent Tenders (Company-specific) -->
+{% if tender_stats and tender_stats.recent_tenders and not is_super_admin %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clock"></i> Recent Company Tenders
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Reference</th>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tender in tender_stats.recent_tenders[:5] %}
+                            <tr>
+                                <td>
+                                    <code>{{ tender.reference_number }}</code>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('view_tender', tender_id=tender.id) }}" class="text-decoration-none">
+                                        {{ tender.title }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background-color: {{ tender.status.color }}; color: white;">
+                                        {{ tender.status.name }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ tender.created_at.strftime('%Y-%m-%d') }}</small>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('view_tender', tender_id=tender.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <style>
 .border-primary { border-color: #007bff !important; }

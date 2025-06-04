@@ -344,6 +344,49 @@ class CompanyService:
             'total_tenders': total_tenders,
             'active_tenders': active_tenders
         }
+    @staticmethod
+    def get_company_stats(company_id):
+        """Get statistics for a specific company"""
+        try:
+            company = Company.query.get(company_id)
+            if not company:
+                return None
+            
+            # Get all users for this company
+            users = User.query.filter_by(company_id=company_id).all()
+            
+            # Count different types of users
+            total_users = len(users)
+            active_users = len([u for u in users if u.is_active])
+            admin_users = len([u for u in users if u.is_admin and not u.is_super_admin])
+            regular_users = len([u for u in users if not u.is_admin and not u.is_super_admin])
+            
+            # Get tender count for this company
+            tender_count = Tender.query.filter_by(company_id=company_id).count()
+            
+            return {
+                'company_name': company.name,
+                'total_users': total_users,
+                'active_users': active_users,
+                'admins': admin_users,
+                'regular_users': regular_users,
+                'tender_count': tender_count,
+                'created_date': company.created_at
+            }
+            
+        except Exception as e:
+            print(f"Error getting company stats: {str(e)}")
+            return None
+    
+    @staticmethod
+    def get_all_companies():
+        """Get all companies (for super admin)"""
+        try:
+            return Company.query.all()
+        except Exception as e:
+            print(f"Error getting all companies: {str(e)}")
+            return []
+
 class RoleService:
     """Role management services"""
     
@@ -557,38 +600,61 @@ class TenderService:
         except Exception as e:
             db.session.rollback()
             return False, f"Error deleting tender: {str(e)}"
-    
     @staticmethod
     def get_tender_stats(company_id=None):
         """Get tender statistics"""
-        if company_id:
-            # Company-specific stats
-            total_tenders = Tender.query.filter_by(company_id=company_id).count()
+        try:
+            if company_id:
+                # Company-specific stats
+                total_tenders = Tender.query.filter_by(company_id=company_id).count()
+                
+                # Get status breakdown for company
+                stats = db.session.query(
+                    TenderStatus.name,
+                    TenderStatus.color,
+                    db.func.count(Tender.id).label('count')
+                ).join(Tender).filter(
+                    Tender.company_id == company_id
+                ).group_by(TenderStatus.name, TenderStatus.color).all()
+                
+            else:
+                # System-wide stats (for super admin)
+                total_tenders = Tender.query.count()
+                
+                # Get status breakdown for all tenders
+                stats = db.session.query(
+                    TenderStatus.name,
+                    TenderStatus.color,
+                    db.func.count(Tender.id).label('count')
+                ).join(Tender).group_by(TenderStatus.name, TenderStatus.color).all()
             
-            # Get status breakdown
-            stats = db.session.query(
-                TenderStatus.name,
-                TenderStatus.color,
-                db.func.count(Tender.id).label('count')
-            ).join(Tender).filter(
-                Tender.company_id == company_id
-            ).group_by(TenderStatus.name, TenderStatus.color).all()
+            # Format the status breakdown
+            status_breakdown = []
+            for stat in stats:
+                status_breakdown.append({
+                    'name': stat.name,
+                    'color': stat.color,
+                    'count': stat.count
+                })
             
-        else:
-            # System-wide stats (for super admin)
-            total_tenders = Tender.query.count()
+            # Sort by count (highest first)
+            status_breakdown.sort(key=lambda x: x['count'], reverse=True)
             
-            stats = db.session.query(
-                TenderStatus.name,
-                TenderStatus.color,
-                db.func.count(Tender.id).label('count')
-            ).join(Tender).group_by(TenderStatus.name, TenderStatus.color).all()
-        
             return {
                 'total_tenders': total_tenders,
-                'status_breakdown': [{'name': s.name, 'color': s.color, 'count': s.count} for s in stats]
+                'status_breakdown': status_breakdown
             }
-    
+            
+        except Exception as e:
+            print(f"Error getting tender stats: {str(e)}")
+            return {
+                'total_tenders': 0,
+                'status_breakdown': []
+            }
+
+
+   
+      
 class TenderCategoryService:
         """Tender category management services"""
         
