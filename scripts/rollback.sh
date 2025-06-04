@@ -5,9 +5,16 @@
 
 set -e  # Exit on any error
 
-# Configuration
-PROJECT_DIR="$HOME/tms"
-BACKUP_DIR="$HOME"
+# Configuration - can be overridden with environment variables
+PROJECT_DIR="${TMS_PROJECT_DIR:-$HOME/tms}"
+BACKUP_BASE_DIR="${TMS_BACKUP_DIR:-$HOME}"
+BACKUP_DIR="$BACKUP_BASE_DIR/tms_backups"
+
+# Auto-detect if we're running from within the project directory
+if [[ "$(basename "$PWD")" == "tms" ]] && [[ -f "app.py" ]]; then
+    PROJECT_DIR="$PWD"
+    echo -e "${BLUE}ℹ️  Auto-detected project directory: $PROJECT_DIR${NC}"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -18,25 +25,49 @@ NC='\033[0m' # No Color
 
 # Function to show usage
 show_usage() {
-    echo -e "${BLUE}Usage: $0 <backup_name>${NC}"
+    echo -e "${BLUE}Usage: $0 [backup_name]${NC}"
+    echo ""
+    echo "If no backup_name is provided, the latest backup will be used."
     echo ""
     echo "Examples:"
-    echo "  $0 tms_backup_20250604_182500"
-    echo "  $0 tms_backup_20250604_145230"
+    echo "  $0                              # Use latest backup"
+    echo "  $0 tms_backup_20250604_182500   # Use specific backup"
     echo ""
     echo "Available backups:"
-    ls -la "$BACKUP_DIR" | grep "tms_backup_" | awk '{print "  " $9}' || echo "  No backups found"
+    if [ -d "$BACKUP_DIR" ]; then
+        ls -1t "$BACKUP_DIR" | grep "tms_backup_" | head -5 | awk '{print "  " $1}' || echo "  No backups found"
+        BACKUP_COUNT=$(ls -1 "$BACKUP_DIR" | grep "tms_backup_" | wc -l)
+        if [ "$BACKUP_COUNT" -gt 5 ]; then
+            echo "  ... and $((BACKUP_COUNT - 5)) more"
+        fi
+    else
+        echo "  Backup directory does not exist: $BACKUP_DIR"
+    fi
 }
 
-# Check if backup name is provided
+# Determine which backup to use
 if [ $# -eq 0 ]; then
-    echo -e "${RED}❌ Error: Backup name not provided!${NC}"
-    echo ""
-    show_usage
-    exit 1
+    # No argument provided, use latest backup
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "${RED}❌ Error: Backup directory does not exist: $BACKUP_DIR${NC}"
+        echo ""
+        show_usage
+        exit 1
+    fi
+    
+    BACKUP_NAME=$(ls -1t "$BACKUP_DIR" | grep "tms_backup_" | head -n 1)
+    if [ -z "$BACKUP_NAME" ]; then
+        echo -e "${RED}❌ Error: No backups found in $BACKUP_DIR${NC}"
+        echo ""
+        show_usage
+        exit 1
+    fi
+    
+    echo -e "${BLUE}ℹ️  No backup specified, using latest: $BACKUP_NAME${NC}"
+else
+    BACKUP_NAME="$1"
 fi
 
-BACKUP_NAME="$1"
 BACKUP_PATH="$BACKUP_DIR/$BACKUP_NAME"
 
 echo -e "${YELLOW}🔄 Starting rollback process...${NC}"
@@ -68,8 +99,10 @@ EMERGENCY_BACKUP="tms_emergency_$(date +"%Y%m%d_%H%M%S")"
 echo -e "${YELLOW}💾 Creating emergency backup of current state...${NC}"
 
 if [ -d "$PROJECT_DIR" ]; then
-    cd "$BACKUP_DIR"
-    if cp -r "$PROJECT_DIR" "$EMERGENCY_BACKUP"; then
+    # Ensure backup directory exists
+    mkdir -p "$BACKUP_DIR"
+    
+    if cp -r "$PROJECT_DIR" "$BACKUP_DIR/$EMERGENCY_BACKUP"; then
         echo -e "${GREEN}✅ Emergency backup created: $EMERGENCY_BACKUP${NC}"
     else
         echo -e "${RED}❌ Error: Failed to create emergency backup!${NC}"
@@ -86,16 +119,15 @@ fi
 
 # Restore from backup
 echo -e "${YELLOW}📦 Restoring from backup...${NC}"
-cd "$BACKUP_DIR"
 
-if cp -r "$BACKUP_PATH" "tms"; then
+if cp -r "$BACKUP_PATH" "$PROJECT_DIR"; then
     echo -e "${GREEN}✅ Backup restored successfully!${NC}"
 else
     echo -e "${RED}❌ Error: Failed to restore from backup!${NC}"
     echo "Attempting to restore emergency backup..."
     
-    if [ -d "$EMERGENCY_BACKUP" ]; then
-        cp -r "$EMERGENCY_BACKUP" "tms"
+    if [ -d "$BACKUP_DIR/$EMERGENCY_BACKUP" ]; then
+        cp -r "$BACKUP_DIR/$EMERGENCY_BACKUP" "$PROJECT_DIR"
         echo -e "${YELLOW}⚠️  Emergency backup restored${NC}"
     fi
     exit 1
