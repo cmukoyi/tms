@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Features - {{ company.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header Card -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-1">
+                            <i class="fas fa-cog me-2"></i>Manage Features
+                        </h3>
+                        <p class="mb-0 text-muted">
+                            <i class="fas fa-building me-1"></i>{{ company.name }}
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <a href="{{ url_for('admin_companies') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to Companies
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Company:</strong> {{ company.name }}</p>
+                            <p><strong>Email:</strong> {{ company.email }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Status:</strong> 
+                                {% if company.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactive</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Created:</strong> {{ company.created_at.strftime('%B %d, %Y') }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature Management Form -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4><i class="fas fa-puzzle-piece me-2"></i>Feature Configuration</h4>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-success" onclick="selectAllFeatures()">
+                            <i class="fas fa-check-double"></i> Enable All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-warning" onclick="deselectAllFeatures()">
+                            <i class="fas fa-times"></i> Disable All
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="featuresForm">
+                        {{ form.hidden_tag() }}
+                        
+                        {% for category, features in features_by_category.items() %}
+                        <div class="feature-category mb-4">
+                            <h5 class="border-bottom pb-2 mb-3 d-flex align-items-center">
+                                <i class="fas fa-{{ 'tachometer-alt' if category == 'dashboard' else 
+                                                    'chart-bar' if category == 'reports' else
+                                                    'file' if category == 'files' else
+                                                    'users' if category == 'users' else
+                                                    'chart-line' if category == 'analytics' else
+                                                    'plug' if category == 'integrations' else
+                                                    'code' if category == 'api' else
+                                                    'star' }} me-2 text-primary"></i>
+                                {{ category|title }}
+                                <span class="badge bg-secondary ms-2">{{ features|length }} feature{{ 's' if features|length != 1 else '' }}</span>
+                            </h5>
+                            
+                            <div class="row">
+                                {% for feature in features %}
+                                {% set field_name = 'feature_' + feature.code %}
+                                {% set field = form[field_name] %}
+                                <div class="col-md-6 col-lg-4 mb-3">
+                                    <div class="card feature-card h-100">
+                                        <div class="card-body">
+                                            <div class="form-check form-switch">
+                                                {{ field(class="form-check-input", id=field_name) }}
+                                                <label class="form-check-label fw-bold" for="{{ field_name }}">
+                                                    {{ feature.name }}
+                                                </label>
+                                            </div>
+                                            {% if feature.description %}
+                                            <small class="text-muted d-block mt-2">
+                                                {{ feature.description }}
+                                            </small>
+                                            {% endif %}
+                                            <div class="mt-2">
+                                                <small class="badge bg-light text-dark">
+                                                    <i class="fas fa-code me-1"></i>{{ feature.code }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer bg-transparent">
+                                            <small class="text-muted">
+                                                <i class="fas fa-tag me-1"></i>{{ feature.category or 'Uncategorized' }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        
+                        <hr>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Changes will take effect immediately after saving.
+                                </small>
+                            </div>
+                            <div>
+                                <a href="{{ url_for('admin_companies') }}" class="btn btn-secondary me-2">
+                                    <i class="fas fa-times"></i> Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary" id="saveButton">
+                                    <i class="fas fa-save"></i> Update Features
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Feature Statistics -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-bar me-2"></i>Feature Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="featureStats">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary" id="totalFeatures">0</h4>
+                                <p class="text-muted mb-0">Total Features</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-success" id="enabledFeatures">0</h4>
+                                <p class="text-muted mb-0">Enabled</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-warning" id="disabledFeatures">0</h4>
+                                <p class="text-muted mb-0">Disabled</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info" id="enabledPercentage">0%</h4>
+                                <p class="text-muted mb-0">Enabled %</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Update statistics when page loads and when checkboxes change
+    updateFeatureStats();
+    
+    // Add event listeners to all feature checkboxes
+    const featureCheckboxes = document.querySelectorAll('input[type="checkbox"][id^="feature_"]');
+    featureCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateFeatureStats);
+    });
+    
+    // Form submission handling
+    const form = document.getElementById('featuresForm');
+    const saveButton = document.getElementById('saveButton');
+    
+    form.addEventListener('submit', function(e) {
+        saveButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+        saveButton.disabled = true;
+    });
+});
+
+function updateFeatureStats() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="feature_"]');
+    const total = checkboxes.length;
+    const enabled = Array.from(checkboxes).filter(cb => cb.checked).length;
+    const disabled = total - enabled;
+    const percentage = total > 0 ? Math.round((enabled / total) * 100) : 0;
+    
+    document.getElementById('totalFeatures').textContent = total;
+    document.getElementById('enabledFeatures').textContent = enabled;
+    document.getElementById('disabledFeatures').textContent = disabled;
+    document.getElementById('enabledPercentage').textContent = percentage + '%';
+}
+
+function selectAllFeatures() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="feature_"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateFeatureStats();
+    
+    // Show feedback
+    showToast('success', 'All features enabled');
+}
+
+function deselectAllFeatures() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="feature_"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateFeatureStats();
+    
+    // Show feedback
+    showToast('warning', 'All features disabled');
+}
+
+function showToast(type, message) {
+    // Create toast element
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type}" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${type === 'success' ? 'check' : 'exclamation-triangle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    // Create toast container if it doesn't exist
+    let toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toastContainer';
+        toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = '1055';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Add toast to container
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    
+    // Initialize and show toast
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    
+    // Remove toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
+}
+
+// Add smooth animations for better UX
+document.querySelectorAll('.feature-card').forEach(card => {
+    card.addEventListener('mouseenter', function() {
+        this.style.transform = 'translateY(-2px)';
+        this.style.transition = 'transform 0.2s ease';
+    });
+    
+    card.addEventListener('mouseleave', function() {
+        this.style.transform = 'translateY(0)';
+    });
+});
+</script>
+
+<style>
+.feature-card {
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.feature-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: rgba(13, 110, 253, 0.2);
+}
+
+.form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.form-check-input:checked + .form-check-label {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.feature-category h5 {
+    color: #495057;
+    font-weight: 600;
+}
+
+.feature-category h5 i {
+    font-size: 1.1em;
+}
+
+.form-switch .form-check-input {
+    width: 2.5em;
+    height: 1.25em;
+}
+
+.card-footer {
+    padding: 0.5rem 1rem;
+    background-color: rgba(0,0,0,0.03);
+}
+
+/* Dark mode improvements */
+[data-theme="dark"] .feature-card {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+}
+
+[data-theme="dark"] .feature-card:hover {
+    border-color: rgba(13, 110, 253, 0.4);
+    box-shadow: 0 4px 12px rgba(255,255,255,0.1);
+}
+
+[data-theme="dark"] .card-footer {
+    background-color: rgba(255,255,255,0.05);
+}
+
+[data-theme="dark"] .form-check-input:checked + .form-check-label {
+    color: #20c997;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .feature-category .row {
+        margin: 0 -0.5rem;
+    }
+    
+    .feature-category .col-md-6,
+    .feature-category .col-lg-4 {
+        padding: 0 0.5rem;
+    }
+    
+    .card-header .btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+    }
+    
+    .feature-card .card-body {
+        padding: 0.75rem;
+    }
+}
+
+/* Loading state for save button */
+.btn.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.btn.loading .fas.fa-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Statistics cards animation */
+#featureStats .col-md-3 {
+    transition: all 0.3s ease;
+}
+
+#featureStats .col-md-3:hover {
+    transform: translateY(-2px);
+}
+
+/* Feature preview badges */
+.badge.bg-light {
+    border: 1px solid #dee2e6;
+}
+
+[data-theme="dark"] .badge.bg-light {
+    background-color: #495057 !important;
+    border-color: #6c757d;
+    color: #fff !important;
+}
+</style>
+{% endblock %}

@@ -1,10 +1,16 @@
-{% extends "base.html" %} {% block title %}Manage Companies - Admin{% endblock
-%} {% block content %}
+{% extends "base.html" %} 
+{% block title %}Manage Companies - Admin{% endblock %} 
+{% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h2><i class="fas fa-building"></i> Manage Companies</h2>
-  <a href="{{ url_for('create_company') }}" class="btn btn-primary">
-    <i class="fas fa-plus"></i> Add New Company
-  </a>
+  <h2><i class="fas fa-building"></i> Manage Companies & Features</h2>
+  <div>
+    <a href="#" onclick="alert('Feature management available after adding routes')" class="btn btn-info me-2">
+      <i class="fas fa-cog"></i> Manage Features
+    </a>
+    <a href="{{ url_for('create_company') }}" class="btn btn-primary">
+      <i class="fas fa-plus"></i> Add New Company
+    </a>
+  </div>
 </div>
 
 <div class="card">
@@ -18,6 +24,7 @@
             <th>Company Name</th>
             <th>Email</th>
             <th>Phone</th>
+            <th>Features</th>
             <th>Status</th>
             <th>Created</th>
             <th>Users</th>
@@ -28,9 +35,41 @@
           {% for company in companies %}
           <tr>
             <td>{{ company.id }}</td>
-            <td>{{ company.name }}</td>
+            <td>
+              <div class="d-flex align-items-center">
+                <i class="fas fa-building text-primary me-2"></i>
+                <strong>{{ company.name }}</strong>
+              </div>
+            </td>
             <td>{{ company.email }}</td>
             <td>{{ company.phone or 'N/A' }}</td>
+            <td>
+              <div class="feature-summary">
+                {% set enabled_features = company.get_enabled_features() %}
+                {% set total_features = 6 %}
+                <span class="badge bg-{{ 'success' if enabled_features|length > 0 else 'secondary' }} mb-1">
+                  {{ enabled_features|length }} / {{ total_features }} enabled
+                </span>
+                <div class="feature-preview">
+                  {% for feature in enabled_features[:3] %}
+                    <small class="badge bg-light text-dark me-1 mb-1">
+                      <i class="fas fa-{{ 'tachometer-alt' if feature.category == 'dashboard' else 
+                                          'chart-bar' if feature.category == 'reports' else
+                                          'file' if feature.category == 'files' else
+                                          'users' if feature.category == 'users' else
+                                          'cog' }} me-1"></i>
+                      {{ feature.name }}
+                    </small>
+                  {% endfor %}
+                  {% if enabled_features|length > 3 %}
+                    <small class="text-muted">+{{ enabled_features|length - 3 }} more</small>
+                  {% endif %}
+                  {% if enabled_features|length == 0 %}
+                    <small class="text-muted fst-italic">No features enabled</small>
+                  {% endif %}
+                </div>
+              </div>
+            </td>
             <td>
               <span
                 class="badge bg-{{ 'success' if company.is_active else 'secondary' }}">
@@ -39,22 +78,58 @@
             </td>
             <td>{{ company.created_at.strftime('%Y-%m-%d') }}</td>
             <td>
-              <span class="badge bg-info"
-                >{{ company.users|length }} users</span>
+              <span class="badge bg-info">{{ company.users|length }} users</span>
             </td>
             <td>
-              <a
-                href="{{ url_for('edit_company', company_id=company.id) }}"
-                class="btn btn-sm btn-outline-primary"
-                title="Edit Company">
-                <i class="fas fa-edit"></i>
-              </a>
-              <a
-                href="{{ url_for('view_company_users', company_id=company.id) }}"
-                class="btn btn-sm btn-outline-info"
-                title="View Users">
-                <i class="fas fa-users"></i>
-              </a>
+              <div class="btn-group-vertical d-grid gap-1" style="min-width: 160px;">
+                <!-- Feature Management Button (Main Action) -->
+                <a
+                  href="{{ url_for('admin_manage_company_features', company_id=company.id) }}"
+                  class="btn btn-sm btn-success"
+                  title="Manage Features">
+                  <i class="fas fa-cog me-1"></i> Manage Features
+                </a>
+                
+                <!-- Other Actions -->
+                <div class="btn-group">
+                  <a
+                    href="{{ url_for('edit_company', company_id=company.id) }}"
+                    class="btn btn-sm btn-outline-primary"
+                    title="Edit Company">
+                    <i class="fas fa-edit"></i>
+                  </a>
+                  <a
+                    href="{{ url_for('view_company_users', company_id=company.id) }}"
+                    class="btn btn-sm btn-outline-info"
+                    title="View Users">
+                    <i class="fas fa-users"></i>
+                  </a>
+                  <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                          data-bs-toggle="dropdown">
+                    <i class="fas fa-ellipsis-v"></i>
+                  </button>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <a class="dropdown-item" href="#" 
+                         onclick="bulkToggleFeatures({{ company.id }}, 'enable_all')">
+                        <i class="fas fa-check-circle text-success me-2"></i> Enable All Features
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="#" 
+                         onclick="bulkToggleFeatures({{ company.id }}, 'disable_all')">
+                        <i class="fas fa-times-circle text-danger me-2"></i> Disable All Features
+                      </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <a class="dropdown-item" href="{{ url_for('view_company', company_id=company.id) }}">
+                        <i class="fas fa-eye text-info me-2"></i> View Details
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -73,4 +148,186 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Feature Overview Card -->
+{% if companies %}
+<div class="card mt-4">
+  <div class="card-header">
+    <h5><i class="fas fa-chart-pie me-2"></i>Feature Overview</h5>
+  </div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-3">
+        <div class="text-center">
+          <h3 class="text-primary">{{ companies|length }}</h3>
+          <p class="text-muted mb-0">Total Companies</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-center">
+          <h3 class="text-success">6</h3>
+          <p class="text-muted mb-0">Available Features</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-center">
+          {% set total_enabled = 0 %}
+          {% for company in companies %}
+            {% set total_enabled = total_enabled + company.get_enabled_features()|length %}
+          {% endfor %}
+          <h3 class="text-info">
+            {{ (total_enabled / companies|length)|round|int if companies else 0 }}
+          </h3>
+          <p class="text-muted mb-0">Avg Features/Company</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-center">
+          {% set active_companies = companies|selectattr('is_active')|list|length %}
+          <h3 class="text-warning">{{ active_companies }}</h3>
+          <p class="text-muted mb-0">Active Companies</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 mb-0">Updating features...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function bulkToggleFeatures(companyId, action) {
+    const actionText = action === 'enable_all' ? 'enable all' : 'disable all';
+    const confirmMessage = `Are you sure you want to ${actionText} features for this company?`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Show loading modal
+    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    loadingModal.show();
+    
+    fetch(`/admin/companies/${companyId}/features/bulk-toggle`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || ''
+        },
+        body: JSON.stringify({ action: action })
+    })
+    .then(response => response.json())
+    .then(data => {
+        loadingModal.hide();
+        if (data.success) {
+            // Show success message
+            showAlert('success', data.message);
+            // Reload page after short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showAlert('danger', 'Error: ' + (data.message || 'Unknown error occurred'));
+        }
+    })
+    .catch(error => {
+        loadingModal.hide();
+        console.error('Error:', error);
+        showAlert('danger', 'An error occurred while updating features');
+    });
+}
+
+function showAlert(type, message) {
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            <i class="fas fa-${ type === 'success' ? 'check-circle' : 'exclamation-triangle' } me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Insert at top of main content
+    const mainContent = document.querySelector('.card .card-body');
+    mainContent.insertAdjacentHTML('afterbegin', alertHtml);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = mainContent.querySelector('.alert');
+        if (alert) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+    }, 5000);
+}
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+
+<style>
+.feature-summary {
+    min-height: 50px;
+}
+
+.feature-preview {
+    max-width: 180px;
+    word-wrap: break-word;
+}
+
+.btn-group-vertical .btn {
+    border-radius: 0.375rem !important;
+    margin-bottom: 0.25rem;
+}
+
+.btn-group-vertical .btn:last-child {
+    margin-bottom: 0;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+@media (max-width: 768px) {
+    .btn-group-vertical {
+        min-width: 140px !important;
+    }
+    
+    .feature-preview {
+        max-width: 120px;
+    }
+    
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+
+/* Feature badge styling */
+.badge.bg-light {
+    border: 1px solid #dee2e6;
+}
+
+[data-theme="dark"] .badge.bg-light {
+    background-color: #495057 !important;
+    border-color: #6c757d;
+    color: #fff !important;
+}
+</style>
 {% endblock %}

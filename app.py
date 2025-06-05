@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from flask_migrate import Migrate
 
 
+
+from models import Feature, CompanyFeature
+from admin_forms import FeatureForm, CompanyFeaturesManagementForm
+
 # Import our modules
 from config import Config
 from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory
@@ -1721,7 +1725,224 @@ def internal_error(error):
     return render_template('errors/500.html'), 500
 
 
+# Feature Management Routes for Superadmin
+@app.route('/admin/features')
+def admin_features():
+    """List all available features"""
+    if not session.get('is_super_admin', False):
+        flash('Access denied. Superadmin privileges required.', 'error')
+        return redirect(url_for('login'))
+    
+    features = Feature.query.order_by(Feature.category, Feature.name).all()
+    
+    # Group by category
+    features_by_category = {}
+    for feature in features:
+        category = feature.category or 'Other'
+        if category not in features_by_category:
+            features_by_category[category] = []
+        features_by_category[category].append(feature)
+    
+    return render_template('admin/features.html', features_by_category=features_by_category)
 
+@app.route('/admin/features/new', methods=['GET', 'POST'])
+def admin_create_feature():
+    """Create a new feature"""
+    if not session.get('is_super_admin', False):
+        flash('Access denied. Superadmin privileges required.', 'error')
+        return redirect(url_for('login'))
+    
+    form = FeatureForm()
+    
+    if form.validate_on_submit():
+        # Check if feature code already exists
+        existing_feature = Feature.query.filter_by(code=form.code.data).first()
+        if existing_feature:
+            flash('Feature code already exists!', 'error')
+            return render_template('admin/feature_form.html', form=form, title='Create Feature')
+        
+        feature = Feature(
+            name=form.name.data,
+            code=form.code.data,
+            description=form.description.data,
+            category=form.category.data,
+            is_active=form.is_active.data
+        )
+        
+        db.session.add(feature)
+        db.session.commit()
+        
+        flash(f'Feature "{feature.name}" created successfully!', 'success')
+        return redirect(url_for('admin_features'))
+    
+    return render_template('admin/feature_form.html', form=form, title='Create Feature')
+
+@app.route('/admin/companies/features')
+def admin_companies_features():
+    """List all companies with feature management"""
+    if not session.get('is_super_admin', False):
+        flash('Access denied. Superadmin privileges required.', 'error')
+        return redirect(url_for('login'))
+    
+    companies = Company.query.filter_by(is_active=True).all()
+    
+    # Get feature counts for each company
+    company_data = []
+    for company in companies:
+        enabled_features = company.get_enabled_features()
+        total_features = Feature.query.filter_by(is_active=True).count()
+        
+        company_data.append({
+            'company': company,
+            'enabled_count': len(enabled_features),
+            'total_count': total_features,
+            'enabled_features': enabled_features
+        })
+    
+    return render_template('admin/companies.html', company_data=company_data)
+
+@app.route('/admin/companies/<int:company_id>/features', methods=['GET', 'POST'])
+def admin_manage_company_features(company_id):
+    """Manage features for a specific company"""
+    if not session.get('is_super_admin', False):
+        flash('Access denied. Superadmin privileges required.', 'error')
+        return redirect(url_for('login'))
+    
+    company = Company.query.get_or_404(company_id)
+    
+    # Debug: Check if company exists and has methods
+    print(f"Company found: {company.name}")
+    print(f"Company has get_enabled_features method: {hasattr(company, 'get_enabled_features')}")
+    
+    try:
+        enabled_features = company.get_enabled_features()
+        print(f"Enabled features: {[f.name for f in enabled_features]}")
+    except Exception as e:
+        print(f"Error getting enabled features: {e}")
+        enabled_features = []
+    
+    # Use the simple template instead of complex form
+    return render_template('admin/company_features_simple.html', company=company)
+
+@app.route('/admin/features/<int:feature_id>/toggle', methods=['POST'])
+def admin_toggle_feature(feature_id):
+    """Toggle feature active status via AJAX"""
+    if not session.get('is_super_admin', False):
+        return jsonify({'success': False, 'message': 'Access denied'})
+    
+    feature = Feature.query.get_or_404(feature_id)
+    feature.is_active = not feature.is_active
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'is_active': feature.is_active,
+        'message': f'Feature "{feature.name}" {"activated" if feature.is_active else "deactivated"}'
+    })
+
+@app.route('/admin/companies/<int:company_id>/features/bulk-toggle', methods=['POST'])
+@login_required
+@super_admin_required
+def bulk_toggle_features(company_id):
+    try:
+        current_user = AuthService.get_user_by_id(session['user_id'])
+
+        data = request.get_json()
+        if not data or 'action' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Action is required'
+            }), 400
+        
+        action = data['action']
+        company = Company.query.get_or_404(company_id)
+        
+        if action == 'enable_all':
+            success = company.enable_all_features(current_user.id)
+            message = 'All features enabled successfully' if success else 'Failed to enable all features'
+        elif action == 'disable_all':
+            success = company.disable_all_features(current_user.id)
+            message = 'All features disabled successfully' if success else 'Failed to disable all features'
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid action'
+            }), 400
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        })
+        
+    except Exception as e:
+        print(f"Error in bulk_toggle_features: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Server error: {str(e)}'
+        }), 500
+
+
+@app.route('/admin/companies/<int:company_id>/toggle-feature', methods=['POST'])
+@login_required
+@super_admin_required
+def toggle_company_feature(company_id):
+    try:
+        current_user = AuthService.get_user_by_id(session['user_id'])
+
+        # Get JSON data from request
+        data = request.get_json()
+        if not data or 'feature_code' not in data:
+            return jsonify({
+                'success': False, 
+                'message': 'Feature code is required'
+            }), 400
+        
+        feature_code = data['feature_code']
+        print(f"Toggling feature {feature_code} for company {company_id}")
+        
+        # Find the company
+        company = Company.query.get_or_404(company_id)
+        
+        # Toggle the feature
+        success, action = company.toggle_feature(feature_code, current_user.id)
+        print(f"Toggle result: success={success}, action={action}")
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'action': action,  # This should be 'enabled' or 'disabled'
+                'message': f'Feature {action} successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Failed to toggle feature: {action}'
+            }), 500
+            
+    except Exception as e:
+        print(f"Error in toggle_company_feature: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Server error: {str(e)}'
+        }), 500
+
+# Update your existing admin_companies route to redirect to new feature management
+# Replace your existing admin_companies route with this:
+#@app.route('/admin/companies')
+##def admin_companies():
+#    """Redirect to companies with features or show simple list"""
+#    if not session.get('is_super_admin', False):
+#        flash('Access denied. Superadmin privileges required.', 'error')
+#        return redirect(url_for('login'))
+#    
+#    try:
+#        # Try to use feature management if available
+#        return redirect(url_for('admin_companies_features'))
+#    except:
+#        # Fallback to your existing companies view
+#        companies = Company.query.all()
+#        return render_template('admin/companies_simple.html', companies=companies)
+#
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block title %}Feature Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3><i class="fas fa-puzzle-piece me-2"></i>Feature Management</h3>
+                    <div>
+                        <a href="{{ url_for('admin.create_feature') }}" class="btn btn-success">
+                            <i class="fas fa-plus"></i> Add New Feature
+                        </a>
+                        <a href="{{ url_for('admin.companies') }}" class="btn btn-secondary ms-2">
+                            <i class="fas fa-building"></i> Manage Companies
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% for category, features in features_by_category.items() %}
+                    <div class="feature-category mb-4">
+                        <h4 class="border-bottom pb-2 mb-3 d-flex align-items-center justify-content-between">
+                            <div>
+                                <i class="fas fa-{{ 'tachometer-alt' if category == 'dashboard' else 
+                                                    'chart-bar' if category == 'reports' else
+                                                    'file' if category == 'files' else
+                                                    'users' if category == 'users' else
+                                                    'chart-line' if category == 'analytics' else
+                                                    'plug' if category == 'integrations' else
+                                                    'code' if category == 'api' else
+                                                    'star' }} me-2 text-primary"></i>
+                                {{ category|title }}
+                            </div>
+                            <span class="badge bg-primary">{{ features|length }} feature{{ 's' if features|length != 1 else '' }}</span>
+                        </h4>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Feature Name</th>
+                                        <th>Code</th>
+                                        <th>Description</th>
+                                        <th>Status</th>
+                                        <th>Usage</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for feature in features %}
+                                    <tr id="feature-row-{{ feature.id }}">
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-{{ 'tachometer-alt' if feature.category == 'dashboard' else 
+                                                                    'chart-bar' if feature.category == 'reports' else
+                                                                    'file' if feature.category == 'files' else
+                                                                    'users' if feature.category == 'users' else
+                                                                    'chart-line' if feature.category == 'analytics' else
+                                                                    'plug' if feature.category == 'integrations' else
+                                                                    'code' if feature.category == 'api' else
+                                                                    'star' }} me-2 text-muted"></i>
+                                                <strong>{{ feature.name }}</strong>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <code class="bg-light px-2 py-1 rounded">{{ feature.code }}</code>
+                                        </td>
+                                        <td>
+                                            <span class="text-break">{{ feature.description or 'No description' }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if feature.is_active else 'danger' }}" id="status-badge-{{ feature.id }}">
+                                                <i class="fas fa-{{ 'check-circle' if feature.is_active else 'times-circle' }} me-1"></i>
+                                                {{ 'Active' if feature.is_active else 'Inactive' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-2">
+                                                    <small class="text-muted">
+                                                        {% set usage_count = feature.company_features|selectattr('enabled')|list|length %}
+                                                        {{ usage_count }} / {{ feature.company_features|length }} companies
+                                                    </small>
+                                                </div>
+                                                <div class="progress" style="width: 60px; height: 8px;">
+                                                    {% set total_companies = feature.company_features|length %}
+                                                    {% set usage_percentage = (usage_count / total_companies * 100) if total_companies > 0 else 0 %}
+                                                    <div class="progress-bar bg-{{ 'success' if usage_percentage > 50 else 'warning' if usage_percentage > 20 else 'danger' }}" 
+                                                         style="width: {{ usage_percentage }}%"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group">
+                                                <a href="{{ url_for('admin.edit_feature', feature_id=feature.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary" 
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Edit Feature">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <button class="btn btn-sm btn-outline-{{ 'warning' if feature.is_active else 'success' }}"
+                                                        onclick="toggleFeature({{ feature.id }})"
+                                                        data-bs-toggle="tooltip"
+                                                        title="{{ 'Deactivate' if feature.is_active else 'Activate' }} Feature"
+                                                        id="toggle-btn-{{ feature.id }}">
+                                                    <i class="fas fa-{{ 'pause' if feature.is_active else 'play' }}" id="toggle-icon-{{ feature.id }}"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-info dropdown-toggle" 
+                                                        data-bs-toggle="dropdown"
+                                                        aria-expanded="false">
+                                                    <i class="fas fa-ellipsis-v"></i>
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" onclick="viewFeatureDetails({{ feature.id }})">
+                                                            <i class="fas fa-eye me-2"></i>View Details
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" onclick="duplicateFeature({{ feature.id }})">
+                                                            <i class="fas fa-copy me-2"></i>Duplicate
+                                                        </a>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li>
+                                                        <a class="dropdown-item text-danger" href="#" onclick="deleteFeature({{ feature.id }})">
+                                                            <i class="fas fa-trash me-2"></i>Delete
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-puzzle-piece fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">No features found</h4>
+                        <p class="text-muted">Create your first feature to get started with feature management.</p>
+                        <a href="{{ url_for('admin.create_feature') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i> Create First Feature
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Feature Statistics -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-bar me-2"></i>Feature Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-primary">
+                                    {% set total_features = features_by_category.values()|map('length')|sum %}
+                                    {{ total_features }}
+                                </h3>
+                                <p class="text-muted mb-0">Total Features</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-success">
+                                    {% set active_features = 0 %}
+                                    {% for category, features in features_by_category.items() %}
+                                        {% set active_features = active_features + (features|selectattr('is_active')|list|length) %}
+                                    {% endfor %}
+                                    {{ active_features }}
+                                </h3>
+                                <p class="text-muted mb-0">Active Features</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-info">{{ features_by_category.keys()|length }}</h3>
+                                <p class="text-muted mb-0">Categories</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="text-warning">
+                                    {% set avg_usage = 0 %}
+                                    {% if total_features > 0 %}
+                                        {% set total_usage = 0 %}
+                                        {% for category, features in features_by_category.items() %}
+                                            {% for feature in features %}
+                                                {% set usage_count = feature.company_features|selectattr('enabled')|list|length %}
+                                                {% set total_companies = feature.company_features|length %}
+                                                {% if total_companies > 0 %}
+                                                    {% set total_usage = total_usage + (usage_count / total_companies) %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endfor %}
+                                        {% set avg_usage = (total_usage / total_features * 100)|round|int %}
+                                    {% endif %}
+                                    {{ avg_usage }}%
+                                </h3>
+                                <p class="text-muted mb-0">Avg Usage</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feature Details Modal -->
+<div class="modal fade" id="featureDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-info-circle me-2"></i>Feature Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="featureDetailsContent">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleFeature(featureId) {
+    const button = document.getElementById(`toggle-btn-${featureId}`);
+    const icon = document.getElementById(`toggle-icon-${featureId}`);
+    const badge = document.getElementById(`status-badge-${featureId}`);
+    
+    // Add loading state
+    button.disabled = true;
+    icon.className = 'fas fa-spinner fa-spin';
+    
+    fetch(`/admin/features/${featureId}/toggle`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || ''
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update button and badge
+            const isActive = data.is_active;
+            button.className = `btn btn-sm btn-outline-${isActive ? 'warning' : 'success'}`;
+            button.title = `${isActive ? 'Deactivate' : 'Activate'} Feature`;
+            icon.className = `fas fa-${isActive ? 'pause' : 'play'}`;
+            
+            badge.className = `badge bg-${isActive ? 'success' : 'danger'}`;
+            badge.innerHTML = `<i class="fas fa-${isActive ? 'check-circle' : 'times-circle'} me-1"></i>${isActive ? 'Active' : 'Inactive'}`;
+            
+            // Show success message
+            showAlert('success', data.message);
+        } else {
+            showAlert('danger', 'Error toggling feature');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'An error occurred');
+    })
+    .finally(() => {
+        button.disabled = false;
+    });
+}
+
+function viewFeatureDetails(featureId) {
+    // This would fetch and display detailed feature information
+    const modal = new bootstrap.Modal(document.getElementById('featureDetailsModal'));
+    document.getElementById('featureDetailsContent').innerHTML = '<p>Loading feature details...</p>';
+    modal.show();
+    
+    // In a real implementation, you'd fetch feature details via AJAX
+    setTimeout(() => {
+        document.getElementById('featureDetailsContent').innerHTML = `
+            <p>Feature details for ID: ${featureId}</p>
+            <p>This would show detailed information about the feature, its usage, companies using it, etc.</p>
+        `;
+    }, 500);
+}
+
+function duplicateFeature(featureId) {
+    if (confirm('Are you sure you want to duplicate this feature?')) {
+        // Implementation for duplicating feature
+        showAlert('info', 'Feature duplication is not yet implemented');
+    }
+}
+
+function deleteFeature(featureId) {
+    if (confirm('Are you sure you want to delete this feature? This action cannot be undone.')) {
+        // Implementation for deleting feature
+        showAlert('warning', 'Feature deletion is not yet implemented');
+    }
+}
+
+function showAlert(type, message) {
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            <i class="fas fa-${ type === 'success' ? 'check-circle' : 'exclamation-triangle' } me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    const mainContent = document.querySelector('main .container-fluid .row .col-12');
+    mainContent.insertAdjacentHTML('afterbegin', alertHtml);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = mainContent.querySelector('.alert');
+        if (alert) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        }
+    }, 5000);
+}
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+
+<style>
+.feature-category {
+    background-color: var(--card-bg);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--card-border);
+}
+
+.table-hover tbody tr:hover {
+    background-color: var(--alert-bg);
+}
+
+.progress {
+    border-radius: 4px;
+    background-color: #e9ecef;
+}
+
+code {
+    font-size: 0.875em;
+}
+
+[data-theme="dark"] code.bg-light {
+    background-color: #495057 !important;
+    color: #e9ecef !important;
+}
+
+.btn-group .btn {
+    border-radius: 0.375rem;
+    margin-right: 0.25rem;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
+}
+
+@media (max-width: 768px) {
+    .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .btn-group .btn {
+        margin-right: 0;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}
+</style>
+{% endblock %}

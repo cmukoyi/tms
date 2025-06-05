@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4>
+                        <i class="fas fa-{{ 'plus' if 'Create' in title else 'edit' }} me-2"></i>
+                        {{ title }}
+                    </h4>
+                    <a href="{{ url_for('admin.features') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Features
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="featureForm">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.name.label(class="form-label") }}
+                                    {{ form.name(class="form-control") }}
+                                    {% if form.name.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.name.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Display name for the feature (e.g., "Dashboard Access")
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.code.label(class="form-label") }}
+                                    {{ form.code(class="form-control") }}
+                                    {% if form.code.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.code.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Unique code used in application logic (e.g., "dashboard")
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control", rows="3") }}
+                            {% if form.description.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.description.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                Brief description of what this feature provides
+                            </small>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.category.label(class="form-label") }}
+                                    {{ form.category(class="form-select") }}
+                                    {% if form.category.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.category.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Group features by category for better organization
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Status</label>
+                                    <div class="form-check form-switch">
+                                        {{ form.is_active(class="form-check-input") }}
+                                        {{ form.is_active.label(class="form-check-label") }}
+                                    </div>
+                                    <small class="form-text text-muted">
+                                        Only active features can be assigned to companies
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Feature Preview -->
+                        <div class="card bg-light mt-4" id="featurePreview">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-eye me-2"></i>Feature Preview</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Name:</strong> <span id="previewName">Feature Name</span></p>
+                        <p><strong>Code:</strong> <code id="previewCode">feature_code</code></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Category:</strong> <span id="previewCategory">Category</span></p>
+                        <p><strong>Status:</strong> <span id="previewStatus" class="badge bg-success">Active</span></p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <p><strong>Description:</strong></p>
+                        <p id="previewDescription" class="text-muted fst-italic">Feature description will appear here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if feature %}
+        <!-- Existing Feature Info -->
+        <div class="card bg-info bg-opacity-10 mt-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Current Feature Usage</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="text-primary">{{ feature.company_features|length }}</h4>
+                            <p class="text-muted mb-0">Total Assignments</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="text-success">{{ feature.company_features|selectattr('enabled')|list|length }}</h4>
+                            <p class="text-muted mb-0">Currently Enabled</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h4 class="text-info">{{ feature.created_at.strftime('%m/%d/%Y') if feature.created_at else 'N/A' }}</h4>
+                            <p class="text-muted mb-0">Created Date</p>
+                        </div>
+                    </div>
+                </div>
+                {% if feature.company_features %}
+                <hr>
+                <h6>Companies Using This Feature:</h6>
+                <div class="row">
+                    {% for company_feature in feature.company_features %}
+                    <div class="col-md-6 mb-2">
+                        <div class="d-flex justify-content-between align-items-center p-2 bg-white rounded border">
+                            <span>
+                                <i class="fas fa-building me-2"></i>
+                                {{ company_feature.company.name }}
+                            </span>
+                            <span class="badge bg-{{ 'success' if company_feature.enabled else 'secondary' }}">
+                                {{ 'Enabled' if company_feature.enabled else 'Disabled' }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <hr>
+        
+        <div class="d-flex justify-content-between">
+            <div>
+                <a href="{{ url_for('admin.features') }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+            <div>
+                {% if feature %}
+                <button type="button" class="btn btn-danger me-2" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                    <i class="fas fa-trash"></i> Delete Feature
+                </button>
+                {% endif %}
+                <button type="submit" class="btn btn-primary" id="submitButton">
+                    <i class="fas fa-save"></i> {{ 'Update' if feature else 'Create' }} Feature
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+</div>
+
+<!-- Code Suggestions -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Feature Code Suggestions</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">Click on a suggestion to use it as the feature code:</p>
+        <div class="d-flex flex-wrap gap-2" id="codeSuggestions">
+            <!-- Will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+</div>
+</div>
+</div>
+
+{% if feature %}
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the feature <strong>"{{ feature.name }}"</strong>?</p>
+                <div class="alert alert-danger">
+                    <i class="fas fa-warning me-2"></i>
+                    <strong>Warning:</strong> This action cannot be undone and will:
+                    <ul class="mb-0 mt-2">
+                        <li>Remove this feature from all companies</li>
+                        <li>Break any code that depends on this feature</li>
+                        <li>Remove all associated feature assignments</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('admin.delete_feature', feature_id=feature.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Delete Feature
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const nameField = document.getElementById('name');
+    const codeField = document.getElementById('code');
+    const descriptionField = document.getElementById('description');
+    const categoryField = document.getElementById('category');
+    const isActiveField = document.getElementById('is_active');
+    
+    // Preview elements
+    const previewName = document.getElementById('previewName');
+    const previewCode = document.getElementById('previewCode');
+    const previewDescription = document.getElementById('previewDescription');
+    const previewCategory = document.getElementById('previewCategory');
+    const previewStatus = document.getElementById('previewStatus');
+    
+    // Update preview in real-time
+    function updatePreview() {
+        previewName.textContent = nameField.value || 'Feature Name';
+        previewCode.textContent = codeField.value || 'feature_code';
+        previewDescription.textContent = descriptionField.value || 'Feature description will appear here...';
+        previewCategory.textContent = categoryField.options[categoryField.selectedIndex].text || 'Category';
+        
+        if (isActiveField.checked) {
+            previewStatus.className = 'badge bg-success';
+            previewStatus.textContent = 'Active';
+        } else {
+            previewStatus.className = 'badge bg-danger';
+            previewStatus.textContent = 'Inactive';
+        }
+    }
+    
+    // Auto-generate code from name
+    nameField.addEventListener('input', function() {
+        if (!codeField.value || codeField.value === generateCode(nameField.dataset.oldValue || '')) {
+            codeField.value = generateCode(this.value);
+        }
+        nameField.dataset.oldValue = this.value;
+        updatePreview();
+        generateCodeSuggestions();
+    });
+    
+    // Update preview on all field changes
+    [codeField, descriptionField, categoryField, isActiveField].forEach(field => {
+        field.addEventListener('input', updatePreview);
+        field.addEventListener('change', updatePreview);
+    });
+    
+    function generateCode(name) {
+        return name.toLowerCase()
+                  .replace(/[^a-z0-9\s]/g, '')
+                  .replace(/\s+/g, '_')
+                  .replace(/_+/g, '_')
+                  .replace(/^_|_$/g, '');
+    }
+    
+    function generateCodeSuggestions() {
+        const name = nameField.value;
+        if (!name) return;
+        
+        const suggestions = [
+            generateCode(name),
+            generateCode(name) + '_access',
+            generateCode(name) + '_feature',
+            'enable_' + generateCode(name),
+            'has_' + generateCode(name),
+            generateCode(name).split('_')[0] // First word only
+        ].filter((value, index, self) => value && self.indexOf(value) === index); // Remove duplicates and empty
+        
+        const container = document.getElementById('codeSuggestions');
+        container.innerHTML = suggestions.map(suggestion => 
+            `<button type="button" class="btn btn-sm btn-outline-primary" onclick="useCodeSuggestion('${suggestion}')">
+                ${suggestion}
+            </button>`
+        ).join('');
+    }
+    
+    window.useCodeSuggestion = function(code) {
+        codeField.value = code;
+        updatePreview();
+        codeField.focus();
+    };
+    
+    // Form validation
+    document.getElementById('featureForm').addEventListener('submit', function(e) {
+        const name = nameField.value.trim();
+        const code = codeField.value.trim();
+        
+        if (!name || !code) {
+            e.preventDefault();
+            alert('Feature name and code are required.');
+            return false;
+        }
+        
+        // Code validation
+        if (!/^[a-z][a-z0-9_]*$/.test(code)) {
+            e.preventDefault();
+            alert('Feature code must start with a letter and contain only lowercase letters, numbers, and underscores.');
+            return false;
+        }
+        
+        // Add loading state
+        const submitButton = document.getElementById('submitButton');
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+        submitButton.disabled = true;
+    });
+    
+    // Initialize preview
+    updatePreview();
+    generateCodeSuggestions();
+    
+    // Focus on name field
+    nameField.focus();
+});
+</script>
+
+<style>
+.feature-preview {
+    background-color: rgba(13, 110, 253, 0.05);
+    border: 1px solid rgba(13, 110, 253, 0.2);
+}
+
+[data-theme="dark"] .feature-preview {
+    background-color: rgba(13, 110, 253, 0.1);
+    border-color: rgba(13, 110, 253, 0.3);
+}
+
+.form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.code-suggestion {
+    transition: all 0.2s ease;
+}
+
+.code-suggestion:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#featurePreview {
+    border-left: 4px solid #0d6efd;
+}
+
+.bg-light {
+    background-color: #f8f9fa !important;
+}
+
+[data-theme="dark"] .bg-light {
+    background-color: #343a40 !important;
+}
+
+[data-theme="dark"] .card.bg-light {
+    background-color: #2d3748 !important;
+    border-color: #4a5568;
+}
+
+[data-theme="dark"] .bg-info.bg-opacity-10 {
+    background-color: rgba(13, 202, 240, 0.1) !important;
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.form-text {
+    font-size: 0.825rem;
+}
+
+@media (max-width: 768px) {
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .d-flex.justify-content-between > div {
+        display: flex;
+        justify-content: center;
+    }
+    
+    #codeSuggestions {
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}

@@ -20,8 +20,242 @@ class Company(db.Model):
     users = db.relationship('User', backref='company', lazy=True)
     tenders = db.relationship('Tender', backref='company', lazy=True)
     
+    # Feature Management Methods (PROPERLY INDENTED INSIDE THE CLASS)
+    def has_feature(self, feature_code):
+        """Check if company has a specific feature enabled"""
+        return db.session.query(CompanyFeature).join(Feature).filter(
+            CompanyFeature.company_id == self.id,
+            Feature.code == feature_code,
+            CompanyFeature.enabled == True,
+            Feature.is_active == True
+        ).first() is not None
+
+    def get_enabled_features(self):
+        """Return list of enabled features for this company"""
+        try:
+            # Use the 'enabled' column since it exists in your table
+            return CompanyFeature.query.filter_by(
+                company_id=self.id, 
+                enabled=True  # Use 'enabled' not 'is_enabled'
+            ).all()
+        except Exception as e:
+            print(f"Error getting enabled features: {e}")
+            return []
+    
+    def enable_feature(self, feature_code, user_id=None):
+        """Enable a feature for this company"""
+        try:
+            from datetime import datetime
+            
+            # Check if feature already exists
+            existing_feature = CompanyFeature.query.filter_by(
+                company_id=self.id,
+                code=feature_code
+            ).first()
+            
+            if existing_feature:
+                # Update existing feature
+                existing_feature.enabled = True
+                existing_feature.is_enabled = True
+                existing_feature.enabled_at = datetime.utcnow()
+                existing_feature.enabled_by = user_id
+            else:
+                # Find or create base feature
+                base_feature = Feature.query.filter_by(code=feature_code).first()
+                if not base_feature:
+                    base_feature = Feature(
+                        code=feature_code,
+                        name=feature_code.replace('_', ' ').title(),
+                        description=f"{feature_code} feature"
+                    )
+                    db.session.add(base_feature)
+                    db.session.flush()
+                
+                # Create new feature record
+                new_feature = CompanyFeature(
+                    company_id=self.id,
+                    feature_id=base_feature.id,
+                    code=feature_code,
+                    enabled=True,
+                    is_enabled=True,
+                    enabled_at=datetime.utcnow(),
+                    enabled_by=user_id
+                )
+                db.session.add(new_feature)
+            
+            db.session.commit()
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error enabling feature {feature_code}: {e}")
+            return False
+    
+    def toggle_feature(self, feature_code, user_id=None):
+        """Toggle a feature on/off for this company"""
+        try:
+            from datetime import datetime
+            
+            # First, try to find existing company feature by code AND company_id
+            feature = CompanyFeature.query.filter_by(
+                company_id=self.id,
+                code=feature_code
+            ).first()
+            
+            if feature:
+                # Toggle existing feature
+                feature.enabled = not feature.enabled
+                feature.is_enabled = feature.enabled  # Keep both columns in sync
+                if feature.enabled:
+                    feature.enabled_at = datetime.utcnow()
+                    feature.enabled_by = user_id
+                else:
+                    feature.enabled_at = None
+                    feature.enabled_by = None
+                action = "enabled" if feature.enabled else "disabled"
+                
+                db.session.commit()
+                return True, action
+            else:
+                # Check if there's an existing record by feature_id to avoid duplicates
+                base_feature = Feature.query.filter_by(code=feature_code).first()
+                if base_feature:
+                    # Check if there's already a CompanyFeature with this feature_id
+                    existing_by_feature_id = CompanyFeature.query.filter_by(
+                        company_id=self.id,
+                        feature_id=base_feature.id
+                    ).first()
+                    
+                    if existing_by_feature_id:
+                        # Update the existing record
+                        existing_by_feature_id.enabled = True
+                        existing_by_feature_id.is_enabled = True
+                        existing_by_feature_id.code = feature_code  # Make sure code is set
+                        existing_by_feature_id.enabled_at = datetime.utcnow()
+                        existing_by_feature_id.enabled_by = user_id
+                        action = "enabled"
+                        
+                        db.session.commit()
+                        return True, action
+                
+                # If we get here, create a new record
+                if not base_feature:
+                    # Create base feature if it doesn't exist
+                    base_feature = Feature(
+                        code=feature_code,
+                        name=feature_code.replace('_', ' ').title(),
+                        description=f"{feature_code} feature"
+                    )
+                    db.session.add(base_feature)
+                    db.session.flush()  # Get the ID
+                
+                # Create new company feature as enabled
+                new_feature = CompanyFeature(
+                    company_id=self.id,
+                    feature_id=base_feature.id,
+                    code=feature_code,
+                    enabled=True,
+                    is_enabled=True,
+                    enabled_at=datetime.utcnow(),
+                    enabled_by=user_id
+                )
+                
+                db.session.add(new_feature)
+                action = "enabled"
+                
+                db.session.commit()
+                return True, action
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error toggling feature {feature_code}: {e}")
+            return False, "error"
+    
+    def enable_all_features(self, user_id=None):
+        """Enable all available features for this company"""
+        available_features = [
+            'dashboard', 'tenders', 'files', 'reports', 'analytics', 'user_management'
+        ]
+        
+        try:
+            for feature_code in available_features:
+                self.enable_feature(feature_code, user_id)
+            return True
+        except Exception as e:
+            print(f"Error enabling all features: {e}")
+            return False
+    
+    # Your disable_all_features method should look like this:
+
+    def disable_all_features(self, user_id=None):
+        """Disable all features for this company"""
+        try:
+            print(f"disable_all_features: Starting for company {self.id}")
+            
+            # Update ALL the boolean columns to make sure it works
+            update_count = CompanyFeature.query.filter_by(company_id=self.id).update({
+                'enabled': False,        # ← Make sure this is included
+                'is_enabled': False,     # ← And this
+                'enabled_at': None,
+                'enabled_by': None
+            })
+            
+            db.session.commit()
+            print(f"disable_all_features: Updated {update_count} records")
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error disabling all features: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def __repr__(self):
-        return f'<Company {self.name}>'
+            return f'<Company {self.name}>'
+
+
+
+def disable_feature(self, feature_code, user_id=None):
+    """Disable a feature for this company"""
+    try:
+        feature = CompanyFeature.query.filter_by(
+            company_id=self.id,
+            code=feature_code
+        ).first()
+        
+        if feature:
+            feature.enabled = False
+            feature.is_enabled = False
+            feature.enabled_at = None
+            feature.enabled_by = None
+            
+            db.session.commit()
+            return True
+        else:
+            # Feature doesn't exist, consider it already disabled
+            return True
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error disabling feature {feature_code}: {e}")
+        return False
+
+def enable_all_features(self, user_id=None):
+    """Enable all available features for this company"""
+    available_features = [
+        'dashboard', 'tenders', 'files', 'reports', 'analytics', 'user_management'
+    ]
+    
+    try:
+        for feature_code in available_features:
+            self.enable_feature(feature_code, user_id)
+        return True
+    except Exception as e:
+        print(f"Error enabling all features: {e}")
+        return False
+
+
 
 class TenderHistory(db.Model):
     __tablename__ = 'tender_history'
@@ -132,6 +366,11 @@ class User(db.Model):
     def full_name(self):
         """Return full name"""
         return f"{self.first_name} {self.last_name}"
+    
+    @property
+    def is_superadmin(self):
+        """Check if user is super admin - for feature management compatibility"""
+        return self.is_super_admin
     
     def __repr__(self):
         return f'<User {self.username}>'
@@ -291,3 +530,54 @@ class CustomField(db.Model):
     
     def __repr__(self):
         return f'<CustomField {self.field_name}>'
+
+# NEW FEATURE MANAGEMENT MODELS
+
+class Feature(db.Model):
+    """Available features that can be enabled/disabled for companies"""
+    __tablename__ = 'features'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    code = db.Column(db.String(50), unique=True, nullable=False)  # Used in code
+    description = db.Column(db.Text)
+    category = db.Column(db.String(50))  # Dashboard, Reports, Files, etc.
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Feature {self.name}>'
+
+
+# Replace your CompanyFeature model with this one that matches your actual table:
+
+class CompanyFeature(db.Model):
+    __tablename__ = 'company_features'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    feature_id = db.Column(db.Integer, db.ForeignKey('features.id'))
+    enabled = db.Column(db.Boolean, default=False)
+    enabled_at = db.Column(db.DateTime)
+    enabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    code = db.Column(db.String(50))
+    is_enabled = db.Column(db.Boolean, default=False)
+    
+    # Relationships
+    company = db.relationship('Company', backref='company_features')
+    feature = db.relationship('Feature', backref='company_features')
+    enabled_by_user = db.relationship('User', foreign_keys=[enabled_by])
+    
+    # Add a property for name since templates expect it
+    @property
+    def name(self):
+        """Get feature name from related Feature or generate from code"""
+        if self.feature and self.feature.name:
+            return self.feature.name
+        elif self.code:
+            return self.code.replace('_', ' ').title()
+        else:
+            return 'Unknown Feature'
+    
+    # Unique constraint
+    __table_args__ = (db.UniqueConstraint('company_id', 'code'),)
