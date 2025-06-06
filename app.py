@@ -5,6 +5,7 @@ import pymysql
 pymysql.install_as_MySQLdb()
 from datetime import datetime, timedelta
 from flask_migrate import Migrate
+from werkzeug.utils import secure_filename
 
 
 # Import our modules
