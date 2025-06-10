@@ -1,147 +1,176 @@
 {% extends "base.html" %}
 {% block title %}Edit Company - Admin{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4><i class="fas fa-edit"></i> Edit Company</h4>
-                <div class="d-flex align-items-center">
-                    {% if company.is_active %}
-                        <span class="badge bg-success me-2">Active</span>
-                    {% else %}
-                        <span class="badge bg-danger me-2">Inactive</span>
-                    {% endif %}
-                    <small class="text-muted">ID: {{ company.id }}</small>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-building me-2"></i>Edit Company: {{ company.name }}</h2>
+                <div>
+                    <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Companies
+                    </a>
+                    <button type="button" class="btn btn-success" onclick="saveAllChanges()">
+                        <i class="fas fa-save me-1"></i>Save All Changes
+                    </button>
                 </div>
             </div>
-            <div class="card-body">
-                <form method="POST">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="name" class="form-label">Company Name *</label>
-                                <input type="text" class="form-control" id="name" name="name" 
-                                       value="{{ company.name }}" required>
+
+            <!-- Company Basic Information -->
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Company Information</h5>
+                            <div class="d-flex align-items-center">
+                                {% if company.is_active %}
+                                    <span class="badge bg-success me-2">Active</span>
+                                {% else %}
+                                    <span class="badge bg-danger me-2">Inactive</span>
+                                {% endif %}
+                                <small class="text-muted">ID: {{ company.id }}</small>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Company Email *</label>
-                                <input type="email" class="form-control" id="email" name="email" 
-                                       value="{{ company.email }}" required>
-                            </div>
+                        <div class="card-body">
+                            {% include 'components/edit_company_form_1.html' %}
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="phone" class="form-label">Phone Number</label>
-                                <input type="tel" class="form-control" id="phone" name="phone" 
-                                       value="{{ company.phone or '' }}">
-                            </div>
+                </div>
+
+                <!-- Company Statistics -->
+                <div class="col-lg-4">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Company Statistics</h5>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Status</label>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="is_active" 
-                                           name="is_active" {% if company.is_active %}checked{% endif %}>
-                                    <label class="form-check-label" for="is_active">
-                                        Company is Active
-                                    </label>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6 mb-3">
+                                    <div class="border rounded p-2">
+                                        <h4 class="text-primary mb-1">{{ company_stats.user_count if company_stats else 0 }}</h4>
+                                        <small class="text-muted">Users</small>
+                                    </div>
                                 </div>
-                                <small class="form-text text-muted">
-                                    Inactive companies cannot access the system
-                                </small>
+                                <div class="col-6 mb-3">
+                                    <div class="border rounded p-2">
+                                        <h4 class="text-success mb-1">{{ company_stats.tender_count if company_stats else 0 }}</h4>
+                                        <small class="text-muted">Tenders</small>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="border rounded p-2">
+                                        <h4 class="text-info mb-1" id="monthly-cost">R{{ "%.2f"|format(monthly_cost if monthly_cost else 0) }}</h4>
+                                        <small class="text-muted">Monthly Cost</small>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="address" class="form-label">Address</label>
-                        <textarea class="form-control" id="address" name="address" rows="3">{{ company.address or '' }}</textarea>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Created</label>
-                                <p class="form-control-plaintext">
-                                    <i class="fas fa-calendar-alt text-muted me-1"></i>
-                                    {{ company.created_at.strftime('%B %d, %Y at %I:%M %p') }}
-                                </p>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Last Updated</label>
-                                <p class="form-control-plaintext">
-                                    <i class="fas fa-clock text-muted me-1"></i>
-                                        {% if company.updated_at %}
-                                          {{ company.updated_at.strftime('%B %d, %Y at %I:%M %p') }}
-                                     {% else %}
-                                        <em class="text-muted">Not yet updated</em>
-                                    {% endif %}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <hr>
-                    
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <a href="{{ url_for('admin_companies') }}" class="btn btn-secondary">
-                                <i class="fas fa-arrow-left"></i> Back to Companies
-                            </a>
-                            <a href="{{ url_for('view_company', company_id=company.id) }}" class="btn btn-info">
-                                <i class="fas fa-eye"></i> View Details
-                            </a>
-                        </div>
-                        <div>
-                            {% if company.is_active %}
-                                <button type="button" class="btn btn-warning me-2" data-bs-toggle="modal" data-bs-target="#deactivateModal">
-                                    <i class="fas fa-ban"></i> Deactivate
-                                </button>
-                            {% endif %}
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save"></i> Update Company
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        
-        <!-- Company Statistics Card -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <h5><i class="fas fa-chart-bar"></i> Company Statistics</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h3 class="text-primary">{{ company.stats.total_users if company.stats else 0 }}</h3>
-                            <p class="text-muted mb-0">Total Users</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h3 class="text-success">{{ company.stats.active_users if company.stats else 0 }}</h3>
-                            <p class="text-muted mb-0">Active Users</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h3 class="text-info">{{ company.stats.admins if company.stats else 0 }}</h3>
-                            <p class="text-muted mb-0">Administrators</p>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Module Management Section -->
+            {% if modules_data %}
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Feature Modules</h5>
+                    <div>
+                        <span class="badge bg-primary">{{ enabled_count if enabled_count else 0 }} of {{ total_modules if total_modules else 0 }} enabled</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="toggleAllModules(true)">
+                            <i class="fas fa-check-all me-1"></i>Enable All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="toggleAllModules(false)">
+                            <i class="fas fa-times me-1"></i>Disable All Optional
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="modulesContainer">
+                        {% for module_data in modules_data %}
+                        <div class="col-lg-6 col-xl-4 mb-3">
+                            <div class="card h-100 module-card 
+                                        {% if module_data.is_enabled %}border-success{% else %}border-secondary{% endif %}
+                                        {% if module_data.definition.is_core %}border-primary{% endif %}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h6 class="card-title mb-0">
+                                            {{ module_data.definition.display_name }}
+                                            {% if module_data.definition.is_core %}
+                                            <span class="badge bg-primary ms-1" title="Core module - cannot be disabled">CORE</span>
+                                            {% endif %}
+                                        </h6>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input module-toggle" type="checkbox" 
+                                                   id="module_{{ module_data.definition.module_name }}"
+                                                   data-module="{{ module_data.definition.module_name }}"
+                                                   {% if module_data.is_enabled %}checked{% endif %}
+                                                   {% if module_data.definition.is_core %}disabled{% endif %}
+                                                   onchange="toggleModule('{{ module_data.definition.module_name }}', this.checked)">
+                                        </div>
+                                    </div>
+                                    
+                                    <p class="card-text text-muted small mb-2">
+                                        {{ module_data.definition.description }}
+                                    </p>
+                                    
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="badge 
+                                              {% if module_data.definition.category == 'core' %}bg-primary
+                                              {% elif module_data.definition.category == 'feature' %}bg-info
+                                              {% elif module_data.definition.category == 'premium' %}bg-warning text-dark
+                                              {% endif %}">
+                                            {{ module_data.definition.category|title }}
+                                        </span>
+                                        
+                                        {% if module_data.definition.monthly_price > 0 %}
+                                        <span class="text-success fw-bold">
+                                            R{{ "%.2f"|format(module_data.definition.monthly_price) }}/mo
+                                        </span>
+                                        {% else %}
+                                        <span class="text-muted">Free</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if module_data.is_enabled and module_data.company_module %}
+                                    <div class="mt-2">
+                                        <small class="text-success">
+                                            <i class="fas fa-check-circle me-1"></i>
+                                            Active since {{ module_data.company_module.enabled_at.strftime('%Y-%m-%d') if module_data.company_module.enabled_at else 'N/A' }}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Module Notes Section -->
+                    <div class="mt-4">
+                        <label for="moduleNotes" class="form-label">Internal Notes</label>
+                        <textarea class="form-control" id="moduleNotes" rows="3" 
+                                  placeholder="Add internal notes about module assignments for this company..."></textarea>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Module Management Not Available -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Feature Modules</h5>
+                </div>
+                <div class="card-body text-center py-4">
+                    <i class="fas fa-cog fa-3x text-muted mb-3"></i>
+                    <h6 class="text-muted">Module Management</h6>
+                    <p class="text-muted mb-3">Module system is not yet initialized</p>
+                    <a href="{{ url_for('initialize_company_modules') }}" class="btn btn-primary">
+                        <i class="fas fa-play-circle me-1"></i>Initialize Modules
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
         </div>
     </div>
 </div>
@@ -172,15 +201,213 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form method="POST" action="{{ url_for('deactivate_company', company_id=company.id) }}" class="d-inline">
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-ban"></i> Deactivate Company
-                    </button>
-                </form>
+                {% include 'components/edit_company_form_2.html' %}
             </div>
         </div>
     </div>
 </div>
+{% endif %}
+
+<!-- Loading Modal (only show if modules are available) -->
+{% if modules_data %}
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary me-2" role="status"></div>
+                <span>Updating...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="notificationToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i id="toastIcon" class="fas fa-check-circle text-success me-2"></i>
+            <strong class="me-auto" id="toastTitle">Success</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage">
+            Changes saved successfully!
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.module-card {
+    transition: all 0.3s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.form-check-input:checked {
+    background-color: #198754;
+    border-color: #198754;
+}
+
+.form-check-input:disabled {
+    opacity: 0.5;
+}
+
+.module-toggle {
+    transform: scale(1.2);
+}
+</style>
+
+{% if modules_data %}
+<script>
+let companyId = {{ company.id }};
+let pendingChanges = {};
+
+function toggleModule(moduleName, enabled) {
+    const card = document.querySelector(`[data-module="${moduleName}"]`).closest('.module-card');
+    
+    // Update visual state immediately
+    if (enabled) {
+        card.classList.remove('border-secondary');
+        card.classList.add('border-success');
+    } else {
+        card.classList.remove('border-success');
+        card.classList.add('border-secondary');
+    }
+    
+    // Store change for batch update
+    pendingChanges[moduleName] = enabled;
+    
+    // Show save button as active
+    const saveBtn = document.querySelector('button[onclick="saveAllChanges()"]');
+    saveBtn.classList.remove('btn-success');
+    saveBtn.classList.add('btn-warning');
+    saveBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Save Pending Changes';
+}
+
+function toggleAllModules(enableAll) {
+    const toggles = document.querySelectorAll('.module-toggle:not(:disabled)');
+    toggles.forEach(toggle => {
+        if (toggle.checked !== enableAll) {
+            toggle.checked = enableAll;
+            toggleModule(toggle.dataset.module, enableAll);
+        }
+    });
+}
+
+async function saveAllChanges() {
+    if (Object.keys(pendingChanges).length === 0) {
+        showToast('Info', 'No changes to save', 'info');
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        // Save company info first
+        const companyForm = new FormData(document.getElementById('companyForm'));
+        const companyFormData = {
+            name: companyForm.get('name'),
+            email: companyForm.get('email'),
+            phone: companyForm.get('phone'),
+            address: companyForm.get('address'),
+            is_active: document.getElementById('is_active').checked
+        };
+        
+        const companyResponse = await fetch(`/admin/companies/${companyId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(companyFormData)
+        });
+        
+        // Save module changes
+        const moduleChanges = [];
+        for (const [moduleName, enabled] of Object.entries(pendingChanges)) {
+            moduleChanges.push({
+                module_name: moduleName,
+                enabled: enabled,
+                notes: document.getElementById('moduleNotes').value
+            });
+        }
+        
+        const moduleResponse = await fetch(`/admin/companies/${companyId}/modules/batch-update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                changes: moduleChanges
+            })
+        });
+        
+        const moduleResult = await moduleResponse.json();
+        
+        hideLoading();
+        
+        if (moduleResult.success) {
+            showToast('Success', 'All changes saved successfully!', 'success');
+            pendingChanges = {};
+            
+            // Reset save button
+            const saveBtn = document.querySelector('button[onclick="saveAllChanges()"]');
+            saveBtn.classList.remove('btn-warning');
+            saveBtn.classList.add('btn-success');
+            saveBtn.innerHTML = '<i class="fas fa-check me-1"></i>All Saved';
+            
+            // Update monthly cost
+            if (moduleResult.monthly_cost !== undefined) {
+                document.getElementById('monthly-cost').textContent = `R${moduleResult.monthly_cost.toFixed(2)}`;
+            }
+            
+            setTimeout(() => {
+                saveBtn.classList.remove('btn-success');
+                saveBtn.classList.add('btn-outline-success');
+                saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Save All Changes';
+            }, 2000);
+        } else {
+            showToast('Error', moduleResult.message || 'Error saving changes', 'error');
+        }
+    } catch (error) {
+        hideLoading();
+        showToast('Error', 'Network error occurred', 'error');
+    }
+}
+
+function showLoading() {
+    const modal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    modal.show();
+}
+
+function hideLoading() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('loadingModal'));
+    if (modal) modal.hide();
+}
+
+function showToast(title, message, type) {
+    const toast = document.getElementById('notificationToast');
+    const toastTitle = document.getElementById('toastTitle');
+    const toastMessage = document.getElementById('toastMessage');
+    const toastIcon = document.getElementById('toastIcon');
+    
+    toastTitle.textContent = title;
+    toastMessage.textContent = message;
+    
+    if (type === 'success') {
+        toastIcon.className = 'fas fa-check-circle text-success me-2';
+    } else if (type === 'error') {
+        toastIcon.className = 'fas fa-exclamation-circle text-danger me-2';
+    } else {
+        toastIcon.className = 'fas fa-info-circle text-info me-2';
+    }
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+}
+</script>
 {% endif %}
 
 <script>
@@ -189,23 +416,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('name').focus();
 });
 
-// Form validation
-document.querySelector('form').addEventListener('submit', function(e) {
-    const name = document.getElementById('name').value.trim();
-    const email = document.getElementById('email').value.trim();
-    
-    if (!name || !email) {
-        e.preventDefault();
-        alert('Company name and email are required.');
-        return false;
-    }
-    
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        e.preventDefault();
-        alert('Please enter a valid email address.');
-        return false;
+// Form validation for basic company form
+document.querySelector('#companyForm').addEventListener('input', function(e) {
+    // Mark as pending change when form fields change
+    const saveBtn = document.querySelector('button[onclick="saveAllChanges()"]');
+    if (saveBtn && !saveBtn.classList.contains('btn-warning')) {
+        saveBtn.classList.remove('btn-success');
+        saveBtn.classList.add('btn-warning');
+        saveBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Save Pending Changes';
     }
 });
 </script>

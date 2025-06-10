@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit_Form_1{% endblock %}
+
+{% block content %}
+<form method="POST" id="tenderForm">
+                    <!-- Basic Information -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="title" class="form-label">Tender Title <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="title" name="title" 
+                                   value="{{ tender.title }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="category_id" class="form-label">Category <span class="text-danger">*</span></label>
+                            <select class="form-select" id="category_id" name="category_id" required>
+                                <option value="">Select Category</option>
+                                {% for category in categories %}
+                                <option value="{{ category.id }}" 
+                                        {% if category.id == tender.category_id %}selected{% endif %}>
+                                    {{ category.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="4">{{ tender.description if tender.description else '' }}</textarea>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="status_id" class="form-label">Status <span class="text-danger">*</span></label>
+                            <select class="form-select" id="status_id" name="status_id" required>
+                                <option value="">Select Status</option>
+                                {% for status in statuses %}
+                                <option value="{{ status.id }}" 
+                                        {% if status.id == tender.status_id %}selected{% endif %}>
+                                    {{ status.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Reference Number</label>
+                            <input type="text" class="form-control" value="{{ tender.reference_number }}" disabled
+                                   placeholder="Reference Number" title="Reference Number">
+                            <div class="form-text">Reference number cannot be changed</div>
+                        </div>
+                    </div>
+
+                    <!-- Dates -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="submission_deadline" class="form-label">Submission Deadline</label>
+                            <input type="datetime-local" class="form-control" id="submission_deadline" 
+                                   name="submission_deadline" 
+                                   value="{% if tender.submission_deadline %}{{ tender.submission_deadline.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="opening_date" class="form-label">Opening Date</label>
+                            <input type="datetime-local" class="form-control" id="opening_date" 
+                                   name="opening_date"
+                                   value="{% if tender.opening_date %}{{ tender.opening_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+                        </div>
+                    </div>
+
+                    <!-- Custom Fields -->
+                    {% if custom_fields %}
+                    <hr>
+                    <h6 class="mb-3">Additional Information</h6>
+                    {% set tender_custom_fields = tender.get_custom_fields() %}
+                    {% for field in custom_fields %}
+                    <div class="mb-3">
+                        <label for="custom_{{ field.field_name }}" class="form-label">
+                            {{ field.field_label }}
+                            {% if field.is_required %}<span class="text-danger">*</span>{% endif %}
+                        </label>
+                        
+                        {% if field.field_type == 'text' %}
+                        <input type="text" class="form-control" id="custom_{{ field.field_name }}" 
+                               name="custom_{{ field.field_name }}" 
+                               value="{{ tender_custom_fields.get(field.field_name, ' }}"
+                               {% if field.is_required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'number' %}
+                        <input type="number" class="form-control" id="custom_{{ field.field_name }}" 
+                               name="custom_{{ field.field_name }}" 
+                               value="{{ tender_custom_fields.get(field.field_name, ' }}"
+                               {% if field.is_required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'date' %}
+                        <input type="date" class="form-control" id="custom_{{ field.field_name }}" 
+                               name="custom_{{ field.field_name }}" 
+                               value="{{ tender_custom_fields.get(field.field_name, ' }}"
+                               {% if field.is_required %}required{% endif %}>
+                        
+                        {% elif field.field_type == 'textarea' %}
+                        <textarea class="form-control" id="custom_{{ field.field_name }}" 
+                                  name="custom_{{ field.field_name }}" rows="3"
+                                  {% if field.is_required %}required{% endif %}>{{ tender_custom_fields.get(field.field_name, ' }}</textarea>
+                        
+                        {% elif field.field_type == 'select' %}
+                        <select class="form-select" id="custom_{{ field.field_name }}" 
+                                name="custom_{{ field.field_name }}" 
+                                {% if field.is_required %}required{% endif %}>
+                            <option value="">Select Option</option>
+                            {% for option in field.get_field_options() %}
+                            <option value="{{ option }}" 
+                                    {% if option == tender_custom_fields.get(field.field_name) %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        
+                        {% elif field.field_type == 'checkbox' %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="custom_{{ field.field_name }}" 
+                                   name="custom_{{ field.field_name }}" value="true"
+                                   {% if tender_custom_fields.get(field.field_name) == 'true' %}checked{% endif %}>
+                            <label class="form-check-label" for="custom_{{ field.field_name }}">
+                                Yes
+                            </label>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Update Tender
+                        </button>
+                    </div>
+                </form>
+{% endblock %}

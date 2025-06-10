@@ -123,21 +123,7 @@
                     <div class="tab-pane fade" id="notes" role="tabpanel" aria-labelledby="notes-tab">
                         <!-- Add Note Form -->
                         <div class="mb-4">
-                            <form method="POST" action="{{ url_for('add_tender_note', tender_id=tender.id) }}" id="addNoteForm">
-                                <div class="mb-3">
-                                    <label for="note_content" class="form-label">Add a Note</label>
-                                    <textarea class="form-control" id="note_content" name="note_content" rows="4" 
-                                              placeholder="Enter your note about this tender's progress..." required></textarea>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">
-                                        <i class="fas fa-info-circle"></i> Notes will be timestamped and attributed to you
-                                    </small>
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-plus"></i> Add Note
-                                    </button>
-                                </div>
-                            </form>
+                            {% include 'components/view_form_1.html' %}
                         </div>
 
                         <hr>
@@ -345,48 +331,7 @@
             <div class="card-body">
                 {% if documents %}
                 <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Document Name</th>
-                                <th>Type</th>
-                                <th>Size</th>
-                                <th>Uploaded</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for document in documents %}
-                            <tr>
-                                <td>
-                                    <i class="fas fa-file-pdf text-danger me-2"></i>
-                                    {{ document.original_filename }}
-                                </td>
-                                <td>
-                                    <span class="badge bg-secondary">{{ document.doc_type.name }}</span>
-                                </td>
-                                <td>{{ document.get_file_size_mb() }} MB</td>
-                                <td>
-                                    <small>{{ document.created_at.strftime('%Y-%m-%d') }}</small><br>
-                                    <small class="text-muted">by {{ document.uploaded_by_user.full_name }}</small>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('download_document', document_id=document.id) }}" 
-                                           class="btn btn-outline-primary" title="Download">
-                                            <i class="fas fa-download"></i>
-                                        </a>
-                                        <button type="button" class="btn btn-outline-danger" 
-                                                title="Delete" data-bs-toggle="modal" 
-                                                data-bs-target="#deleteDocModal{{ document.id }}">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                    {% include 'components/view_table_1.html' %}
                 </div>
                 {% else %}
                 <div class="text-center py-4">
@@ -474,39 +419,7 @@
 <div class="modal fade" id="uploadModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('upload_tender_document', tender_id=tender.id) }}" enctype="multipart/form-data">
-                <div class="modal-header">
-                    <h5 class="modal-title">Upload Document</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="document_type_id" class="form-label">Document Type <span class="text-danger">*</span></label>
-                        <select class="form-select" id="document_type_id" name="document_type_id" required>
-                            <option value="">Select Document Type</option>
-                            {% for doc_type in document_types %}
-                            <option value="{{ doc_type.id }}">{{ doc_type.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Choose the type of document you're uploading</div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="document" class="form-label">Select File <span class="text-danger">*</span></label>
-                        <input type="file" class="form-control" id="document" name="document" required>
-                        <div class="form-text">
-                            Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, PNG<br>
-                            Maximum file size: 25MB
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload"></i> Upload Document
-                    </button>
-                </div>
-            </form>
+            {% include 'components/view_form_2.html' %}
         </div>
     </div>
 </div>
