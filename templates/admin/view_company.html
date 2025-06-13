@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.name }} - Company Details - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-building me-2"></i>{{ company.name }}</h2>
+                <div>
+                    <a href="{{ url_for('edit_company', company_id=company.id) }}" class="btn btn-primary me-2">
+                        <i class="fas fa-edit me-1"></i>Edit Company
+                    </a>
+                    <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Companies
+                    </a>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Company Information -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-info-circle me-2"></i>Company Information
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Company Name:</strong></td>
+                                    <td>{{ company.name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>{{ company.email }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phone:</strong></td>
+                                    <td>{{ company.phone or 'Not provided' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Address:</strong></td>
+                                    <td>{{ company.address or 'Not provided' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        {% if company.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>{{ company.created_at.strftime('%B %d, %Y at %I:%M %p') if company.created_at else 'Unknown' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Company Statistics -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-chart-bar me-2"></i>Statistics
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-6 mb-3">
+                                    <div class="border rounded p-3">
+                                        <h3 class="text-primary mb-1">{{ user_count }}</h3>
+                                        <small class="text-muted">Total Users</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <div class="border rounded p-3">
+                                        <h3 class="text-success mb-1">{{ tender_count }}</h3>
+                                        <small class="text-muted">Total Tenders</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="border rounded p-3">
+                                        <h3 class="text-info mb-1">{{ active_user_count }}</h3>
+                                        <small class="text-muted">Active Users</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="border rounded p-3">
+                                        <h3 class="text-warning mb-1">{{ module_count }}</h3>
+                                        <small class="text-muted">Enabled Modules</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enabled Modules -->
+            {% if company_modules %}
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-puzzle-piece me-2"></i>Enabled Modules
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for module in company_modules %}
+                                <div class="col-md-4 mb-3">
+                                    <div class="border rounded p-3">
+                                        <h6 class="mb-1">{{ module.display_name }}</h6>
+                                        <small class="text-muted">{{ module.description or 'No description' }}</small>
+                                        <div class="mt-2">
+                                            {% if module.is_core %}
+                                                <span class="badge bg-primary">Core</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ module.category.title() }}</span>
+                                            {% endif %}
+                                            {% if module.monthly_price > 0 %}
+                                                <span class="badge bg-success">${{ "%.2f"|format(module.monthly_price) }}/month</span>
+                                            {% else %}
+                                                <span class="badge bg-info">Free</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Users List -->
+            {% if users %}
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-users me-2"></i>Company Users
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Email</th>
+                                            <th>Username</th>
+                                            <th>Role</th>
+                                            <th>Status</th>
+                                            <th>Last Login</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for user in users %}
+                                        <tr>
+                                            <td>{{ user.full_name }}</td>
+                                            <td>{{ user.email }}</td>
+                                            <td>{{ user.username }}</td>
+                                            <td>{{ user.role.name if user.role else 'No Role' }}</td>
+                                            <td>
+                                                {% if user.is_active %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Inactive</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if user.last_login %}
+                                                    {{ user.last_login.strftime('%m/%d/%Y %I:%M %p') }}
+                                                {% else %}
+                                                    <span class="text-muted">Never</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Tenders -->
+            {% if recent_tenders %}
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-file-contract me-2"></i>Recent Tenders
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Reference</th>
+                                            <th>Title</th>
+                                            <th>Category</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th>Deadline</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for tender in recent_tenders %}
+                                        <tr>
+                                            <td>{{ tender.reference_number }}</td>
+                                            <td>{{ tender.title }}</td>
+                                            <td>{{ tender.category.name if tender.category else 'Uncategorized' }}</td>
+                                            <td>
+                                                <span class="badge" style="background-color: {{ tender.status.color if tender.status else '#6c757d' }}">
+                                                    {{ tender.status.name if tender.status else 'No Status' }}
+                                                </span>
+                                            </td>
+                                            <td>{{ tender.created_at.strftime('%m/%d/%Y') if tender.created_at else 'Unknown' }}</td>
+                                            <td>
+                                                {% if tender.submission_deadline %}
+                                                    {{ tender.submission_deadline.strftime('%m/%d/%Y') }}
+                                                {% else %}
+                                                    <span class="text-muted">No deadline</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

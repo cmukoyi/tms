@@ -13,108 +13,175 @@ from services.module_service import ModuleService
 
 class CompanyService:
     """Company management services"""
-    # Add this method to your CompanyService class in services.py
 
-# Add these methods to your CompanyService class in services.py
-# Insert them after your existing methods in the CompanyService class
+    @staticmethod
+    def get_company_by_id(company_id):
+        """Get company by ID"""
+        return Company.query.get(company_id)
 
-@staticmethod
-def get_all_companies():
-    """Get all companies"""
-    return Company.query.order_by(Company.name).all()
-
-@staticmethod
-def get_company_by_id(company_id):
-    """Get company by ID"""
-    return Company.query.get(company_id)
-
-@staticmethod
-def update_company(company_id, name, email, phone=None, address=None, is_active=True):
-    """Update company details"""
-    try:
-        company = Company.query.get(company_id)
-        if not company:
-            return False, "Company not found"
-        
-        # Check if email is taken by another company
-        existing_company = Company.query.filter(
-            Company.email == email, 
-            Company.id != company_id
-        ).first()
-        if existing_company:
-            return False, "Email already exists for another company"
-        
-        # Update company fields
-        company.name = name
-        company.email = email
-        company.phone = phone
-        company.address = address
-        company.is_active = is_active
-        
-        db.session.commit()
-        return True, "Company updated successfully"
-    except Exception as e:
-        db.session.rollback()
-        return False, f"Error updating company: {str(e)}"
-
-@staticmethod
-def deactivate_company(company_id):
-    """Deactivate a company"""
-    try:
-        company = Company.query.get(company_id)
-        if not company:
-            return False, "Company not found"
-        
-        company.is_active = False
-        db.session.commit()
-        return True, f"Company '{company.name}' has been deactivated"
-    except Exception as e:
-        db.session.rollback()
-        return False, f"Error deactivating company: {str(e)}"
-
-@staticmethod
-def get_company_stats(company_id):
-    """Get statistics for a company"""
-    try:
-        company = Company.query.get(company_id)
-        if not company:
-            return None
-        
-        # Count users
-        user_count = User.query.filter_by(company_id=company_id, is_active=True).count()
-        
-        # Count tenders
-        tender_count = Tender.query.filter_by(company_id=company_id).count()
-        
-        # Count active tenders (assuming you have a status table)
-        active_tender_count = 0
+    @staticmethod
+    def update_company(company_id, name, email, phone=None, address=None, is_active=True):
+        """Update company details"""
         try:
-            # Try to get active tenders (non-closed)
-            closed_status = TenderStatus.query.filter_by(name='Closed').first()
-            if closed_status:
-                active_tender_count = Tender.query.filter(
-                    Tender.company_id == company_id,
-                    Tender.status_id != closed_status.id
-                ).count()
-            else:
-                active_tender_count = tender_count
-        except:
-            active_tender_count = tender_count
-        
-        return {
-            'user_count': user_count,
-            'tender_count': tender_count,
-            'active_tender_count': active_tender_count,
-            'company_name': company.name
-        }
-    except Exception as e:
-        print(f"Error getting company stats: {str(e)}")
-        return {
-            'user_count': 0,
-            'tender_count': 0,
-            'active_tender_count': 0,
-            'company_name': 'Unknown'
-        }
+            company = Company.query.get(company_id)
+            if not company:
+                return False, "Company not found."
+            
+            # Store original status for comparison
+            original_status = company.is_active
+            
+            # Check if email is already taken by another company
+            existing_company = Company.query.filter(
+                Company.email == email,
+                Company.id != company_id
+            ).first()
+            
+            if existing_company:
+                return False, f"Email '{email}' is already registered to another company."
+            
+            # Update company details
+            company.name = name
+            company.email = email
+            company.phone = phone
+            company.address = address
+            company.is_active = is_active
+            
+            # If company is being deactivated, deactivate all its users
+            if original_status and not is_active:
+                User.query.filter_by(company_id=company_id).update({'is_active': False})
+            # If company is being reactivated, reactivate all its users
+            elif not original_status and is_active:
+                User.query.filter_by(company_id=company_id).update({'is_active': True})
+            
+            db.session.commit()
+            
+            # Prepare status change message
+            status_change = ""
+            if original_status != is_active:
+                status_change = f" Company has been {'activated' if is_active else 'deactivated'}."
+                if not is_active:
+                    status_change += " All company users have been deactivated."
+                else:
+                    status_change += " All company users have been reactivated."
+            
+            return True, f"Company '{name}' updated successfully.{status_change}"
+            
+        except Exception as e:
+            db.session.rollback()
+            return False, f"Error updating company: {str(e)}"
+
+    @staticmethod
+    def deactivate_company(company_id):
+        """Deactivate a company and its users"""
+        try:
+            company = Company.query.get(company_id)
+            if not company:
+                return False, "Company not found"
+            
+            if not company.is_active:
+                return False, "Company is already inactive"
+            
+            # Deactivate company
+            company.is_active = False
+            
+            # Deactivate all company users
+            User.query.filter_by(company_id=company_id).update({'is_active': False})
+            
+            db.session.commit()
+            return True, f"Company '{company.name}' and its users deactivated successfully"
+        except Exception as e:
+            db.session.rollback()
+            return False, f"Error deactivating company: {str(e)}"
+
+    @staticmethod
+    def activate_company(company_id):
+        """Activate a company and its users"""
+        try:
+            company = Company.query.get(company_id)
+            if not company:
+                return False, "Company not found"
+            
+            if company.is_active:
+                return False, "Company is already active"
+            
+            # Activate company
+            company.is_active = True
+            
+            # Activate all company users
+            User.query.filter_by(company_id=company_id).update({'is_active': True})
+            
+            db.session.commit()
+            return True, f"Company '{company.name}' and its users activated successfully"
+        except Exception as e:
+            db.session.rollback()
+            return False, f"Error activating company: {str(e)}"
+
+    @staticmethod
+    def get_company_stats(company_id):
+        """Get comprehensive company statistics"""
+        try:
+            company = Company.query.get(company_id)
+            if not company:
+                return None
+            
+            # Get all users for this company
+            users = User.query.filter_by(company_id=company_id).all()
+            
+            # Count different types of users
+            total_users = len(users)
+            active_users = len([u for u in users if u.is_active])
+            admin_users = User.query.join(Role).filter(
+                User.company_id == company_id,
+                Role.name == 'Company Admin'
+            ).count()
+            
+            # Get tender statistics
+            total_tenders = Tender.query.filter_by(company_id=company_id).count()
+            active_tenders = Tender.query.join(TenderStatus).filter(
+                Tender.company_id == company_id,
+                TenderStatus.name.in_(['Open', 'Active', 'Published'])
+            ).count()
+            
+            # Count active tenders (non-closed)
+            active_tender_count = 0
+            try:
+                closed_status = TenderStatus.query.filter_by(name='Closed').first()
+                if closed_status:
+                    active_tender_count = Tender.query.filter(
+                        Tender.company_id == company_id,
+                        Tender.status_id != closed_status.id
+                    ).count()
+                else:
+                    active_tender_count = total_tenders
+            except:
+                active_tender_count = total_tenders
+            
+            return {
+                'company_name': company.name,
+                'total_users': total_users,
+                'active_users': active_users,
+                'admins': admin_users,
+                'inactive_users': total_users - active_users,
+                'total_tenders': total_tenders,
+                'active_tenders': active_tenders,
+                'active_tender_count': active_tender_count,
+                'created_date': company.created_at
+            }
+            
+        except Exception as e:
+            print(f"Error getting company stats: {str(e)}")
+            return {
+                'company_name': 'Unknown',
+                'total_users': 0,
+                'active_users': 0,
+                'admins': 0,
+                'inactive_users': 0,
+                'total_tenders': 0,
+                'active_tenders': 0,
+                'active_tender_count': 0,
+                'created_date': None
+            }
+
     @staticmethod
     def generate_password(length=12):
         """Generate a secure random password"""
@@ -193,68 +260,65 @@ def get_company_stats(company_id):
         except Exception as e:
             db.session.rollback()
             return None, None, f"Error creating company: {str(e)}"
-    
-    # Add this method to your CompanyService class in services.py
 
-@staticmethod
-def create_company_with_admin_and_modules(name, email, phone=None, address=None, 
-                                         admin_first_name=None, admin_last_name=None, 
-                                         admin_email=None, admin_username=None,
-                                         enable_all_features=False, enable_premium=False,
-                                         selected_modules=None):
-    """
-    Create a new company with admin user and setup modules
-    Enhanced version that includes module setup
-    """
-    try:
-        # First create the company and admin (your existing logic)
-        company, admin_info, message = CompanyService.create_company_with_admin(
-            name=name,
-            email=email, 
-            phone=phone,
-            address=address,
-            admin_first_name=admin_first_name,
-            admin_last_name=admin_last_name,
-            admin_email=admin_email,
-            admin_username=admin_username
-        )
-        
-        if not company:
-            return None, None, message
-        
-        # Now setup modules
-        from services.company_module_service import CompanyModuleService
-        
-        if selected_modules:
-            # Enable specific modules
-            for module_name in selected_modules:
-                CompanyModuleService.toggle_company_module(
-                    company.id, module_name, True, admin_info['user_id'], 
-                    "Enabled during company creation"
-                )
-        elif enable_all_features:
-            # Enable all features and optionally premium
-            CompanyModuleService.setup_company_modules(company.id, include_premium=enable_premium)
-        else:
-            # Default: only core modules
-            CompanyModuleService.setup_company_modules(company.id, include_premium=False)
+    @staticmethod
+    def create_company_with_admin_and_modules(name, email, phone=None, address=None, 
+                                             admin_first_name=None, admin_last_name=None, 
+                                             admin_email=None, admin_username=None,
+                                             enable_all_features=False, enable_premium=False,
+                                             selected_modules=None):
+        """
+        Create a new company with admin user and setup modules
+        Enhanced version that includes module setup
+        """
+        try:
+            # First create the company and admin (your existing logic)
+            company, admin_info, message = CompanyService.create_company_with_admin(
+                name=name,
+                email=email, 
+                phone=phone,
+                address=address,
+                admin_first_name=admin_first_name,
+                admin_last_name=admin_last_name,
+                admin_email=admin_email,
+                admin_username=admin_username
+            )
             
-            # Disable feature modules if only core requested
-            from models import ModuleDefinition
-            feature_modules = ModuleDefinition.query.filter_by(category='feature').all()
-            for module_def in feature_modules:
-                CompanyModuleService.toggle_company_module(
-                    company.id, module_def.module_name, False, admin_info['user_id'],
-                    "Disabled - only core modules requested during creation"
-                )
-        
-        return company, admin_info, message
-        
-    except Exception as e:
-        db.session.rollback()
-        return None, None, f"Error creating company with modules: {str(e)}"  
-    
-    
+            if not company:
+                return None, None, message
+            
+            # Now setup modules
+            from services.company_module_service import CompanyModuleService
+            
+            if selected_modules:
+                # Enable specific modules
+                for module_name in selected_modules:
+                    CompanyModuleService.toggle_company_module(
+                        company.id, module_name, True, admin_info['user_id'], 
+                        "Enabled during company creation"
+                    )
+            elif enable_all_features:
+                # Enable all features and optionally premium
+                CompanyModuleService.setup_company_modules(company.id, include_premium=enable_premium)
+            else:
+                # Default: only core modules
+                CompanyModuleService.setup_company_modules(company.id, include_premium=False)
+                
+                # Disable feature modules if only core requested
+                from models import ModuleDefinition
+                feature_modules = ModuleDefinition.query.filter_by(category='feature').all()
+                for module_def in feature_modules:
+                    CompanyModuleService.toggle_company_module(
+                        company.id, module_def.module_name, False, admin_info['user_id'],
+                        "Disabled - only core modules requested during creation"
+                    )
+            
+            return company, admin_info, message
+            
+        except Exception as e:
+            db.session.rollback()
+            return None, None, f"Error creating company with modules: {str(e)}"
+
     @staticmethod
     def create_company(name, email, phone=None, address=None):
         """Create a new company (legacy method - kept for compatibility)"""
@@ -279,185 +343,19 @@ def create_company_with_admin_and_modules(name, email, phone=None, address=None,
     @staticmethod
     def get_all_companies():
         """Get all companies (both active and inactive)"""
-        return Company.query.order_by(Company.created_at.desc()).all()
+        try:
+            return Company.query.order_by(Company.created_at.desc()).all()
+        except Exception as e:
+            print(f"Error getting all companies: {str(e)}")
+            return []
     
     @staticmethod
     def get_active_companies():
         """Get all active companies only"""
-        return Company.query.filter_by(is_active=True).order_by(Company.created_at.desc()).all()
-    
-    @staticmethod
-    def get_company_by_id(company_id):
-        """Get company by ID"""
-        return Company.query.get(company_id)
-    
-    @staticmethod
-    def update_company(company_id, name, email, phone=None, address=None, is_active=True):
-        """Update company details"""
         try:
-            company = Company.query.get(company_id)
-            if not company:
-                return False, "Company not found."
-            
-            # Store original status for comparison
-            original_status = company.is_active
-            
-            # Check if email is already taken by another company
-            existing_company = Company.query.filter(
-                Company.email == email,
-                Company.id != company_id
-            ).first()
-            
-            if existing_company:
-                return False, f"Email '{email}' is already registered to another company."
-            
-            # Update company details
-            company.name = name
-            company.email = email
-            company.phone = phone
-            company.address = address
-            company.is_active = is_active
-            
-            # If company is being deactivated, deactivate all its users
-            if original_status and not is_active:
-                User.query.filter_by(company_id=company_id).update({'is_active': False})
-            # If company is being reactivated, reactivate all its users
-            elif not original_status and is_active:
-                User.query.filter_by(company_id=company_id).update({'is_active': True})
-            
-            db.session.commit()
-            
-            # Prepare status change message
-            status_change = ""
-            if original_status != is_active:
-                status_change = f" Company has been {'activated' if is_active else 'deactivated'}."
-                if not is_active:
-                    status_change += " All company users have been deactivated."
-                else:
-                    status_change += " All company users have been reactivated."
-            
-            return True, f"Company '{name}' updated successfully.{status_change}"
-            
+            return Company.query.filter_by(is_active=True).order_by(Company.created_at.desc()).all()
         except Exception as e:
-            db.session.rollback()
-            return False, f"Error updating company: {str(e)}"
-    
-    @staticmethod
-    def deactivate_company(company_id):
-        """Deactivate a company and its users"""
-        try:
-            company = Company.query.get(company_id)
-            if not company:
-                return False, "Company not found"
-            
-            if not company.is_active:
-                return False, "Company is already inactive"
-            
-            # Deactivate company
-            company.is_active = False
-            
-            # Deactivate all company users
-            User.query.filter_by(company_id=company_id).update({'is_active': False})
-            
-            db.session.commit()
-            return True, f"Company '{company.name}' and its users deactivated successfully"
-        except Exception as e:
-            db.session.rollback()
-            return False, f"Error deactivating company: {str(e)}"
-    
-    @staticmethod
-    def activate_company(company_id):
-        """Activate a company and its users"""
-        try:
-            company = Company.query.get(company_id)
-            if not company:
-                return False, "Company not found"
-            
-            if company.is_active:
-                return False, "Company is already active"
-            
-            # Activate company
-            company.is_active = True
-            
-            # Activate all company users
-            User.query.filter_by(company_id=company_id).update({'is_active': True})
-            
-            db.session.commit()
-            return True, f"Company '{company.name}' and its users activated successfully"
-        except Exception as e:
-            db.session.rollback()
-            return False, f"Error activating company: {str(e)}"
-    
-    @staticmethod
-    def get_company_stats(company_id):
-        """Get company statistics"""
-        company = Company.query.get(company_id)
-        if not company:
-            return None
-        
-        total_users = User.query.filter_by(company_id=company_id).count()
-        active_users = User.query.filter_by(company_id=company_id, is_active=True).count()
-        admin_users = User.query.join(Role).filter(
-            User.company_id == company_id,
-            Role.name == 'Company Admin'
-        ).count()
-        
-        # Add tender statistics
-        total_tenders = Tender.query.filter_by(company_id=company_id).count()
-        active_tenders = Tender.query.join(TenderStatus).filter(
-            Tender.company_id == company_id,
-            TenderStatus.name.in_(['Open', 'Active', 'Published'])
-        ).count()
-        
-        return {
-            'total_users': total_users,
-            'active_users': active_users,
-            'admins': admin_users,
-            'inactive_users': total_users - active_users,
-            'total_tenders': total_tenders,
-            'active_tenders': active_tenders
-        }
-    @staticmethod
-    def get_company_stats(company_id):
-        """Get statistics for a specific company"""
-        try:
-            company = Company.query.get(company_id)
-            if not company:
-                return None
-            
-            # Get all users for this company
-            users = User.query.filter_by(company_id=company_id).all()
-            
-            # Count different types of users
-            total_users = len(users)
-            active_users = len([u for u in users if u.is_active])
-            admin_users = len([u for u in users if u.is_admin and not u.is_super_admin])
-            regular_users = len([u for u in users if not u.is_admin and not u.is_super_admin])
-            
-            # Get tender count for this company
-            tender_count = Tender.query.filter_by(company_id=company_id).count()
-            
-            return {
-                'company_name': company.name,
-                'total_users': total_users,
-                'active_users': active_users,
-                'admins': admin_users,
-                'regular_users': regular_users,
-                'tender_count': tender_count,
-                'created_date': company.created_at
-            }
-            
-        except Exception as e:
-            print(f"Error getting company stats: {str(e)}")
-            return None
-    
-    @staticmethod
-    def get_all_companies():
-        """Get all companies (for super admin)"""
-        try:
-            return Company.query.all()
-        except Exception as e:
-            print(f"Error getting all companies: {str(e)}")
+            print(f"Error getting active companies: {str(e)}")
             return []
 
 class RoleService:

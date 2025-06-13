@@ -2,6 +2,8 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from functools import wraps
 import os
 import pymysql
+import json
+
 pymysql.install_as_MySQLdb()
 from datetime import datetime, timedelta
 from flask_migrate import Migrate
@@ -11,7 +13,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import tzlocal  # optional helper to get local timezone name, install with: pip install tzlocal
 from services.company_module_service import CompanyModuleService, require_company_module
-
+from services import CompanyService
+from flask import Markup
 
 
 # In app.py, instead of:
@@ -22,7 +25,12 @@ from services import AuthService  # This will import from your original services
 from services.module_service import ModuleService
 # Import our modules
 from config import Config
-from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory
+from models import *
+
+#from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory, ModuleDefinition
+#from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory
+#from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory, ModuleDefinition, CompanyModule
+
 from services import (
     AuthService, CompanyService, RoleService, TenantService,
     TenderService, TenderCategoryService, TenderStatusService, 
@@ -47,6 +55,10 @@ from reportlab.lib.units import inch
 # Initialize Flask app
 app = Flask(__name__)
 
+@app.template_filter('tojsonfilter')
+def to_json_filter(obj):
+    """Convert object to JSON string for use in templates"""
+    return json.dumps(obj)
 app.config.from_object(Config)
 
 @app.context_processor
@@ -1515,8 +1527,9 @@ def create_company():
     
     # Get available modules for the form
     all_modules = ModuleDefinition.query.filter_by(is_active=True).order_by(ModuleDefinition.sort_order).all()
-    
-    return render_template('admin/create_company.html', available_modules=all_modules)
+    # Convert to dictionaries
+    modules_data = [module.to_dict() for module in all_modules]
+    return render_template('admin/create_company.html', available_modules=modules_data) 
 
 
 
@@ -1750,19 +1763,36 @@ def update_company_details(company_id):
         }), 500
 
 @app.route('/admin/companies/<int:company_id>/view')
+@login_required
 @super_admin_required
 def view_company(company_id):
-    """Admin - View company details"""
-    company = CompanyService.get_company_by_id(company_id)
-    if not company:
-        flash('Company not found.', 'error')
-        return redirect(url_for('admin_companies'))
+    company = Company.query.get_or_404(company_id)
     
-    users = AuthService.get_users_by_company(company_id)
-    stats = CompanyService.get_company_stats(company_id)
+    # Get company statistics
+    user_count = User.query.filter_by(company_id=company_id).count()
+    active_user_count = User.query.filter_by(company_id=company_id, is_active=True).count()
+    tender_count = Tender.query.filter_by(company_id=company_id).count()
     
-    return render_template('admin/view_company.html', 
-                         company=company, users=users, stats=stats)
+    # Get users
+    users = User.query.filter_by(company_id=company_id).order_by(User.first_name, User.last_name).all()
+    
+    # Get enabled modules
+    company_modules = []
+    if hasattr(company, 'company_modules'):
+        company_modules = [cm.to_dict() for cm in company.company_modules if cm.is_enabled]
+    
+    # Get recent tenders (last 10)
+    recent_tenders = Tender.query.filter_by(company_id=company_id).order_by(Tender.created_at.desc()).limit(10).all()
+    
+    return render_template('admin/view_company.html',
+                         company=company,
+                         user_count=user_count,
+                         active_user_count=active_user_count,
+                         tender_count=tender_count,
+                         module_count=len(company_modules),
+                         users=users,
+                         company_modules=company_modules,
+                         recent_tenders=recent_tenders)
 
 @app.route('/admin/companies/<int:company_id>/deactivate', methods=['POST'])
 @super_admin_required

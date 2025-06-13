@@ -64,7 +64,8 @@ document.querySelectorAll('input[name="setup_option"]').forEach(radio => {
             // Check feature modules, uncheck premium
             document.querySelectorAll('.module-checkbox').forEach(cb => {
                 const moduleName = cb.value;
-                const module = {{ available_modules | tojsonfilter }}.find(m => m.module_name === moduleName);
+                const module = {{ available_modules | tojson }}.find(m => m.module_name === moduleName);
+
                 if (module) {
                     cb.checked = module.is_core || module.category === 'feature';
                 }
