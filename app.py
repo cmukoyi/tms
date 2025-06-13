@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from flask import jsonify, request
 from flask_login import current_user
+from markupsafe import Markup
+
 
 pymysql.install_as_MySQLdb()
 from datetime import datetime, timedelta
@@ -17,7 +19,8 @@ from zoneinfo import ZoneInfo
 import tzlocal  # optional helper to get local timezone name, install with: pip install tzlocal
 from services.company_module_service import CompanyModuleService, require_company_module
 from services import CompanyService
-from flask import Markup
+from permissions import ModulePermissions, require_module, require_company_admin
+
 
 
 # In app.py, instead of:
@@ -94,6 +97,7 @@ def test_modules():
     # Get modules
     modules = ModuleService.get_all_modules()
     return render_template('admin/modules.html', modules=modules)
+
 
 @app.route('/admin/init-modules')
 def init_modules():
@@ -220,7 +224,230 @@ def logout():
     return redirect(url_for('home'))
 
 # Replace your dashboard route in app.py with this:
+@app.route('/test-permissions')
+@login_required
+def test_permissions():
+    """Test route to check user permissions"""
+    try:
+        user_id = session['user_id']
+        permissions = ModulePermissions.get_user_permissions(user_id)
+        
+        if not permissions:
+            return jsonify({
+                'success': False,
+                'error': 'Could not load user permissions'
+            })
+        
+        available_routes = ModulePermissions.get_available_routes(user_id)
+        
+        # Handle company name safely for super admins
+        company_name = None
+        if permissions['company']:
+            company_name = permissions['company'].name
+        elif permissions['is_super_admin']:
+            company_name = "System Administration (No Company)"
+        
+        return jsonify({
+            'success': True,
+            'user': f"{permissions['user'].first_name} {permissions['user'].last_name}",
+            'company': company_name,
+            'user_role': permissions['user_role'],
+            'is_company_admin': permissions['is_company_admin'],
+            'is_super_admin': permissions['is_super_admin'],
+            'enabled_modules': permissions['enabled_modules'],
+            'permissions': {
+                'can_delete': permissions['can_delete'],
+                'can_manage_users': permissions['can_manage_users'],
+                'can_view_analytics': permissions['can_view_analytics'],
+                'can_use_api': permissions['can_use_api'],
+                'has_notifications': permissions['has_notifications'],
+                'has_white_label': permissions['has_white_label'],
+                'can_manage_company': permissions['can_manage_company'],
+                'can_upload_documents': permissions['can_upload_documents'],
+                'can_create_custom_fields': permissions['can_create_custom_fields'],
+                'can_add_notes': permissions['can_add_notes'],
+                'can_view_audit_log': permissions['can_view_audit_log'],
+                'can_advanced_search': permissions['can_advanced_search']
+            },
+            'available_routes': available_routes
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+@app.route('/test-module-access/<module_name>')
+@login_required
+def test_module_access(module_name):
+    """Test if user has access to a specific module"""
+    try:
+        user_id = session['user_id']
+        user = User.query.get(user_id)
+        
+        # Test the module access function
+        has_access = ModulePermissions.check_module_access(module_name, user_id)
+        
+        # Get permissions for context
+        permissions = ModulePermissions.get_user_permissions(user_id)
+        
+        return jsonify({
+            'success': True,
+            'module_name': module_name,
+            'has_access': has_access,
+            'user_is_super_admin': user.is_super_admin if user else False,
+            'user_company_id': user.company_id if user else None,
+            'enabled_modules': permissions['enabled_modules'] if permissions else [],
+            'message': f"Access to '{module_name}': {'GRANTED' if has_access else 'DENIED'}"
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+        
+# Test route that requires a specific module
+@app.route('/test-analytics')
+@login_required
+@require_module('reporting')
+def test_analytics():
+    """Test route that requires analytics module"""
+    return jsonify({
+        'success': True,
+        'message': 'You have access to analytics!',
+        'module': 'reporting'
+    })
 
+# Add this route to app.py to see who is currently logged in
+
+@app.route('/debug-current-user')
+@login_required
+def debug_current_user():
+    """Debug route to see current logged in user details"""
+    try:
+        user_id = session.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'No user_id in session',
+                'session_keys': list(session.keys())
+            })
+        
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': f'User ID {user_id} not found in database'
+            })
+        
+        # Get all user details
+        user_details = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'company_id': user.company_id,
+            'role_id': user.role_id,
+            'is_super_admin': user.is_super_admin,
+            'is_active': user.is_active
+        }
+        
+        # Get role details
+        role_details = None
+        if user.role:
+            role_details = {
+                'id': user.role.id,
+                'name': user.role.name,
+                'description': user.role.description,
+                'name_repr': repr(user.role.name)  # Shows hidden characters
+            }
+        
+        # Get company details
+        company_details = None
+        if user.company:
+            company_details = {
+                'id': user.company.id,
+                'name': user.company.name,
+                'email': user.company.email
+            }
+        
+        return jsonify({
+            'success': True,
+            'session_user_id': user_id,
+            'user': user_details,
+            'role': role_details,
+            'company': company_details
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+# Add this route to verify the role fix is working
+
+@app.route('/verify-role-fix')
+@login_required
+def verify_role_fix():
+    """Verify that role checking is working correctly"""
+    try:
+        user_id = session['user_id']
+        user = User.query.get(user_id)
+        
+        # Manual role check
+        user_role = user.role.name if user.role else 'user'
+        admin_roles = ['company_admin', 'admin', 'Company Admin', 'Admin', 'Super Admin']
+        
+        # Test both methods
+        direct_check = user_role in admin_roles
+        lower_check = user_role.lower() in [role.lower() for role in admin_roles]
+        
+        # Get permissions through the system
+        permissions = ModulePermissions.get_user_permissions(user_id)
+        
+        return jsonify({
+            'success': True,
+            'user_role': user_role,
+            'admin_roles': admin_roles,
+            'direct_check': direct_check,
+            'lower_check': lower_check,
+            'system_says_admin': permissions['is_company_admin'] if permissions else None,
+            'system_permissions': {
+                'can_delete': permissions['can_delete'],
+                'can_manage_users': permissions['can_manage_users'],
+                'can_manage_company': permissions['can_manage_company']
+            } if permissions else None
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+      
+# Test route that requires company admin
+@app.route('/test-admin')
+@login_required
+@require_company_admin
+def test_admin():
+    """Test route that requires company admin role"""
+    return jsonify({
+        'success': True,
+        'message': 'You have company admin access!',
+        'role': 'admin'
+    })
 @app.route('/company/notes')
 @login_required
 def company_notes():
@@ -236,9 +463,13 @@ def company_notes():
 def dashboard():
     """User dashboard"""
     user = AuthService.get_user_by_id(session['user_id'])
+    permissions = ModulePermissions.get_user_permissions(session['user_id'])
     
     # Get additional context based on user role
-    context = {'user': user}
+    context = {
+        'user': user,
+        'permissions': permissions  # Add permissions for template use
+    }
     
     if user.is_super_admin:
         # Use direct database queries instead of service methods
@@ -263,7 +494,7 @@ def dashboard():
             'closed': total_tenders - active_tenders
         }
         
-    elif user.company_id and user.role.name == 'Company Admin':
+    elif user.company_id and permissions and permissions['is_company_admin']:
         # Company admin stats - use direct queries
         user_count = User.query.filter_by(company_id=user.company_id, is_active=True).count()
         tender_count = Tender.query.filter_by(company_id=user.company_id).count()
@@ -273,10 +504,12 @@ def dashboard():
             'tender_count': tender_count
         }
         
-        context['company_users'] = User.query.filter_by(
-            company_id=user.company_id, 
-            is_active=True
-        ).all()
+        # Only show users if user management module is enabled
+        if permissions and permissions['can_manage_users']:
+            context['company_users'] = User.query.filter_by(
+                company_id=user.company_id, 
+                is_active=True
+            ).all()
         
         # Company tender stats
         total_tenders = Tender.query.filter_by(company_id=user.company_id).count()
@@ -304,9 +537,11 @@ def dashboard():
 # NEW TENDER ROUTES
 @app.route('/tenders', methods=['GET', 'POST'])
 @login_required
+@require_module('tender_management')  # ← Add this decorator
 def tenders():
     """View tenders with simple pagination"""
     user = AuthService.get_user_by_id(session['user_id'])
+    permissions = ModulePermissions.get_user_permissions(session['user_id'])
     
     # Get parameters with defaults
     page = request.args.get('page', 1, type=int)
@@ -323,6 +558,18 @@ def tenders():
         query = Tender.query
     else:
         query = Tender.query.filter_by(company_id=user.company_id)
+    
+    # Apply advanced search if available
+    search_query = request.args.get('search', '').strip()
+    if search_query and permissions and permissions['can_advanced_search']:
+        query = query.filter(
+            Tender.title.contains(search_query) | 
+            Tender.description.contains(search_query) |
+            Tender.reference_number.contains(search_query)
+        )
+    elif search_query:
+        # Basic search if advanced search not available
+        query = query.filter(Tender.title.contains(search_query))
     
     # Apply filters
     if status_filter:
@@ -362,10 +609,15 @@ def tenders():
                          statuses=statuses,
                          current_status=status_filter,
                          current_category=category_filter,
-                         per_page=per_page)
+                         per_page=per_page,
+                         permissions=permissions,  # ← Add permissions for template
+                         search_query=search_query)
+    
 
 @app.route('/tenders/create', methods=['GET', 'POST'])
 @login_required
+@require_module('tender_management')  # ← Require tender management module
+
 def create_tender():
     """Create new tender"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -443,9 +695,11 @@ def create_tender():
 
 @app.route('/tenders/<int:tender_id>')
 @login_required
+@require_module('tender_management')  # ← Add this decorator
 def view_tender(tender_id):
     """View tender details with notes"""
     user = AuthService.get_user_by_id(session['user_id'])
+    permissions = ModulePermissions.get_user_permissions(session['user_id'])
     tender = TenderService.get_tender_by_id(tender_id)
     
     if not tender:
@@ -457,16 +711,27 @@ def view_tender(tender_id):
         flash('Access denied.', 'error')
         return redirect(url_for('tenders'))
     
-    # Get tender documents
-    documents = TenderDocumentService.get_tender_documents(tender_id)
-    document_types = DocumentTypeService.get_all_document_types()
-    custom_fields = CustomFieldService.get_all_custom_fields()
+    # Get tender documents (only if document management is enabled)
+    documents = []
+    document_types = []
+    if permissions and permissions['can_upload_documents']:
+        documents = TenderDocumentService.get_tender_documents(tender_id)
+        document_types = DocumentTypeService.get_all_document_types()
     
-    # Get tender notes ordered by creation date (newest first)
-    tender_notes = TenderNote.query.filter_by(tender_id=tender_id).order_by(TenderNote.created_at.desc()).all()
+    # Get custom fields (only if module is enabled)
+    custom_fields = []
+    if permissions and 'custom_fields' in permissions['enabled_modules']:
+        custom_fields = CustomFieldService.get_all_custom_fields()
     
-    # Get tender history
-    tender_history = TenderHistoryService.get_tender_history(tender_id)
+    # Get tender notes (only if notes module is enabled)
+    tender_notes = []
+    if permissions and permissions['can_add_notes']:
+        tender_notes = TenderNote.query.filter_by(tender_id=tender_id).order_by(TenderNote.created_at.desc()).all()
+    
+    # Get tender history (only if audit module is enabled)
+    tender_history = []
+    if permissions and permissions['can_view_audit_log']:
+        tender_history = TenderHistoryService.get_tender_history(tender_id)
 
     return render_template('tenders/view.html', 
                          tender=tender, 
@@ -475,7 +740,8 @@ def view_tender(tender_id):
                          custom_fields=custom_fields,
                          tender_notes=tender_notes,
                          tender_history=tender_history,
-                         current_user=user)  # Pass current user for template
+                         current_user=user,
+                         permissions=permissions)  # ← Add permissions for template
 
 @app.route('/tenders/<int:tender_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -547,6 +813,8 @@ def edit_tender(tender_id):
 # TENDER NOTES ROUTES
 @app.route('/tender/<int:tender_id>/notes', methods=['POST'])
 @login_required
+@require_module('tender_management')  # ← Add this decorator
+@require_module('notes_comments')     # ← Add this decorator
 def add_tender_note(tender_id):
     """Add a new note to a tender"""
     try:
@@ -577,12 +845,14 @@ def add_tender_note(tender_id):
         db.session.add(new_note)
         db.session.commit()
         
-        # Log note addition
-        TenderHistoryService.log_note_added(
-            tender_id=tender_id,
-            performed_by_id=user.id,
-            note_content=note_content
-        )
+        # Log note addition (only if audit module is enabled)
+        permissions = ModulePermissions.get_user_permissions(session['user_id'])
+        if permissions and permissions['can_view_audit_log']:
+            TenderHistoryService.log_note_added(
+                tender_id=tender_id,
+                performed_by_id=user.id,
+                note_content=note_content
+            )
         
         flash('Note added successfully!', 'success')
         
@@ -681,6 +951,8 @@ def delete_tender_note(note_id):
 
 @app.route('/tenders/<int:tender_id>/upload', methods=['POST'])
 @login_required
+@require_module('tender_management')  # ← Add this decorator
+@require_module('document_management')  # ← Add this decorator
 def upload_tender_document(tender_id):
     """Upload document to tender"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -714,21 +986,22 @@ def upload_tender_document(tender_id):
         upload_folder=app.config['UPLOAD_FOLDER']
     )
     
-    
-  
     if document:
         flash(message, 'success')
+        # Log document upload (only if audit module is enabled)
+        permissions = ModulePermissions.get_user_permissions(session['user_id'])
+        if permissions and permissions['can_view_audit_log']:
+            TenderHistoryService.log_document_uploaded(
+                tender_id=tender_id,
+                performed_by_id=user.id,
+                document_name=document.original_filename,
+                document_type=document.doc_type.name,
+            )
     else:
         flash(message, 'error')
     
-    TenderHistoryService.log_document_uploaded(
-        tender_id=tender_id,
-        performed_by_id=user.id,
-        document_name=document.original_filename,
-        document_type=document.doc_type.name,
-       
-    )
     return redirect(url_for('view_tender', tender_id=tender_id))
+
 
 
 
@@ -760,6 +1033,7 @@ def delete_tender(tender_id):
 # REPORTS ROUTES
 @app.route('/reports')
 @login_required
+@require_module('reporting')  # ← Add this decorator
 def reports():
     """Reports dashboard"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -791,6 +1065,8 @@ def reports():
 
 @app.route('/reports/tenders')
 @login_required
+@require_module('reporting')  # ← Add this decorator
+
 def tender_reports():
     """Detailed tender reports"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -844,6 +1120,7 @@ def tender_reports():
 
 @app.route('/active_tenders_report')
 @login_required
+@require_module('reporting')
 def active_tenders_report():
     """Report of all active (non-closed) tenders"""
         
@@ -891,6 +1168,7 @@ def active_tenders_report():
 
 @app.route('/closed_tenders_report')
 @login_required
+@require_module('reporting') 
 def closed_tenders_report():
     """Report of all closed tenders"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -932,6 +1210,7 @@ def closed_tenders_report():
 
 @app.route('/overdue_tenders_report')
 @login_required
+@require_module('reporting') 
 def overdue_tenders_report():
     """Report of overdue tenders (past submission deadline)"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -972,6 +1251,7 @@ def overdue_tenders_report():
 
 @app.route('/tenders_by_category_report')
 @login_required
+@require_module('reporting') 
 def tenders_by_category_report():
     """Report of tenders grouped by category"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -1433,26 +1713,7 @@ def delete_custom_field(field_id):
 
 # Keep all existing routes (admin routes for companies, users, etc.)
 # Super Admin Routes (keeping all existing ones)
-@app.route('/admin/companies')
-@super_admin_required
-def admin_companies():
-    """Admin - Manage companies"""
-    # Use direct database query instead of service method
-    companies = Company.query.order_by(Company.name).all()
-    
-    # Add stats for each company manually
-    for company in companies:
-        user_count = User.query.filter_by(company_id=company.id, is_active=True).count()
-        tender_count = Tender.query.filter_by(company_id=company.id).count()
-        
-        # Create a simple stats object
-        company.stats = type('CompanyStats', (), {
-            'user_count': user_count,
-            'tender_count': tender_count,
-            'active_tender_count': tender_count  # For now, assume all are active
-        })()
-    
-    return render_template('admin/companies.html', companies=companies)
+
 
 
 @app.route('/admin/companies/create', methods=['GET', 'POST'])
@@ -1546,11 +1807,12 @@ def create_company():
 
 
 
+
 @app.route('/admin/companies/<int:company_id>/edit', methods=['GET', 'POST'])
+@login_required
 @super_admin_required
 def edit_company(company_id):
     """Edit company details and manage modules"""
-    # Get company directly from database
     company = Company.query.get_or_404(company_id)
     
     if request.method == 'POST':
@@ -1602,163 +1864,117 @@ def edit_company(company_id):
         'tender_count': tender_count
     })()
     
-    # Define available modules (you can move this to a database table later)
-    available_modules = [
-        {
-            'module_name': 'tender_management',
-            'display_name': 'Tender Management',
-            'description': 'Create, manage and track tenders',
-            'category': 'core',
-            'monthly_price': 0.0,
-            'is_core': True
-        },
-        {
-            'module_name': 'user_management',
-            'display_name': 'User Management', 
-            'description': 'Manage company users and permissions',
-            'category': 'core',
-            'monthly_price': 0.0,
-            'is_core': True
-        },
-        {
-            'module_name': 'analytics',
-            'display_name': 'Analytics & Reporting',
-            'description': 'Advanced analytics and custom reports',
-            'category': 'feature',
-            'monthly_price': 499.99,  # ~R500/month
-            'is_core': False
-        },
-        {
-            'module_name': 'notifications',
-            'display_name': 'Email Notifications',
-            'description': 'Automated email notifications and alerts',
-            'category': 'feature', 
-            'monthly_price': 179.99,  # ~R180/month
-            'is_core': False
-        },
-        {
-            'module_name': 'api_access',
-            'display_name': 'API Access',
-            'description': 'REST API for third-party integrations',
-            'category': 'premium',
-            'monthly_price': 899.99,  # ~R900/month
-            'is_core': False
-        },
-        {
-            'module_name': 'white_label',
-            'display_name': 'White Label Branding',
-            'description': 'Custom branding and white-label options',
-            'category': 'premium',
-            'monthly_price': 1799.99,  # ~R1800/month
-            'is_core': False
-        }
-    ]
+    # Get modules from database with proper structure
+    try:
+        modules_status = CompanyModule.get_company_modules_with_status(company_id)
+        monthly_cost = CompanyModule.get_monthly_cost(company_id)
+        enabled_count = sum(1 for module in modules_status if module['enabled'])
+    except Exception as e:
+        print(f"Error getting modules: {str(e)}")
+        # Fallback to empty data
+        modules_status = []
+        monthly_cost = 0.0
+        enabled_count = 0
     
-    # Get currently enabled modules (from database or default)
-    enabled_modules = get_company_enabled_modules(company_id)
-    
-    # Prepare modules data for template
+    # Convert to the format your template expects with all required attributes
     modules_data = []
-    monthly_cost = 0.0
-    enabled_count = 0
-    
-    for module in available_modules:
-        is_enabled = module['module_name'] in enabled_modules or module['is_core']
+    for module_status in modules_status:
+        # Create a proper module definition with all expected attributes
+        module_def_data = {
+            'id': module_status.get('id', 0),
+            'module_name': module_status.get('module_name', ''),
+            'display_name': module_status.get('display_name', ''),
+            'description': module_status.get('description', ''),
+            'category': module_status.get('category', 'feature'),
+            'monthly_price': module_status.get('monthly_price', 0.0),  # ← Add this!
+            'is_core': module_status.get('is_core', False),
+            'is_active': module_status.get('is_active', True),
+            'sort_order': module_status.get('sort_order', 0)
+        }
         
         module_data = type('ModuleData', (), {
-            'definition': type('ModuleDef', (), module)(),
-            'is_enabled': is_enabled,
+            'definition': type('ModuleDef', (), module_def_data)(),
+            'is_enabled': module_status.get('enabled', False),
             'company_module': type('CompanyModule', (), {
-                'enabled_at': datetime.now()
-            })() if is_enabled else None
+                'enabled_at': datetime.now(),
+                'monthly_cost': module_status.get('monthly_price', 0.0)
+            })() if module_status.get('enabled', False) else None
         })()
         
         modules_data.append(module_data)
-        
-        if is_enabled:
-            enabled_count += 1
-            monthly_cost += module['monthly_price']
     
     return render_template('admin/edit_company.html',
                          company=company,
                          company_stats=company_stats,
                          modules_data=modules_data,
                          enabled_count=enabled_count,
-                         total_modules=len(available_modules),
+                         total_modules=len(modules_status),
                          monthly_cost=monthly_cost)
 
-def get_company_enabled_modules(company_id):
-    """Get list of enabled modules for a company"""
-    # This is a simple implementation - you can store this in database later
-    # For now, let's check if there's a company_modules table
-    try:
-        # Try to get from database (if table exists)
-        query = db.session.execute(
-            text("SELECT module_name FROM company_modules WHERE company_id = :company_id AND enabled = 1"),
-            {'company_id': company_id}
-        )
-        return [row[0] for row in query.fetchall()]
-    except:
-        # If table doesn't exist, return default enabled modules
-        return ['analytics', 'notifications']  # Some default enabled modules
 
 @app.route('/admin/companies/<int:company_id>/modules/batch-update', methods=['POST'])
 @login_required
 @super_admin_required
 def update_company_modules(company_id):
-    """Update company module settings"""
+    """Update company module settings - now saves to database"""
     try:
         company = Company.query.get_or_404(company_id)
         
-        # Handle both JSON and form data
-        if request.is_json:
-            data = request.get_json()
-            changes = data.get('changes', [])
-        else:
-            # Handle form data (fallback)
-            enabled_modules = request.form.getlist('enabled_modules')
-            changes = []
-            # Convert form data to changes format
-            all_module_names = ['tender_management', 'user_management', 'analytics', 'notifications', 'api_access', 'white_label']
-            for module_name in all_module_names:
-                changes.append({
-                    'module_name': module_name,
-                    'enabled': module_name in enabled_modules,
-                    'notes': request.form.get('notes', '')
-                })
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'message': 'Content-Type must be application/json'
+            }), 400
+            
+        data = request.get_json()
+        changes = data.get('changes', [])
         
         print(f"Processing {len(changes)} module changes for company {company_id}")
         
-        # Calculate new monthly cost
-        module_prices = {
-            'tender_management': 0.0,
-            'user_management': 0.0,
-            'analytics': 29.99,
-            'notifications': 9.99,
-            'api_access': 49.99,
-            'white_label': 99.99
-        }
-        
-        monthly_cost = 0.0
-        enabled_modules = []
-        
+        # Process each module change
+        updated_modules = []
         for change in changes:
-            if change.get('enabled'):
-                module_name = change.get('module_name')
-                enabled_modules.append(module_name)
-                monthly_cost += module_prices.get(module_name, 0.0)
+            module_name = change.get('module_name')
+            enabled = change.get('enabled', False)
+            notes = change.get('notes', '')
+            
+            try:
+                if enabled:
+                    CompanyModule.enable_module(
+                        company_id=company_id,
+                        module_name=module_name,
+                        enabled_by_user_id=session.get('user_id'),
+                        notes=notes
+                    )
+                    updated_modules.append(f"Enabled {module_name}")
+                else:
+                    CompanyModule.disable_module(
+                        company_id=company_id,
+                        module_name=module_name,
+                        disabled_by_user_id=session.get('user_id')
+                    )
+                    updated_modules.append(f"Disabled {module_name}")
+                    
+            except ValueError as e:
+                print(f"Error processing module {module_name}: {str(e)}")
+                # Don't fail the entire operation, just log and continue
+                updated_modules.append(f"Error with {module_name}: {str(e)}")
+                continue
+        
+        # Get updated status and cost
+        enabled_modules = CompanyModule.get_enabled_modules(company_id)
+        monthly_cost = CompanyModule.get_monthly_cost(company_id)
         
         print(f"Enabled modules: {enabled_modules}")
         print(f"Monthly cost: {monthly_cost}")
-        
-        # Here you can add database storage logic if needed
-        # For now, just return success with the calculated cost
         
         return jsonify({
             'success': True,
             'message': f'Modules updated successfully. {len(enabled_modules)} modules enabled.',
             'monthly_cost': monthly_cost,
-            'enabled_count': len(enabled_modules)
+            'enabled_count': len(enabled_modules),
+            'enabled_modules': enabled_modules,
+            'updates': updated_modules
         })
         
     except Exception as e:
@@ -1798,6 +2014,81 @@ def update_company_details(company_id):
         return jsonify({
             'success': False,
             'message': f'Error updating company: {str(e)}'
+        }), 500
+
+@app.route('/test-company-modules')
+@login_required
+def test_company_modules():
+    """Test route to check if module system is working"""
+    try:
+        user_id = session['user_id']
+        user = User.query.get(user_id)
+        
+        # Debug info
+        debug_info = {
+            'user_id': user_id,
+            'user_found': user is not None,
+            'user_company_id': user.company_id if user else None,
+            'user_name': user.first_name + ' ' + user.last_name if user else None,
+        }
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'User not found',
+                'debug': debug_info
+            })
+        
+        if not user.company_id:
+            return jsonify({
+                'success': False,
+                'error': 'User has no company assigned',
+                'debug': debug_info
+            })
+        
+        company = Company.query.get(user.company_id)
+        debug_info['company_found'] = company is not None
+        debug_info['company_name'] = company.name if company else None
+        
+        if not company:
+            return jsonify({
+                'success': False,
+                'error': 'Company not found',
+                'debug': debug_info
+            })
+        
+        # Check if the methods exist
+        if not hasattr(company, 'get_enabled_modules'):
+            return jsonify({
+                'success': False,
+                'error': 'Company model missing get_enabled_modules method',
+                'debug': debug_info,
+                'available_methods': [method for method in dir(company) if not method.startswith('_')]
+            })
+        
+        # Test the methods
+        enabled_modules = company.get_enabled_modules()
+        monthly_cost = company.get_monthly_cost()
+        has_analytics = company.has_module('analytics')
+        modules_status = CompanyModule.get_company_modules_with_status(company.id)
+        
+        return jsonify({
+            'success': True,
+            'debug': debug_info,
+            'user': user.first_name + ' ' + user.last_name,
+            'company': company.name,
+            'enabled_modules': enabled_modules,
+            'monthly_cost': monthly_cost,
+            'has_analytics': has_analytics,
+            'all_modules': modules_status
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
         }), 500
 
 @app.route('/admin/companies/<int:company_id>/view')
@@ -1845,10 +2136,35 @@ def deactivate_company(company_id):
 
 @app.route('/admin/users')
 @super_admin_required
+@require_module('user_management')  # ← Add this decorator
 def admin_users():
     """Admin - Manage users"""
     users = AuthService.get_all_users()
     return render_template('admin/users.html', users=users)
+
+@app.route('/admin/companies')
+@super_admin_required
+@require_module('company_management')  # ← Add this decorator (if you have this module)
+def admin_companies():
+    """Admin - Manage companies"""
+    # Use direct database query instead of service method
+    companies = Company.query.order_by(Company.name).all()
+    
+    # Add stats for each company manually
+    for company in companies:
+        user_count = User.query.filter_by(company_id=company.id, is_active=True).count()
+        tender_count = Tender.query.filter_by(company_id=company.id).count()
+        
+        # Create a simple stats object
+        company.stats = type('CompanyStats', (), {
+            'user_count': user_count,
+            'tender_count': tender_count,
+            'active_tender_count': tender_count  # For now, assume all are active
+        })()
+    
+    return render_template('admin/companies.html', companies=companies)
+
+
 
 @app.route('/admin/users/create', methods=['GET', 'POST'])
 @super_admin_required
@@ -1952,6 +2268,7 @@ def admin_roles():
 # Company Admin Routes (keeping existing ones)
 @app.route('/company/users')
 @company_admin_required
+@require_module('user_management') 
 def company_users():
     """Company Admin - Manage company users"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -1969,6 +2286,7 @@ def company_users():
 
 @app.route('/company/users/create', methods=['GET', 'POST'])
 @company_admin_required
+@require_module('user_management') 
 def create_company_user():
     """Company Admin - Create new user for their company"""
     current_user = AuthService.get_user_by_id(session['user_id'])
@@ -2394,6 +2712,7 @@ def admin_company_modules():
 
 @app.route('/documents')
 @login_required
+@require_module('document_management')
 def documents():
     """View and manage documents"""
     # Get documents for the current user's company
@@ -2433,6 +2752,7 @@ def documents():
 
 @app.route('/documents/upload', methods=['GET', 'POST'])
 @login_required
+@require_module('document_management')
 def upload_document():
     """Upload a new document"""
     if request.method == 'POST':
