@@ -11,11 +11,15 @@ let pendingChanges = {};
  * Initialize the page when DOM is loaded
  */
 document.addEventListener('DOMContentLoaded', function() {
-    // Get company ID from data attribute or global variable
+    // Get company ID from data attribute
     const companyElement = document.querySelector('[data-company-id]');
     if (companyElement) {
         companyId = parseInt(companyElement.getAttribute('data-company-id'));
+        console.log('Company ID:', companyId);
     }
+    
+    // Initialize module toggle listeners
+    initializeModuleToggles();
     
     // Auto-focus on the first input field
     const nameField = document.getElementById('name');
@@ -28,6 +32,20 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
+ * Initialize module toggle event listeners
+ */
+function initializeModuleToggles() {
+    document.querySelectorAll('.module-toggle').forEach(toggle => {
+        toggle.addEventListener('change', function() {
+            const moduleName = this.dataset.module;
+            const isEnabled = this.checked;
+            console.log(`Module ${moduleName} toggled to ${isEnabled}`);
+            toggleModule(moduleName, isEnabled);
+        });
+    });
+}
+
+/**
  * Initialize form validation and change tracking
  */
 function initializeFormValidation() {
@@ -35,12 +53,7 @@ function initializeFormValidation() {
     if (companyForm) {
         companyForm.addEventListener('input', function(e) {
             // Mark as pending change when form fields change
-            const saveBtn = document.querySelector('button[onclick="saveAllChanges()"]');
-            if (saveBtn && !saveBtn.classList.contains('btn-warning')) {
-                saveBtn.classList.remove('btn-success');
-                saveBtn.classList.add('btn-warning');
-                saveBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Save Pending Changes';
-            }
+            markPendingChanges();
         });
     }
 }
@@ -51,23 +64,33 @@ function initializeFormValidation() {
  * @param {boolean} enabled - Whether the module should be enabled
  */
 function toggleModule(moduleName, enabled) {
-    const card = document.querySelector(`[data-module="${moduleName}"]`).closest('.module-card');
+    const toggle = document.querySelector(`[data-module="${moduleName}"]`);
+    const card = toggle ? toggle.closest('.module-card') : null;
     
     // Update visual state immediately
-    if (enabled) {
-        card.classList.remove('border-secondary');
-        card.classList.add('border-success');
-    } else {
-        card.classList.remove('border-success');
-        card.classList.add('border-secondary');
+    if (card) {
+        if (enabled) {
+            card.classList.remove('border-secondary');
+            card.classList.add('border-success');
+        } else {
+            card.classList.remove('border-success');
+            card.classList.add('border-secondary');
+        }
     }
     
     // Store change for batch update
     pendingChanges[moduleName] = enabled;
     
     // Show save button as active
+    markPendingChanges();
+}
+
+/**
+ * Mark that there are pending changes
+ */
+function markPendingChanges() {
     const saveBtn = document.querySelector('button[onclick="saveAllChanges()"]');
-    if (saveBtn) {
+    if (saveBtn && !saveBtn.innerHTML.includes('Pending')) {
         saveBtn.classList.remove('btn-success');
         saveBtn.classList.add('btn-warning');
         saveBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Save Pending Changes';
@@ -92,104 +115,94 @@ function toggleAllModules(enableAll) {
  * Save all pending changes (company info and modules)
  */
 async function saveAllChanges() {
-    if (Object.keys(pendingChanges).length === 0) {
-        showToast('Info', 'No changes to save', 'info');
+    console.log('saveAllChanges called');
+    console.log('Pending changes:', pendingChanges);
+    
+    if (!companyId) {
+        showToast('Error', 'Company ID not found', 'error');
         return;
     }
     
-    showLoading();
+    // Show loading state
+    const saveBtn = document.querySelector('button[onclick="saveAllChanges()"]');
+    const originalText = saveBtn.innerHTML;
+    
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+    saveBtn.disabled = true;
     
     try {
-        // Save company info first
-        await saveCompanyInfo();
-        
         // Save module changes
-        const moduleResult = await saveModuleChanges();
+        const result = await saveModuleChanges();
         
-        hideLoading();
-        
-        if (moduleResult.success) {
-            showToast('Success', 'All changes saved successfully!', 'success');
+        if (result.success) {
+            showToast('Success', 'Changes saved successfully!', 'success');
             pendingChanges = {};
             
             // Reset save button
             resetSaveButton();
             
             // Update monthly cost if provided
-            if (moduleResult.monthly_cost !== undefined) {
-                updateMonthlyCost(moduleResult.monthly_cost);
+            if (result.monthly_cost !== undefined) {
+                updateMonthlyCost(result.monthly_cost);
             }
         } else {
-            showToast('Error', moduleResult.message || 'Error saving changes', 'error');
+            showToast('Error', result.message || 'Error saving changes', 'error');
         }
     } catch (error) {
-        hideLoading();
-        showToast('Error', 'Network error occurred', 'error');
         console.error('Save error:', error);
+        showToast('Error', 'Network error occurred: ' + error.message, 'error');
+    } finally {
+        // Reset button state
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
     }
 }
 
 /**
- * Save company basic information
- */
-async function saveCompanyInfo() {
-    const companyForm = document.getElementById('companyForm');
-    if (!companyForm) return;
-    
-    const formData = new FormData(companyForm);
-    const companyFormData = {
-        name: formData.get('name'),
-        email: formData.get('email'),
-        phone: formData.get('phone'),
-        address: formData.get('address'),
-        is_active: document.getElementById('is_active')?.checked || false
-    };
-    
-    const response = await fetch(`/admin/companies/${companyId}/update`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(companyFormData)
-    });
-    
-    if (!response.ok) {
-        throw new Error('Failed to save company info');
-    }
-    
-    return response.json();
-}
-
-/**
- * Save module changes
+ * Save module changes using the correct endpoint
  */
 async function saveModuleChanges() {
-    const moduleChanges = [];
-    const moduleNotes = document.getElementById('moduleNotes')?.value || '';
+    console.log('Saving module changes...');
     
-    for (const [moduleName, enabled] of Object.entries(pendingChanges)) {
-        moduleChanges.push({
-            module_name: moduleName,
-            enabled: enabled,
-            notes: moduleNotes
-        });
-    }
+    // Prepare form data
+    const formData = new FormData();
     
-    const response = await fetch(`/admin/companies/${companyId}/modules/batch-update`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            changes: moduleChanges
-        })
+    // Add all currently checked modules
+    document.querySelectorAll('.module-toggle:checked').forEach(toggle => {
+        formData.append('enabled_modules', toggle.dataset.module);
     });
     
-    if (!response.ok) {
-        throw new Error('Failed to save module changes');
+    // Add notes if any
+    const notes = document.getElementById('moduleNotes')?.value;
+    if (notes) {
+        formData.append('notes', notes);
     }
     
-    return response.json();
+    console.log('FormData prepared, sending to:', `/admin/companies/${companyId}/modules`);
+    
+    // const response = await fetch(`/admin/companies/${companyId}/modules`, {
+
+    const response = await fetch(`/admin/companies/${companyId}/modules/batch-update`, {
+
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    });
+    
+    console.log('Response status:', response.status);
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('Response data:', result);
+    
+    return result;
 }
 
 /**
@@ -205,7 +218,7 @@ function resetSaveButton() {
     
     setTimeout(() => {
         saveBtn.classList.remove('btn-success');
-        saveBtn.classList.add('btn-outline-success');
+        saveBtn.classList.add('btn-success');
         saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Save All Changes';
     }, 2000);
 }
@@ -222,30 +235,6 @@ function updateMonthlyCost(cost) {
 }
 
 /**
- * Show loading modal
- */
-function showLoading() {
-    const loadingModal = document.getElementById('loadingModal');
-    if (loadingModal && typeof bootstrap !== 'undefined') {
-        const modal = new bootstrap.Modal(loadingModal);
-        modal.show();
-    }
-}
-
-/**
- * Hide loading modal
- */
-function hideLoading() {
-    const loadingModal = document.getElementById('loadingModal');
-    if (loadingModal && typeof bootstrap !== 'undefined') {
-        const modal = bootstrap.Modal.getInstance(loadingModal);
-        if (modal) {
-            modal.hide();
-        }
-    }
-}
-
-/**
  * Show toast notification
  * @param {string} title - Toast title
  * @param {string} message - Toast message
@@ -258,7 +247,8 @@ function showToast(title, message, type) {
     const toastIcon = document.getElementById('toastIcon');
     
     if (!toast || !toastTitle || !toastMessage || !toastIcon) {
-        console.warn('Toast elements not found');
+        console.warn('Toast elements not found, using alert fallback');
+        alert(`${title}: ${message}`);
         return;
     }
     
@@ -283,26 +273,8 @@ function showToast(title, message, type) {
     if (typeof bootstrap !== 'undefined') {
         const bsToast = new bootstrap.Toast(toast);
         bsToast.show();
+    } else {
+        console.warn('Bootstrap not loaded, using alert fallback');
+        alert(`${title}: ${message}`);
     }
-}
-
-/**
- * Utility function to get CSRF token if needed
- */
-function getCSRFToken() {
-    const token = document.querySelector('meta[name="csrf-token"]');
-    return token ? token.getAttribute('content') : null;
-}
-
-/**
- * Add CSRF token to fetch requests if available
- * @param {object} headers - Existing headers object
- * @returns {object} Headers with CSRF token added
- */
-function addCSRFToken(headers = {}) {
-    const token = getCSRFToken();
-    if (token) {
-        headers['X-CSRFToken'] = token;
-    }
-    return headers;
 }

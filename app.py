@@ -3,6 +3,9 @@ from functools import wraps
 import os
 import pymysql
 import json
+from datetime import datetime
+from flask import jsonify, request
+from flask_login import current_user
 
 pymysql.install_as_MySQLdb()
 from datetime import datetime, timedelta
@@ -217,6 +220,16 @@ def logout():
     return redirect(url_for('home'))
 
 # Replace your dashboard route in app.py with this:
+
+@app.route('/company/notes')
+@login_required
+def company_notes():
+    """View company notes/announcements"""
+    # You can implement this to show company-wide notes or announcements
+    # For now, let's redirect to dashboard or show a placeholder
+    return render_template('company_notes.html')
+
+
 
 @app.route('/dashboard')
 @login_required
@@ -1690,16 +1703,31 @@ def get_company_enabled_modules(company_id):
         return ['analytics', 'notifications']  # Some default enabled modules
 
 @app.route('/admin/companies/<int:company_id>/modules/batch-update', methods=['POST'])
+@login_required
 @super_admin_required
 def update_company_modules(company_id):
     """Update company module settings"""
     try:
         company = Company.query.get_or_404(company_id)
-        data = request.get_json()
-        changes = data.get('changes', [])
         
-        # Simple storage - you can implement proper database storage later
-        # For now, we'll store in a simple way or just return success
+        # Handle both JSON and form data
+        if request.is_json:
+            data = request.get_json()
+            changes = data.get('changes', [])
+        else:
+            # Handle form data (fallback)
+            enabled_modules = request.form.getlist('enabled_modules')
+            changes = []
+            # Convert form data to changes format
+            all_module_names = ['tender_management', 'user_management', 'analytics', 'notifications', 'api_access', 'white_label']
+            for module_name in all_module_names:
+                changes.append({
+                    'module_name': module_name,
+                    'enabled': module_name in enabled_modules,
+                    'notes': request.form.get('notes', '')
+                })
+        
+        print(f"Processing {len(changes)} module changes for company {company_id}")
         
         # Calculate new monthly cost
         module_prices = {
@@ -1712,22 +1740,32 @@ def update_company_modules(company_id):
         }
         
         monthly_cost = 0.0
+        enabled_modules = []
+        
         for change in changes:
             if change.get('enabled'):
                 module_name = change.get('module_name')
+                enabled_modules.append(module_name)
                 monthly_cost += module_prices.get(module_name, 0.0)
         
-        # Always include core modules
-        monthly_cost += module_prices.get('tender_management', 0.0)
-        monthly_cost += module_prices.get('user_management', 0.0)
+        print(f"Enabled modules: {enabled_modules}")
+        print(f"Monthly cost: {monthly_cost}")
+        
+        # Here you can add database storage logic if needed
+        # For now, just return success with the calculated cost
         
         return jsonify({
             'success': True,
-            'message': 'Modules updated successfully',
-            'monthly_cost': monthly_cost
+            'message': f'Modules updated successfully. {len(enabled_modules)} modules enabled.',
+            'monthly_cost': monthly_cost,
+            'enabled_count': len(enabled_modules)
         })
         
     except Exception as e:
+        print(f"Error updating modules: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
         return jsonify({
             'success': False,
             'message': f'Error updating modules: {str(e)}'
@@ -2681,7 +2719,8 @@ def debug_routes():
     for rule in app.url_map.iter_rules():
         output.append(f"{rule.endpoint}: {rule}")
     return '<br>'.join(output)
-   
+
+  
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

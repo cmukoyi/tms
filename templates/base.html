@@ -212,28 +212,8 @@
                   <a class="dropdown-item" href="{{ url_for('admin_roles') }}">
                     <i class="fas fa-user-tag me-2"></i>Roles
                   </a>
-                </li>
-                <li><hr class="dropdown-divider" /></li>
-                <li>
-                  <a
-                    class="dropdown-item"
-                    href="{{ url_for('admin_company_modules') }}"
-                  >
-                    <i class="fas fa-puzzle-piece me-2"></i>Company Modules
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{{ url_for('initialize_company_modules') }}">
-                    <i class="fas fa-play-circle me-2"></i>Initialize Modules
-                  </a>
-                </li>
-                {% if can_access_module('custom_fields') %}
-                <li>
-                  <a class="dropdown-item" href="{{ url_for('admin_custom_fields') }}">
-                    <i class="fas fa-cogs me-2"></i>Custom Fields
-                  </a>
-                </li>
-                {% endif %}
+               
+                  
               </ul>
             </div>
             {% endif %}
