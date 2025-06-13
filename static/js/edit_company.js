@@ -159,44 +159,68 @@ async function saveAllChanges() {
 }
 
 /**
- * Save module changes using the correct endpoint
+ * Save module changes using JSON instead of FormData
  */
 async function saveModuleChanges() {
     console.log('Saving module changes...');
     
-    // Prepare form data
-    const formData = new FormData();
+    // Prepare changes array in the format expected by the Flask route
+    const changes = [];
     
-    // Add all currently checked modules
-    document.querySelectorAll('.module-toggle:checked').forEach(toggle => {
-        formData.append('enabled_modules', toggle.dataset.module);
-    });
-    
-    // Add notes if any
-    const notes = document.getElementById('moduleNotes')?.value;
-    if (notes) {
-        formData.append('notes', notes);
-    }
-    
-    console.log('FormData prepared, sending to:', `/admin/companies/${companyId}/modules`);
-    
-    // const response = await fetch(`/admin/companies/${companyId}/modules`, {
-
-    const response = await fetch(`/admin/companies/${companyId}/modules/batch-update`, {
-
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
+    // Get all module toggles and their current states
+    document.querySelectorAll('.module-toggle').forEach(toggle => {
+        const moduleName = toggle.dataset.module;
+        const isEnabled = toggle.checked;
+        
+        // Only include modules that have actually changed
+        if (pendingChanges.hasOwnProperty(moduleName)) {
+            changes.push({
+                module_name: moduleName,
+                enabled: isEnabled,
+                notes: isEnabled ? 'Enabled via admin interface' : 'Disabled via admin interface'
+            });
         }
     });
     
+    console.log('Changes to send:', changes);
+    
+    if (changes.length === 0) {
+        console.log('No changes to save');
+        return { success: true, message: 'No changes to save' };
+    }
+    
+    // Prepare JSON data
+    const requestData = {
+        changes: changes
+    };
+    
+    console.log('Request data:', requestData);
+    console.log('Sending to:', `/admin/companies/${companyId}/modules/batch-update`);
+    
+    // Send JSON request with proper headers
+    const response = await fetch(`/admin/companies/${companyId}/modules/batch-update`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',  // ← This is the key fix!
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(requestData)  // ← Send JSON, not FormData
+    });
+    
     console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
         const errorText = await response.text();
         console.error('Response error:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        
+        try {
+            const errorData = JSON.parse(errorText);
+            throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        } catch (parseError) {
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
     }
     
     const result = await response.json();

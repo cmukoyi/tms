@@ -1816,45 +1816,10 @@ def edit_company(company_id):
     company = Company.query.get_or_404(company_id)
     
     if request.method == 'POST':
-        try:
-            # Get form data
-            name = request.form.get('name', '').strip()
-            email = request.form.get('email', '').strip()
-            phone = request.form.get('phone', '').strip()
-            address = request.form.get('address', '').strip()
-            is_active = 'is_active' in request.form
-            
-            # Validation
-            if not name or not email:
-                flash('Company name and email are required', 'error')
-                return redirect(url_for('edit_company', company_id=company_id))
-            
-            # Check if email is taken by another company
-            existing_company = Company.query.filter(
-                Company.email == email,
-                Company.id != company_id
-            ).first()
-            
-            if existing_company:
-                flash('Email already exists for another company', 'error')
-                return redirect(url_for('edit_company', company_id=company_id))
-            
-            # Update company
-            company.name = name
-            company.email = email
-            company.phone = phone if phone else None
-            company.address = address if address else None
-            company.is_active = is_active
-            
-            db.session.commit()
-            flash('Company updated successfully!', 'success')
-            return redirect(url_for('admin_companies'))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Error updating company: {str(e)}', 'error')
+        # ... keep your existing POST handling code ...
+        pass
     
-    # GET request - show the form
+    # GET request - show the form with CORRECT module states
     # Get company stats
     user_count = User.query.filter_by(company_id=company_id, is_active=True).count()
     tender_count = Tender.query.filter_by(company_id=company_id).count()
@@ -1864,63 +1829,424 @@ def edit_company(company_id):
         'tender_count': tender_count
     })()
     
-    # Get modules from database with proper structure
+    # Get all available modules
     try:
-        modules_status = CompanyModule.get_company_modules_with_status(company_id)
-        monthly_cost = CompanyModule.get_monthly_cost(company_id)
-        enabled_count = sum(1 for module in modules_status if module['enabled'])
-    except Exception as e:
-        print(f"Error getting modules: {str(e)}")
-        # Fallback to empty data
-        modules_status = []
-        monthly_cost = 0.0
-        enabled_count = 0
+        all_modules = ModuleDefinition.query.filter_by(is_active=True).order_by(ModuleDefinition.sort_order).all()
+    except:
+        print("ModuleDefinition table not found, creating empty list")
+        all_modules = []
     
-    # Convert to the format your template expects with all required attributes
+    # Get ACTUALLY enabled modules for this company from CompanyModule table
+    try:
+        enabled_company_modules = CompanyModule.query.filter_by(
+            company_id=company_id, 
+            is_enabled=True
+        ).all()
+        enabled_module_names = {cm.module_name for cm in enabled_company_modules}
+        monthly_cost = sum(cm.monthly_cost or 0 for cm in enabled_company_modules)
+        
+        print(f"Company {company_id} enabled modules from DB: {enabled_module_names}")
+        print(f"Monthly cost: {monthly_cost}")
+        
+    except Exception as e:
+        print(f"Error loading company modules: {str(e)}")
+        enabled_module_names = set()
+        monthly_cost = 0.0
+    
+    # Create modules_data structure with CORRECT enabled states
     modules_data = []
-    for module_status in modules_status:
-        # Create a proper module definition with all expected attributes
-        module_def_data = {
-            'id': module_status.get('id', 0),
-            'module_name': module_status.get('module_name', ''),
-            'display_name': module_status.get('display_name', ''),
-            'description': module_status.get('description', ''),
-            'category': module_status.get('category', 'feature'),
-            'monthly_price': module_status.get('monthly_price', 0.0),  # ← Add this!
-            'is_core': module_status.get('is_core', False),
-            'is_active': module_status.get('is_active', True),
-            'sort_order': module_status.get('sort_order', 0)
-        }
+    for module_def in all_modules:
+        # Check if this module is actually enabled in the database
+        is_enabled = module_def.module_name in enabled_module_names
+        
+        # Get the company module record if it exists
+        company_module = None
+        if is_enabled:
+            try:
+                company_module = CompanyModule.query.filter_by(
+                    company_id=company_id,
+                    module_name=module_def.module_name,
+                    is_enabled=True
+                ).first()
+            except:
+                pass
         
         module_data = type('ModuleData', (), {
-            'definition': type('ModuleDef', (), module_def_data)(),
-            'is_enabled': module_status.get('enabled', False),
-            'company_module': type('CompanyModule', (), {
-                'enabled_at': datetime.now(),
-                'monthly_cost': module_status.get('monthly_price', 0.0)
-            })() if module_status.get('enabled', False) else None
+            'definition': module_def,
+            'is_enabled': is_enabled,  # This should reflect the actual database state
+            'company_module': company_module
         })()
         
         modules_data.append(module_data)
+        
+        print(f"Module {module_def.module_name}: enabled={is_enabled}")
+    
+    enabled_count = len(enabled_module_names)
+    total_modules = len(all_modules)
+    
+    print(f"Final stats: {enabled_count}/{total_modules} modules enabled, cost: R{monthly_cost}")
     
     return render_template('admin/edit_company.html',
                          company=company,
                          company_stats=company_stats,
                          modules_data=modules_data,
                          enabled_count=enabled_count,
-                         total_modules=len(modules_status),
+                         total_modules=total_modules,
                          monthly_cost=monthly_cost)
+    
+    
+# Add this simplified debug route to test saving:
 
+@app.route('/debug/test-save/<int:company_id>')
+@login_required 
+@super_admin_required
+def test_save_module(company_id):
+    """Test saving a single module to see what happens"""
+    try:
+        # Test saving the reporting module
+        module_name = 'reporting'
+        
+        print(f"\n=== Testing module save for company {company_id} ===")
+        
+        # Check if record exists
+        existing = CompanyModule.query.filter_by(
+            company_id=company_id,
+            module_name=module_name
+        ).first()
+        
+        print(f"Existing record: {existing}")
+        
+        if existing:
+            existing.is_enabled = True
+            existing.enabled_at = datetime.now()
+            print("Updated existing record")
+        else:
+            # Create new record
+            new_module = CompanyModule(
+                company_id=company_id,
+                module_name=module_name,
+                is_enabled=True,
+                enabled_at=datetime.now(),
+                monthly_cost=99.0
+            )
+            db.session.add(new_module)
+            print("Created new record")
+        
+        # Try to commit
+        db.session.commit()
+        print("Commit successful")
+        
+        # Check what's in the database now
+        all_modules = CompanyModule.query.filter_by(company_id=company_id).all()
+        
+        result = {
+            'success': True,
+            'message': f'Test save completed for company {company_id}',
+            'modules_in_db': [
+                {
+                    'id': m.id,
+                    'module_name': m.module_name,
+                    'is_enabled': m.is_enabled,
+                    'enabled_at': m.enabled_at.isoformat() if m.enabled_at else None,
+                    'monthly_cost': m.monthly_cost
+                } for m in all_modules
+            ]
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+        
+
+# Add this route to check if the table exists and its structure:
+
+@app.route('/debug/check-tables')
+@login_required
+@super_admin_required  
+def check_tables():
+    """Check if CompanyModule table exists and its structure"""
+    try:
+        from sqlalchemy import inspect
+        
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
+        
+        result = {
+            'all_tables': tables,
+            'company_module_exists': 'company_module' in tables,
+            'module_definition_exists': 'module_definition' in tables
+        }
+        
+        # If CompanyModule table exists, check its columns
+        if 'company_module' in tables:
+            columns = inspector.get_columns('company_module')
+            result['company_module_columns'] = [
+                {
+                    'name': col['name'],
+                    'type': str(col['type']),
+                    'nullable': col['nullable']
+                } for col in columns
+            ]
+            
+            # Check if there are any records
+            try:
+                count = db.session.query(CompanyModule).count()
+                result['company_module_record_count'] = count
+                
+                # Get sample records
+                sample_records = CompanyModule.query.limit(5).all()
+                result['sample_records'] = [
+                    {
+                        'id': r.id,
+                        'company_id': r.company_id,
+                        'module_name': r.module_name,
+                        'is_enabled': r.is_enabled,
+                        'enabled_at': r.enabled_at.isoformat() if r.enabled_at else None
+                    } for r in sample_records
+                ]
+            except Exception as e:
+                result['query_error'] = str(e)
+        
+        # Check ModuleDefinition table
+        if 'module_definition' in tables:
+            columns = inspector.get_columns('module_definition')
+            result['module_definition_columns'] = [
+                {
+                    'name': col['name'], 
+                    'type': str(col['type']),
+                    'nullable': col['nullable']
+                } for col in columns
+            ]
+            
+            try:
+                count = db.session.query(ModuleDefinition).count()
+                result['module_definition_record_count'] = count
+                
+                sample_defs = ModuleDefinition.query.limit(5).all()
+                result['sample_definitions'] = [
+                    {
+                        'id': r.id,
+                        'module_name': r.module_name,
+                        'display_name': r.display_name,
+                        'monthly_price': r.monthly_price,
+                        'is_active': r.is_active
+                    } for r in sample_defs
+                ]
+            except Exception as e:
+                result['module_def_query_error'] = str(e)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+# Add this route to check the actual structure of your existing tables:
+
+@app.route('/debug/check-actual-tables')
+@login_required
+@super_admin_required
+def check_actual_tables():
+    """Check the actual structure of existing tables"""
+    try:
+        from sqlalchemy import inspect, text
+        
+        inspector = inspect(db.engine)
+        result = {}
+        
+        # Check company_modules table (plural)
+        if 'company_modules' in inspector.get_table_names():
+            columns = inspector.get_columns('company_modules')
+            result['company_modules'] = {
+                'columns': [
+                    {
+                        'name': col['name'],
+                        'type': str(col['type']),
+                        'nullable': col['nullable']
+                    } for col in columns
+                ],
+                'sample_data': []
+            }
+            
+            # Get sample data using raw SQL
+            try:
+                with db.engine.connect() as conn:
+                    sample_result = conn.execute(text("SELECT * FROM company_modules LIMIT 5"))
+                    result['company_modules']['sample_data'] = [
+                        dict(row._mapping) for row in sample_result
+                    ]
+                    
+                    count_result = conn.execute(text("SELECT COUNT(*) as count FROM company_modules"))
+                    result['company_modules']['total_count'] = count_result.fetchone()[0]
+            except Exception as e:
+                result['company_modules']['data_error'] = str(e)
+        
+        # Check module_definitions table (plural)
+        if 'module_definitions' in inspector.get_table_names():
+            columns = inspector.get_columns('module_definitions')
+            result['module_definitions'] = {
+                'columns': [
+                    {
+                        'name': col['name'],
+                        'type': str(col['type']),
+                        'nullable': col['nullable']
+                    } for col in columns
+                ],
+                'sample_data': []
+            }
+            
+            # Get sample data using raw SQL
+            try:
+                with db.engine.connect() as conn:
+                    sample_result = conn.execute(text("SELECT * FROM module_definitions LIMIT 5"))
+                    result['module_definitions']['sample_data'] = [
+                        dict(row._mapping) for row in sample_result
+                    ]
+                    
+                    count_result = conn.execute(text("SELECT COUNT(*) as count FROM module_definitions"))
+                    result['module_definitions']['total_count'] = count_result.fetchone()[0]
+            except Exception as e:
+                result['module_definitions']['data_error'] = str(e)
+        
+        # Also check company_features table (seems related)
+        if 'company_features' in inspector.get_table_names():
+            columns = inspector.get_columns('company_features')
+            result['company_features'] = {
+                'columns': [
+                    {
+                        'name': col['name'],
+                        'type': str(col['type']),
+                        'nullable': col['nullable']
+                    } for col in columns
+                ],
+                'sample_data': []
+            }
+            
+            try:
+                with db.engine.connect() as conn:
+                    sample_result = conn.execute(text("SELECT * FROM company_features LIMIT 5"))
+                    result['company_features']['sample_data'] = [
+                        dict(row._mapping) for row in sample_result
+                    ]
+                    
+                    count_result = conn.execute(text("SELECT COUNT(*) as count FROM company_features"))
+                    result['company_features']['total_count'] = count_result.fetchone()[0]
+            except Exception as e:
+                result['company_features']['data_error'] = str(e)
+        
+        # Check features table
+        if 'features' in inspector.get_table_names():
+            columns = inspector.get_columns('features')
+            result['features'] = {
+                'columns': [
+                    {
+                        'name': col['name'],
+                        'type': str(col['type']),
+                        'nullable': col['nullable']
+                    } for col in columns
+                ],
+                'sample_data': []
+            }
+            
+            try:
+                with db.engine.connect() as conn:
+                    sample_result = conn.execute(text("SELECT * FROM features LIMIT 10"))
+                    result['features']['sample_data'] = [
+                        dict(row._mapping) for row in sample_result
+                    ]
+                    
+                    count_result = conn.execute(text("SELECT COUNT(*) as count FROM features"))
+                    result['features']['total_count'] = count_result.fetchone()[0]
+            except Exception as e:
+                result['features']['data_error'] = str(e)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/debug/company/<int:company_id>/modules')
+@login_required
+def debug_company_modules(company_id):
+    """Debug route to see what modules are actually saved in the database"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        
+        # Get all CompanyModule records for this company
+        company_modules = CompanyModule.query.filter_by(company_id=company_id).all()
+        
+        # Get enabled modules using the method
+        try:
+            enabled_modules = company.get_enabled_modules()
+        except:
+            enabled_modules = CompanyModule.get_enabled_modules(company_id)
+        
+        # Get all available modules
+        try:
+            all_modules = ModuleDefinition.query.all()
+        except:
+            all_modules = []
+        
+        debug_info = {
+            'company_id': company_id,
+            'company_name': company.name,
+            'company_modules_table': [
+                {
+                    'id': cm.id,
+                    'module_name': cm.module_name,
+                    'is_enabled': cm.is_enabled,
+                    'enabled_at': cm.enabled_at.isoformat() if cm.enabled_at else None,
+                    'monthly_cost': cm.monthly_cost
+                } for cm in company_modules
+            ],
+            'enabled_modules_method': enabled_modules,
+            'available_modules': [
+                {
+                    'id': m.id,
+                    'module_name': m.module_name,
+                    'display_name': m.display_name,
+                    'monthly_price': m.monthly_price
+                } for m in all_modules
+            ],
+            'total_company_modules': len(company_modules),
+            'total_enabled': len([cm for cm in company_modules if cm.is_enabled])
+        }
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
 
 @app.route('/admin/companies/<int:company_id>/modules/batch-update', methods=['POST'])
 @login_required
 @super_admin_required
 def update_company_modules(company_id):
-    """Update company module settings - now saves to database"""
+    """Update company module settings - FIXED VERSION"""
     try:
+        print(f"\n=== DEBUG: Batch update for company {company_id} ===")
+        
         company = Company.query.get_or_404(company_id)
         
         if not request.is_json:
+            print(f"ERROR: Request is not JSON! Content-Type: {request.content_type}")
             return jsonify({
                 'success': False,
                 'message': 'Content-Type must be application/json'
@@ -1929,56 +2255,124 @@ def update_company_modules(company_id):
         data = request.get_json()
         changes = data.get('changes', [])
         
-        print(f"Processing {len(changes)} module changes for company {company_id}")
+        print(f"Processing {len(changes)} module changes")
         
-        # Process each module change
+        # Track results
         updated_modules = []
+        errors = []
+        
         for change in changes:
             module_name = change.get('module_name')
             enabled = change.get('enabled', False)
             notes = change.get('notes', '')
             
+            print(f"Processing: {module_name} -> {enabled}")
+            
             try:
+                # Check if CompanyModule record exists
+                company_module = CompanyModule.query.filter_by(
+                    company_id=company_id,
+                    module_name=module_name
+                ).first()
+                
                 if enabled:
-                    CompanyModule.enable_module(
-                        company_id=company_id,
-                        module_name=module_name,
-                        enabled_by_user_id=session.get('user_id'),
-                        notes=notes
-                    )
-                    updated_modules.append(f"Enabled {module_name}")
-                else:
-                    CompanyModule.disable_module(
-                        company_id=company_id,
-                        module_name=module_name,
-                        disabled_by_user_id=session.get('user_id')
-                    )
-                    updated_modules.append(f"Disabled {module_name}")
+                    # Enable the module
+                    if company_module:
+                        # Update existing record
+                        company_module.is_enabled = True
+                        company_module.enabled_at = datetime.now()
+                        if hasattr(company_module, 'enabled_by_user_id'):
+                            company_module.enabled_by_user_id = session.get('user_id')
+                        print(f"Updated existing record for {module_name}")
+                    else:
+                        # Create new record
+                        # Get module definition for pricing
+                        module_def = ModuleDefinition.query.filter_by(module_name=module_name).first()
+                        monthly_cost = module_def.monthly_price if module_def else 0.0
+                        
+                        company_module = CompanyModule(
+                            company_id=company_id,
+                            module_name=module_name,
+                            is_enabled=True,
+                            enabled_at=datetime.now(),
+                            monthly_cost=monthly_cost
+                        )
+                        
+                        # Set additional fields if they exist
+                        if hasattr(company_module, 'enabled_by_user_id'):
+                            company_module.enabled_by_user_id = session.get('user_id')
+                        if hasattr(company_module, 'notes'):
+                            company_module.notes = notes
+                        
+                        db.session.add(company_module)
+                        print(f"Created new record for {module_name}")
                     
-            except ValueError as e:
-                print(f"Error processing module {module_name}: {str(e)}")
-                # Don't fail the entire operation, just log and continue
-                updated_modules.append(f"Error with {module_name}: {str(e)}")
+                    updated_modules.append(f"Enabled {module_name}")
+                    
+                else:
+                    # Disable the module
+                    if company_module:
+                        company_module.is_enabled = False
+                        company_module.disabled_at = datetime.now()
+                        if hasattr(company_module, 'disabled_by_user_id'):
+                            company_module.disabled_by_user_id = session.get('user_id')
+                        print(f"Disabled {module_name}")
+                        updated_modules.append(f"Disabled {module_name}")
+                    else:
+                        print(f"Module {module_name} was not enabled, nothing to disable")
+                        updated_modules.append(f"Module {module_name} was already disabled")
+                
+            except Exception as e:
+                error_msg = f"Error with {module_name}: {str(e)}"
+                print(error_msg)
+                errors.append(error_msg)
                 continue
         
-        # Get updated status and cost
-        enabled_modules = CompanyModule.get_enabled_modules(company_id)
-        monthly_cost = CompanyModule.get_monthly_cost(company_id)
+        # Commit all changes
+        try:
+            db.session.commit()
+            print("Database changes committed successfully")
+        except Exception as e:
+            db.session.rollback()
+            print(f"Database commit failed: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Database error: {str(e)}'
+            }), 500
         
-        print(f"Enabled modules: {enabled_modules}")
-        print(f"Monthly cost: {monthly_cost}")
+        # Get updated status
+        try:
+            enabled_modules = company.get_enabled_modules()
+            monthly_cost = CompanyModule.get_monthly_cost(company_id)
+        except:
+            # Fallback method
+            enabled_company_modules = CompanyModule.query.filter_by(
+                company_id=company_id, 
+                is_enabled=True
+            ).all()
+            enabled_modules = [cm.module_name for cm in enabled_company_modules]
+            monthly_cost = sum(cm.monthly_cost or 0 for cm in enabled_company_modules)
         
-        return jsonify({
+        print(f"Final enabled modules: {enabled_modules}")
+        print(f"Final monthly cost: {monthly_cost}")
+        
+        result = {
             'success': True,
             'message': f'Modules updated successfully. {len(enabled_modules)} modules enabled.',
             'monthly_cost': monthly_cost,
             'enabled_count': len(enabled_modules),
             'enabled_modules': enabled_modules,
             'updates': updated_modules
-        })
+        }
+        
+        if errors:
+            result['errors'] = errors
+            result['message'] += f' ({len(errors)} errors occurred)'
+        
+        return jsonify(result)
         
     except Exception as e:
-        print(f"Error updating modules: {str(e)}")
+        print(f"ERROR in update_company_modules: {str(e)}")
         import traceback
         traceback.print_exc()
         
