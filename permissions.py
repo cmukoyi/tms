@@ -1,9 +1,12 @@
-# Replace your entire permissions.py file with this fixed version:
+
 
 from functools import wraps
 from flask import session, request, jsonify, flash, redirect, url_for, abort
 from models import User, Company, CompanyModule, ModuleDefinition, Role
 
+from functools import wraps
+from flask import session, flash, redirect, url_for, jsonify, request
+from services.role_service import RoleService
 class ModulePermissions:
     """Centralized module permission checking"""
     
@@ -314,3 +317,177 @@ def can_delete_entries(user_id=None):
         
     permissions = ModulePermissions.get_user_permissions(user_id)
     return permissions and permissions['can_delete'] if permissions else False
+
+# permissions.py - Update this file with new permission system
+
+from functools import wraps
+from flask import session, flash, redirect, url_for, jsonify, request
+from services.role_service import RoleService
+
+def require_permission(permission):
+    """Decorator to require a specific permission"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                flash('Please log in to access this page.', 'warning')
+                return redirect(url_for('login'))
+            
+            user_id = session['user_id']
+            if not RoleService.check_user_permission(user_id, permission):
+                flash('Access denied. You do not have the required permissions.', 'error')
+                
+                # Return JSON for AJAX requests
+                if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. Insufficient permissions.',
+                        'required_permission': permission
+                    }), 403
+                
+                return redirect(url_for('dashboard'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def require_any_permission(*permissions):
+    """Decorator to require ANY of the specified permissions"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                flash('Please log in to access this page.', 'warning')
+                return redirect(url_for('login'))
+            
+            user_id = session['user_id']
+            has_permission = any(
+                RoleService.check_user_permission(user_id, perm) 
+                for perm in permissions
+            )
+            
+            if not has_permission:
+                flash('Access denied. You do not have the required permissions.', 'error')
+                
+                if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. Insufficient permissions.',
+                        'required_permissions': list(permissions)
+                    }), 403
+                
+                return redirect(url_for('dashboard'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def require_all_permissions(*permissions):
+    """Decorator to require ALL of the specified permissions"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                flash('Please log in to access this page.', 'warning')
+                return redirect(url_for('login'))
+            
+            user_id = session['user_id']
+            has_all_permissions = all(
+                RoleService.check_user_permission(user_id, perm) 
+                for perm in permissions
+            )
+            
+            if not has_all_permissions:
+                flash('Access denied. You do not have all required permissions.', 'error')
+                
+                if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. Insufficient permissions.',
+                        'required_permissions': list(permissions)
+                    }), 403
+                
+                return redirect(url_for('dashboard'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def require_role_level(min_level):
+    """Decorator to require minimum role level"""
+    level_hierarchy = {
+        'viewer': 1,
+        'vendor': 2,
+        'procurement_manager': 3,
+        'company_admin': 4,
+        'super_admin': 5
+    }
+    
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                flash('Please log in to access this page.', 'warning')
+                return redirect(url_for('login'))
+            
+            from models import User
+            user = User.query.get(session['user_id'])
+            
+            if not user:
+                flash('User not found.', 'error')
+                return redirect(url_for('login'))
+            
+            # Super admin always has access
+            if user.is_super_admin:
+                return f(*args, **kwargs)
+            
+            if not user.role:
+                flash('No role assigned.', 'error')
+                return redirect(url_for('dashboard'))
+            
+            user_level = level_hierarchy.get(user.role.level, 0)
+            required_level = level_hierarchy.get(min_level, 5)
+            
+            if user_level < required_level:
+                flash('Access denied. Insufficient role level.', 'error')
+                
+                if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                    return jsonify({
+                        'success': False,
+                        'message': 'Access denied. Insufficient role level.',
+                        'required_level': min_level,
+                        'user_level': user.role.level
+                    }), 403
+                
+                return redirect(url_for('dashboard'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Helper functions for templates
+def has_permission(permission):
+    """Template helper to check if current user has permission"""
+    if 'user_id' not in session:
+        return False
+    return RoleService.check_user_permission(session['user_id'], permission)
+
+def get_user_permissions():
+    """Template helper to get current user's permissions"""
+    if 'user_id' not in session:
+        return []
+    return RoleService.get_user_permissions(session['user_id'])
+
+def has_any_permission(*permissions):
+    """Template helper to check if user has any of the permissions"""
+    if 'user_id' not in session:
+        return False
+    user_id = session['user_id']
+    return any(RoleService.check_user_permission(user_id, perm) for perm in permissions)
+
+def has_all_permissions(*permissions):
+    """Template helper to check if user has all permissions"""
+    if 'user_id' not in session:
+        return False
+    user_id = session['user_id']
+    return all(RoleService.check_user_permission(user_id, perm) for perm in permissions)

@@ -1,11 +1,12 @@
 /**
- * Edit Company Page JavaScript
- * Handles company editing, module management, and form interactions
+ * Enhanced Edit Company Page JavaScript
+ * Handles company editing, module management, pricing, and form interactions
  */
 
 // Global variables
 let companyId = null;
 let pendingChanges = {};
+let pricingModal = null;
 
 /**
  * Initialize the page when DOM is loaded
@@ -18,8 +19,17 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Company ID:', companyId);
     }
     
+    // Initialize pricing modal
+    const pricingModalElement = document.getElementById('pricingModal');
+    if (pricingModalElement) {
+        pricingModal = new bootstrap.Modal(pricingModalElement);
+    }
+    
     // Initialize module toggle listeners
     initializeModuleToggles();
+    
+    // Initialize pricing listeners
+    initializePricingListeners();
     
     // Auto-focus on the first input field
     const nameField = document.getElementById('name');
@@ -29,6 +39,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize form validation
     initializeFormValidation();
+    
+    // Initialize pricing actions visibility
+    updatePricingActionsVisibility();
 });
 
 /**
@@ -46,6 +59,17 @@ function initializeModuleToggles() {
 }
 
 /**
+ * Initialize pricing-related event listeners
+ */
+function initializePricingListeners() {
+    // Price difference calculator
+    const customPriceInput = document.getElementById('pricing_custom_price');
+    if (customPriceInput) {
+        customPriceInput.addEventListener('input', calculatePriceDifference);
+    }
+}
+
+/**
  * Initialize form validation and change tracking
  */
 function initializeFormValidation() {
@@ -55,11 +79,16 @@ function initializeFormValidation() {
             // Mark as pending change when form fields change
             markPendingChanges();
         });
+        
+        companyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveCompanyDetails();
+        });
     }
 }
 
 /**
- * Toggle a specific module on/off
+ * Toggle a specific module on/off with pricing consideration
  * @param {string} moduleName - The name of the module to toggle
  * @param {boolean} enabled - Whether the module should be enabled
  */
@@ -76,13 +105,73 @@ function toggleModule(moduleName, enabled) {
             card.classList.remove('border-success');
             card.classList.add('border-secondary');
         }
+        
+        // Update pricing actions visibility
+        const pricingActions = card.querySelector('.pricing-actions');
+        if (pricingActions) {
+            pricingActions.style.display = enabled ? 'block' : 'none';
+        }
     }
     
     // Store change for batch update
     pendingChanges[moduleName] = enabled;
     
+    // Update monthly cost calculation
+    updateMonthlyCostCalculation();
+    
     // Show save button as active
     markPendingChanges();
+}
+
+/**
+ * Update pricing actions visibility based on module state
+ */
+function updatePricingActionsVisibility() {
+    document.querySelectorAll('.module-card').forEach(card => {
+        const toggle = card.querySelector('.module-toggle');
+        const pricingActions = card.querySelector('.pricing-actions');
+        
+        if (toggle && pricingActions) {
+            pricingActions.style.display = toggle.checked ? 'block' : 'none';
+        }
+    });
+}
+
+/**
+ * Calculate monthly cost based on current module states and custom pricing
+ */
+function updateMonthlyCostCalculation() {
+    let totalCost = 0;
+    
+    document.querySelectorAll('.module-toggle:checked').forEach(toggle => {
+        const card = toggle.closest('.module-card');
+        
+        // Look for custom pricing first
+        const customPricing = card.querySelector('.custom-pricing');
+        if (customPricing) {
+            const priceMatch = customPricing.textContent.match(/R\s*([\d.,]+)/);
+            if (priceMatch) {
+                totalCost += parseFloat(priceMatch[1].replace(',', ''));
+            }
+        } else {
+            // Use default pricing
+            const defaultPricing = card.querySelector('.default-pricing, .text-success.fw-bold');
+            if (defaultPricing && defaultPricing.textContent.includes('R')) {
+                const priceMatch = defaultPricing.textContent.match(/R\s*([\d.,]+)/);
+                if (priceMatch) {
+                    totalCost += parseFloat(priceMatch[1].replace(',', ''));
+                }
+            }
+        }
+    });
+    
+    // Update monthly cost display
+    const monthlyCostElement = document.getElementById('monthly-cost');
+    if (monthlyCostElement) {
+        monthlyCostElement.textContent = `R${totalCost.toFixed(2)}`;
+    }
+    
+    return totalCost;
 }
 
 /**
@@ -144,7 +233,13 @@ async function saveAllChanges() {
             // Update monthly cost if provided
             if (result.monthly_cost !== undefined) {
                 updateMonthlyCost(result.monthly_cost);
+            } else {
+                // Recalculate based on current state
+                updateMonthlyCostCalculation();
             }
+            
+            // Update pricing actions visibility
+            updatePricingActionsVisibility();
         } else {
             showToast('Error', result.message || 'Error saving changes', 'error');
         }
@@ -201,11 +296,11 @@ async function saveModuleChanges() {
     const response = await fetch(`/admin/companies/${companyId}/modules/batch-update`, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',  // ← This is the key fix!
+            'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
         },
-        body: JSON.stringify(requestData)  // ← Send JSON, not FormData
+        body: JSON.stringify(requestData)
     });
     
     console.log('Response status:', response.status);
@@ -227,6 +322,46 @@ async function saveModuleChanges() {
     console.log('Response data:', result);
     
     return result;
+}
+
+/**
+ * Save company details
+ */
+async function saveCompanyDetails() {
+    const form = document.getElementById('companyForm');
+    if (!form) return;
+    
+    const formData = new FormData(form);
+    
+    const data = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        phone: formData.get('phone') || null,
+        address: formData.get('address') || null,
+        is_active: formData.has('is_active')
+    };
+    
+    try {
+        const response = await fetch(`/admin/companies/${companyId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Success', 'Company details updated successfully!', 'success');
+            return true;
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        showToast('Error', 'Error updating company details: ' + error.message, 'error');
+        return false;
+    }
 }
 
 /**
@@ -262,7 +397,7 @@ function updateMonthlyCost(cost) {
  * Show toast notification
  * @param {string} title - Toast title
  * @param {string} message - Toast message
- * @param {string} type - Toast type (success, error, info)
+ * @param {string} type - Toast type (success, error, info, warning)
  */
 function showToast(title, message, type) {
     const toast = document.getElementById('notificationToast');
@@ -279,17 +414,27 @@ function showToast(title, message, type) {
     toastTitle.textContent = title;
     toastMessage.textContent = message;
     
-    // Set icon based on type
+    // Remove existing classes
+    toast.classList.remove('border-success', 'border-danger', 'border-warning', 'border-info');
+    
+    // Set icon and styling based on type
     switch (type) {
         case 'success':
             toastIcon.className = 'fas fa-check-circle text-success me-2';
+            toast.classList.add('border-success');
             break;
         case 'error':
             toastIcon.className = 'fas fa-exclamation-circle text-danger me-2';
+            toast.classList.add('border-danger');
+            break;
+        case 'warning':
+            toastIcon.className = 'fas fa-exclamation-triangle text-warning me-2';
+            toast.classList.add('border-warning');
             break;
         case 'info':
         default:
             toastIcon.className = 'fas fa-info-circle text-info me-2';
+            toast.classList.add('border-info');
             break;
     }
     
@@ -301,4 +446,214 @@ function showToast(title, message, type) {
         console.warn('Bootstrap not loaded, using alert fallback');
         alert(`${title}: ${message}`);
     }
+}
+
+// ============================================================================
+// PRICING FUNCTIONS
+// ============================================================================
+
+/**
+ * Show pricing modal for a specific module
+ * @param {string} moduleId - Module ID
+ * @param {string} moduleName - Module display name
+ * @param {string} defaultPrice - Default module price
+ * @param {string} currentPrice - Current effective price
+ */
+function showPricingModal(moduleId, moduleName, defaultPrice, currentPrice) {
+    if (!pricingModal) {
+        console.error('Pricing modal not initialized');
+        return;
+    }
+    
+    document.getElementById('pricing_module_id').value = moduleId;
+    document.getElementById('pricing_module_name').value = moduleName;
+    document.getElementById('pricing_default_price').value = parseFloat(defaultPrice).toFixed(2);
+    document.getElementById('pricing_custom_price').value = parseFloat(currentPrice).toFixed(2);
+    document.getElementById('pricing_notes').value = '';
+    
+    calculatePriceDifference();
+    pricingModal.show();
+}
+
+/**
+ * Calculate and display price difference
+ */
+function calculatePriceDifference() {
+    const defaultPrice = parseFloat(document.getElementById('pricing_default_price').value) || 0;
+    const customPrice = parseFloat(document.getElementById('pricing_custom_price').value) || 0;
+    const difference = customPrice - defaultPrice;
+    const diffElement = document.getElementById('price_difference');
+    
+    if (!diffElement) return;
+    
+    if (difference > 0) {
+        diffElement.innerHTML = `<span class="text-danger"><i class="fas fa-arrow-up"></i> R${difference.toFixed(2)} more than default</span>`;
+    } else if (difference < 0) {
+        diffElement.innerHTML = `<span class="text-success"><i class="fas fa-arrow-down"></i> R${Math.abs(difference).toFixed(2)} less than default</span>`;
+    } else {
+        diffElement.innerHTML = `<span class="text-muted">Same as default price</span>`;
+    }
+}
+
+/**
+ * Set custom pricing for a module
+ */
+function setCustomPricing() {
+    const moduleId = document.getElementById('pricing_module_id').value;
+    const customPrice = document.getElementById('pricing_custom_price').value;
+    const notes = document.getElementById('pricing_notes').value;
+    
+    if (!customPrice || customPrice < 0) {
+        showToast('Error', 'Please enter a valid custom price', 'error');
+        return;
+    }
+    
+    // Show loading state
+    const setBtn = document.querySelector('button[onclick="setCustomPricing()"]');
+    const originalText = setBtn.innerHTML;
+    setBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Setting...';
+    setBtn.disabled = true;
+    
+    fetch(`/admin/billing/pricing/${companyId}/set`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            module_id: moduleId,
+            custom_price: parseFloat(customPrice),
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Success', 'Custom pricing set successfully!', 'success');
+            pricingModal.hide();
+            
+            // Update monthly cost display
+            if (data.new_total !== undefined) {
+                updateMonthlyCost(data.new_total);
+            } else {
+                updateMonthlyCostCalculation();
+            }
+            
+            // Refresh the page to show updated pricing
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error', data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Error', 'Error setting custom pricing: ' + error.message, 'error');
+    })
+    .finally(() => {
+        setBtn.innerHTML = originalText;
+        setBtn.disabled = false;
+    });
+}
+
+/**
+ * Remove custom pricing for a module
+ * @param {string} moduleId - Module ID
+ * @param {string} moduleName - Module display name
+ */
+function removeModuleCustomPricing(moduleId, moduleName) {
+    if (!confirm(`Are you sure you want to remove custom pricing for "${moduleName}"?`)) {
+        return;
+    }
+    
+    fetch(`/admin/billing/pricing/${companyId}/remove`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            module_id: moduleId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Success', 'Custom pricing removed successfully!', 'success');
+            
+            // Update monthly cost display
+            if (data.new_total !== undefined) {
+                updateMonthlyCost(data.new_total);
+            } else {
+                updateMonthlyCostCalculation();
+            }
+            
+            // Refresh the page to show updated pricing
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error', data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Error', 'Error removing custom pricing: ' + error.message, 'error');
+    });
+}
+
+// ============================================================================
+// KEYBOARD SHORTCUTS AND AUTO-SAVE
+// ============================================================================
+
+// Add keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl+S to save
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        saveAllChanges();
+    }
+    
+    // Escape to discard changes
+    if (e.key === 'Escape' && Object.keys(pendingChanges).length > 0) {
+        if (confirm('Are you sure you want to discard all unsaved changes?')) {
+            location.reload();
+        }
+    }
+});
+
+// Auto-save functionality (optional)
+let autoSaveTimeout;
+function scheduleAutoSave() {
+    clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(() => {
+        if (Object.keys(pendingChanges).length > 0) {
+            console.log('Auto-saving changes...');
+            saveAllChanges();
+        }
+    }, 30000); // Auto-save after 30 seconds of inactivity
+}
+
+// Schedule auto-save on any change
+document.addEventListener('change', scheduleAutoSave);
+document.addEventListener('input', scheduleAutoSave);
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Format currency for display
+ * @param {number} amount - Amount to format
+ * @returns {string} Formatted currency string
+ */
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-ZA', {
+        style: 'currency',
+        currency: 'ZAR',
+        minimumFractionDigits: 2
+    }).format(amount);
+}
+
+/**
+ * Validate price input
+ * @param {string} price - Price string to validate
+ * @returns {boolean} Whether the price is valid
+ */
+function isValidPrice(price) {
+    const num = parseFloat(price);
+    return !isNaN(num) && num >= 0;
 }

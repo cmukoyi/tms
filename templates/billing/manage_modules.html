@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Modules{% endblock %}
+
+{% block extra_css %}
+<style>
+.module-card {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+.module-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+.module-card.core {
+    border-left-color: #007bff;
+}
+.module-card.feature {
+    border-left-color: #17a2b8;
+}
+.module-card.premium {
+    border-left-color: #ffc107;
+}
+.add-module-card {
+    border: 2px dashed #dee2e6;
+    background-color: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.add-module-card:hover {
+    border-color: #007bff;
+    background-color: #e3f2fd;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-puzzle-piece text-primary"></i> Module Management
+                    </h1>
+                    <p class="text-muted">Create and manage system modules and features</p>
+                </div>
+                <div>
+                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModuleModal">
+                        <i class="fas fa-plus"></i> Add New Module
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="initializeDefaultModules()">
+                        <i class="fas fa-sync"></i> Initialize Defaults
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Module Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="fas fa-puzzle-piece fa-2x text-primary mb-2"></i>
+                    <h4>{{ modules|length if modules else 0 }}</h4>
+                    <small class="text-muted">Total Modules</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="fas fa-star fa-2x text-warning mb-2"></i>
+                    <h4>{{ modules|selectattr('is_core')|list|length if modules else 0 }}</h4>
+                    <small class="text-muted">Core Modules</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="fas fa-cog fa-2x text-info mb-2"></i>
+                    <h4>{{ modules|selectattr('category', 'equalto', 'feature')|list|length if modules else 0 }}</h4>
+                    <small class="text-muted">Feature Modules</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="fas fa-crown fa-2x text-success mb-2"></i>
+                    <h4>{{ modules|selectattr('category', 'equalto', 'premium')|list|length if modules else 0 }}</h4>
+                    <small class="text-muted">Premium Modules</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modules Grid -->
+    <div class="row">
+        <!-- Add New Module Card -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 add-module-card" data-bs-toggle="modal" data-bs-target="#addModuleModal">
+                <div class="card-body d-flex flex-column justify-content-center align-items-center text-center">
+                    <i class="fas fa-plus fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">Add New Module</h5>
+                    <p class="text-muted small">Create a new feature or service module</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Existing Modules -->
+        {% for module in modules %}
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 module-card {{ module.category }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">{{ module.display_name }}</h6>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="editModule({{ module.id }})">
+                                    <i class="fas fa-edit"></i> Edit
+                                </a></li>
+                                {% if not module.is_core %}
+                                <li><a class="dropdown-item text-danger" href="#" onclick="deleteModule({{ module.id }}, '{{ module.display_name }}')">
+                                    <i class="fas fa-trash"></i> Delete
+                                </a></li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('view_module_usage', module_id=module.id) }}">
+                                    <i class="fas fa-chart-bar"></i> Usage Stats
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <p class="card-text text-muted small mb-3">{{ module.description }}</p>
+                    
+                    <!-- Module Badges -->
+                    <div class="mb-3">
+                        <span class="badge bg-{{ 
+                            'primary' if module.category == 'core' else
+                            'info' if module.category == 'feature' else
+                            'warning' if module.category == 'premium' else
+                            'secondary' }} me-1">
+                            {{ module.category|title }}
+                        </span>
+                        {% if module.is_core %}
+                        <span class="badge bg-danger">Core</span>
+                        {% endif %}
+                        {% if not module.is_active %}
+                        <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Pricing -->
+                    <div class="mb-3">
+                        {% if module.monthly_price > 0 %}
+                        <h5 class="text-success mb-0">R {{ "%.2f"|format(module.monthly_price) }}<small class="text-muted">/month</small></h5>
+                        {% else %}
+                        <h5 class="text-muted mb-0">Free</h5>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Usage Statistics -->
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <small class="text-muted d-block">Companies Using</small>
+                            <strong>{{ module.usage_count if module.usage_count else 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Revenue</small>
+                            <strong>R {{ "%.0f"|format(module.monthly_revenue if module.monthly_revenue else 0) }}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-footer bg-transparent">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            Sort: {{ module.sort_order }}
+                        </small>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editModule({{ module.id }})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-{{ 'success' if module.is_active else 'warning' }}" 
+                                    onclick="toggleModuleStatus({{ module.id }}, {{ module.is_active|lower }})">
+                                <i class="fas fa-{{ 'pause' if module.is_active else 'play' }}"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Add/Edit Module Modal -->
+<div class="modal fade" id="addModuleModal" tabindex="-1" aria-labelledby="addModuleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="moduleForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addModuleModalLabel">
+                        <i class="fas fa-plus"></i> Add New Module
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="module_id" name="module_id">
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="module_name" class="form-label">Module Name *</label>
+                                <input type="text" class="form-control" id="module_name" name="module_name" required>
+                                <div class="form-text">Unique identifier (e.g., advanced_analytics)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="display_name" class="form-label">Display Name *</label>
+                                <input type="text" class="form-control" id="display_name" name="display_name" required>
+                                <div class="form-text">User-friendly name</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="category" class="form-label">Category *</label>
+                                <select class="form-select" id="category" name="category" required>
+                                    <option value="">Select Category</option>
+                                    <option value="core">Core</option>
+                                    <option value="feature">Feature</option>
+                                    <option value="premium">Premium</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="monthly_price" class="form-label">Monthly Price (R)</label>
+                                <input type="number" class="form-control" id="monthly_price" name="monthly_price" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="sort_order" class="form-label">Sort Order</label>
+                                <input type="number" class="form-control" id="sort_order" name="sort_order" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_core" name="is_core">
+                                <label class="form-check-label" for="is_core">
+                                    Core Module (cannot be disabled)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                                <label class="form-check-label" for="is_active">
+                                    Active
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save"></i> Save Module
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="notificationToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i id="toastIcon" class="fas fa-check-circle text-success me-2"></i>
+            <strong class="me-auto" id="toastTitle">Success</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage">
+            Module saved successfully!
+        </div>
+    </div>
+</div>
+
+<script>
+// Variables
+let addModuleModal;
+let notificationToast;
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    addModuleModal = new bootstrap.Modal(document.getElementById('addModuleModal'));
+    notificationToast = new bootstrap.Toast(document.getElementById('notificationToast'));
+    
+    // Handle form submission
+    document.getElementById('moduleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        
+        // Convert checkbox values to boolean
+        data.is_core = formData.has('is_core');
+        data.is_active = formData.has('is_active');
+        
+        const moduleId = data.module_id;
+        const url = moduleId ? `/admin/billing/modules/${moduleId}/edit` : '/admin/billing/modules/add';
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                addModuleModal.hide();
+                showToast('Success', data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error', data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error', 'Failed to save module', 'error');
+        });
+    });
+    
+    // Reset form when modal is hidden
+    document.getElementById('addModuleModal').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('moduleForm').reset();
+        document.getElementById('module_id').value = '';
+        document.getElementById('addModuleModalLabel').innerHTML = '<i class="fas fa-plus"></i> Add New Module';
+    });
+});
+
+// Edit module function
+function editModule(moduleId) {
+    // You would fetch module data here and populate the form
+    fetch(`/admin/billing/modules/${moduleId}/data`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const module = data.module;
+                
+                // Populate form
+                document.getElementById('module_id').value = module.id;
+                document.getElementById('module_name').value = module.module_name;
+                document.getElementById('display_name').value = module.display_name;
+                document.getElementById('description').value = module.description || '';
+                document.getElementById('category').value = module.category;
+                document.getElementById('monthly_price').value = module.monthly_price;
+                document.getElementById('sort_order').value = module.sort_order;
+                document.getElementById('is_core').checked = module.is_core;
+                document.getElementById('is_active').checked = module.is_active;
+                
+                // Update modal title
+                document.getElementById('addModuleModalLabel').innerHTML = '<i class="fas fa-edit"></i> Edit Module';
+                
+                // Show modal
+                addModuleModal.show();
+            } else {
+                showToast('Error', 'Failed to load module data', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error', 'Failed to load module data', 'error');
+        });
+}
+
+// Delete module function
+function deleteModule(moduleId, moduleName) {
+    if (confirm(`Are you sure you want to delete "${moduleName}"? This action cannot be undone.`)) {
+        fetch(`/admin/billing/modules/${moduleId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Success', data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error', data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error', 'Failed to delete module', 'error');
+        });
+    }
+}
+
+// Toggle module status
+function toggleModuleStatus(moduleId, currentStatus) {
+    fetch(`/admin/billing/modules/${moduleId}/toggle-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Success', data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error', data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Error', 'Failed to update module status', 'error');
+    });
+}
+
+// Initialize default modules
+function initializeDefaultModules() {
+    if (confirm('This will create default system modules. Continue?')) {
+        fetch('/admin/billing/modules/initialize-defaults', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Success', data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast('Error', data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error', 'Failed to initialize modules', 'error');
+        });
+    }
+}
+
+// Show toast notification
+function showToast(title, message, type) {
+    const toastIcon = document.getElementById('toastIcon');
+    const toastTitle = document.getElementById('toastTitle');
+    const toastMessage = document.getElementById('toastMessage');
+    
+    // Update icon and title based on type
+    if (type === 'success') {
+        toastIcon.className = 'fas fa-check-circle text-success me-2';
+        toastTitle.textContent = 'Success';
+    } else {
+        toastIcon.className = 'fas fa-exclamation-circle text-danger me-2';
+        toastTitle.textContent = 'Error';
+    }
+    
+    toastMessage.textContent = message;
+    notificationToast.show();
+}
+</script>
+{% endblock %}

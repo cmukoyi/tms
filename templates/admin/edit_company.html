@@ -25,6 +25,35 @@
 .module-toggle {
     transform: scale(1.2);
 }
+
+/* New pricing styles */
+.pricing-badge {
+    font-size: 0.875rem;
+}
+
+.custom-pricing {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+    color: white;
+}
+
+.default-pricing {
+    background-color: #6c757d;
+    color: white;
+}
+
+.savings-badge {
+    background-color: #28a745;
+    color: white;
+}
+
+.markup-badge {
+    background-color: #dc3545;
+    color: white;
+}
+
+.pricing-actions {
+    margin-top: 8px;
+}
 </style>
 {% endblock %}
 
@@ -38,6 +67,9 @@
                 <div>
                     <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i>Back to Companies
+                    </a>
+                    <a href="{{ url_for('edit_company_pricing', company_id=company.id) }}" class="btn btn-outline-warning">
+                        <i class="fas fa-dollar-sign me-1"></i>Custom Pricing
                     </a>
                     <button type="button" class="btn btn-success" onclick="saveAllChanges()">
                         <i class="fas fa-save me-1"></i>Save All Changes
@@ -142,7 +174,7 @@
                                         {{ module_data.definition.description }}
                                     </p>
                                     
-                                    <div class="d-flex justify-content-between align-items-center">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
                                         <span class="badge 
                                               {% if module_data.definition.category == 'core' %}bg-primary
                                               {% elif module_data.definition.category == 'feature' %}bg-info
@@ -150,15 +182,57 @@
                                               {% endif %}">
                                             {{ module_data.definition.category|title }}
                                         </span>
-                                        
-                                        {% if module_data.definition.monthly_price > 0 %}
-                                        <span class="text-success fw-bold">
-                                            R{{ "%.2f"|format(module_data.definition.monthly_price) }}/mo
-                                        </span>
+                                    </div>
+                                    
+                                    <!-- Enhanced Pricing Display -->
+                                    <div class="mb-2">
+                                        {% if module_data.company_module and module_data.company_module.has_custom_pricing() %}
+                                            <!-- Custom Pricing -->
+                                            <span class="badge custom-pricing pricing-badge d-block mb-1">
+                                                <i class="fas fa-star"></i> Custom: R {{ "%.2f"|format(module_data.company_module.get_effective_price()) }}/mo
+                                            </span>
+                                            <small class="text-muted d-block">
+                                                Default: R {{ "%.2f"|format(module_data.definition.monthly_price or 0) }}/mo
+                                            </small>
+                                            {% set price_diff = module_data.company_module.get_effective_price() - (module_data.definition.monthly_price or 0) %}
+                                            {% if price_diff < 0 %}
+                                                <span class="badge savings-badge">
+                                                    <i class="fas fa-arrow-down"></i> Saves R {{ "%.2f"|format(-price_diff) }}
+                                                </span>
+                                            {% elif price_diff > 0 %}
+                                                <span class="badge markup-badge">
+                                                    <i class="fas fa-arrow-up"></i> +R {{ "%.2f"|format(price_diff) }}
+                                                </span>
+                                            {% endif %}
                                         {% else %}
-                                        <span class="text-muted">Free</span>
+                                            <!-- Default Pricing -->
+                                            {% if module_data.definition.monthly_price > 0 %}
+                                            <span class="badge default-pricing pricing-badge">
+                                                R {{ "%.2f"|format(module_data.definition.monthly_price) }}/mo
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-success pricing-badge">Free</span>
+                                            {% endif %}
                                         {% endif %}
                                     </div>
+                                    
+                                    <!-- Pricing Actions (only for enabled modules) -->
+                                    {% if module_data.is_enabled %}
+                                    <div class="pricing-actions">
+                                        <button type="button" 
+                                                class="btn btn-outline-warning btn-sm" 
+                                                onclick="showPricingModal('{{ module_data.definition.id }}', '{{ module_data.definition.display_name }}', '{{ module_data.definition.monthly_price or 0 }}', '{{ module_data.company_module.get_effective_price() if module_data.company_module else module_data.definition.monthly_price or 0 }}')">
+                                            <i class="fas fa-dollar-sign"></i> Set Price
+                                        </button>
+                                        {% if module_data.company_module and module_data.company_module.has_custom_pricing() %}
+                                        <button type="button" 
+                                                class="btn btn-outline-danger btn-sm ms-1" 
+                                                onclick="removeModuleCustomPricing('{{ module_data.definition.id }}', '{{ module_data.definition.display_name }}')">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
                                     
                                     {% if module_data.is_enabled and module_data.company_module %}
                                     <div class="mt-2">
@@ -198,6 +272,58 @@
                 </div>
             </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Custom Pricing Modal -->
+<div class="modal fade" id="pricingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-dollar-sign"></i> Set Custom Pricing
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="pricingForm">
+                    <input type="hidden" id="pricing_module_id" name="module_id">
+                    <div class="mb-3">
+                        <label class="form-label">Module</label>
+                        <input type="text" class="form-control" id="pricing_module_name" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Default Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R</span>
+                            <input type="text" class="form-control" id="pricing_default_price" readonly>
+                            <span class="input-group-text">/month</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Custom Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R</span>
+                            <input type="number" class="form-control" id="pricing_custom_price" name="custom_price" step="0.01" min="0" required>
+                            <span class="input-group-text">/month</span>
+                        </div>
+                        <div class="form-text">
+                            <span id="price_difference"></span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reason/Notes</label>
+                        <textarea class="form-control" id="pricing_notes" name="notes" rows="3" placeholder="Reason for custom pricing (e.g., contract negotiation, volume discount, etc.)"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="setCustomPricing()">
+                    <i class="fas fa-save"></i> Set Custom Price
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -266,4 +392,113 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/edit_company.js') }}"></script>
+<script>
+// Pricing modal functions
+let pricingModal;
+
+document.addEventListener('DOMContentLoaded', function() {
+    pricingModal = new bootstrap.Modal(document.getElementById('pricingModal'));
+    
+    // Price difference calculator
+    document.getElementById('pricing_custom_price').addEventListener('input', calculatePriceDifference);
+});
+
+function showPricingModal(moduleId, moduleName, defaultPrice, currentPrice) {
+    document.getElementById('pricing_module_id').value = moduleId;
+    document.getElementById('pricing_module_name').value = moduleName;
+    document.getElementById('pricing_default_price').value = parseFloat(defaultPrice).toFixed(2);
+    document.getElementById('pricing_custom_price').value = parseFloat(currentPrice).toFixed(2);
+    document.getElementById('pricing_notes').value = '';
+    
+    calculatePriceDifference();
+    pricingModal.show();
+}
+
+function calculatePriceDifference() {
+    const defaultPrice = parseFloat(document.getElementById('pricing_default_price').value) || 0;
+    const customPrice = parseFloat(document.getElementById('pricing_custom_price').value) || 0;
+    const difference = customPrice - defaultPrice;
+    const diffElement = document.getElementById('price_difference');
+    
+    if (difference > 0) {
+        diffElement.innerHTML = `<span class="text-danger"><i class="fas fa-arrow-up"></i> R${difference.toFixed(2)} more than default</span>`;
+    } else if (difference < 0) {
+        diffElement.innerHTML = `<span class="text-success"><i class="fas fa-arrow-down"></i> R${Math.abs(difference).toFixed(2)} less than default</span>`;
+    } else {
+        diffElement.innerHTML = `<span class="text-muted">Same as default price</span>`;
+    }
+}
+
+function setCustomPricing() {
+    const moduleId = document.getElementById('pricing_module_id').value;
+    const customPrice = document.getElementById('pricing_custom_price').value;
+    const notes = document.getElementById('pricing_notes').value;
+    
+    if (!customPrice || customPrice < 0) {
+        alert('Please enter a valid custom price');
+        return;
+    }
+    
+    fetch(`/admin/billing/pricing/{{ company.id }}/set`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            module_id: moduleId,
+            custom_price: parseFloat(customPrice),
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Success', 'Custom pricing set successfully!', 'success');
+            pricingModal.hide();
+            // Update monthly cost display
+            if (data.new_total !== undefined) {
+                document.getElementById('monthly-cost').textContent = `R${data.new_total.toFixed(2)}`;
+            }
+            // Refresh the page to show updated pricing
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error', data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Error', 'Error setting custom pricing: ' + error.message, 'error');
+    });
+}
+
+function removeModuleCustomPricing(moduleId, moduleName) {
+    if (confirm(`Are you sure you want to remove custom pricing for "${moduleName}"?`)) {
+        fetch(`/admin/billing/pricing/{{ company.id }}/remove`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                module_id: moduleId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Success', 'Custom pricing removed successfully!', 'success');
+                // Update monthly cost display
+                if (data.new_total !== undefined) {
+                    document.getElementById('monthly-cost').textContent = `R${data.new_total.toFixed(2)}`;
+                }
+                // Refresh the page to show updated pricing
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error', data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Error', 'Error removing custom pricing: ' + error.message, 'error');
+        });
+    }
+}
+</script>
 {% endblock %}

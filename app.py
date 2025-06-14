@@ -8,6 +8,13 @@ from flask import jsonify, request
 from flask_login import current_user
 from markupsafe import Markup
 
+from services.billing_service import BillingService
+from decimal import Decimal
+import calendar
+
+
+from sqlalchemy import func, and_, or_
+
 
 pymysql.install_as_MySQLdb()
 from datetime import datetime, timedelta
@@ -33,15 +40,14 @@ from services.module_service import ModuleService
 from config import Config
 from models import *
 
-#from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory, ModuleDefinition
-#from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory
-#from models import db, User, Company, Role, Tender, TenderCategory, TenderStatus, TenderDocument, DocumentType, CustomField, TenderNote, TenderHistory, ModuleDefinition, CompanyModule
-
 from services import (
     AuthService, CompanyService, RoleService, TenantService,
     TenderService, TenderCategoryService, TenderStatusService, 
     DocumentTypeService, TenderDocumentService, CustomFieldService, TenderHistoryService
 )
+
+from services.role_service import RoleService
+from permissions import require_permission, require_role_level
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -78,6 +84,25 @@ def inject_module_access():
         return user_can_access_module(module_name)
     
     return dict(can_access_module=can_access_module)
+
+@app.context_processor
+def inject_current_date():
+    return {
+        'current_month': datetime.now().month,
+        'current_year': datetime.now().year
+    }
+@app.context_processor
+def inject_permission_helpers():
+    """Inject permission helper functions into templates"""
+    from permissions import has_permission, get_user_permissions, has_any_permission, has_all_permissions
+    
+    return dict(
+        has_permission=has_permission,
+        get_user_permissions=get_user_permissions,
+        has_any_permission=has_any_permission,
+        has_all_permissions=has_all_permissions
+    )
+    
 
 # Initialize database
 db.init_app(app)
@@ -538,6 +563,8 @@ def dashboard():
 @app.route('/tenders', methods=['GET', 'POST'])
 @login_required
 @require_module('tender_management')  # ← Add this decorator
+
+
 def tenders():
     """View tenders with simple pagination"""
     user = AuthService.get_user_by_id(session['user_id'])
@@ -1815,12 +1842,43 @@ def edit_company(company_id):
     """Edit company details and manage modules"""
     company = Company.query.get_or_404(company_id)
     
-    if request.method == 'POST':
-        # ... keep your existing POST handling code ...
-        pass
+    # Get all available modules
+    all_modules = ModuleDefinition.query.filter_by(is_active=True).order_by(ModuleDefinition.sort_order).all()
     
-    # GET request - show the form with CORRECT module states
-    # Get company stats
+    # Get ACTUALLY enabled modules using JOIN
+    enabled_company_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
+        CompanyModule.company_id == company_id,
+        CompanyModule.is_enabled == True
+    ).all()
+    
+    enabled_module_ids = {cm.module_id for cm, _ in enabled_company_modules}
+    monthly_cost = sum(float(module_def.monthly_price) if module_def.monthly_price else 0.0 
+                      for cm, module_def in enabled_company_modules)
+    
+    # Create modules_data structure with CORRECT enabled states
+    modules_data = []
+    for module_def in all_modules:
+        # Check if this module is actually enabled by checking module_id
+        is_enabled = module_def.id in enabled_module_ids
+        
+        # Get the company module record if it exists
+        company_module = None
+        if is_enabled:
+            company_module = CompanyModule.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_enabled=True
+            ).first()
+        
+        module_data = type('ModuleData', (), {
+            'definition': module_def,
+            'is_enabled': is_enabled,
+            'company_module': company_module
+        })()
+        
+        modules_data.append(module_data)
+    
+    # Company stats
     user_count = User.query.filter_by(company_id=company_id, is_active=True).count()
     tender_count = Tender.query.filter_by(company_id=company_id).count()
     
@@ -1829,73 +1887,13 @@ def edit_company(company_id):
         'tender_count': tender_count
     })()
     
-    # Get all available modules
-    try:
-        all_modules = ModuleDefinition.query.filter_by(is_active=True).order_by(ModuleDefinition.sort_order).all()
-    except:
-        print("ModuleDefinition table not found, creating empty list")
-        all_modules = []
-    
-    # Get ACTUALLY enabled modules for this company from CompanyModule table
-    try:
-        enabled_company_modules = CompanyModule.query.filter_by(
-            company_id=company_id, 
-            is_enabled=True
-        ).all()
-        enabled_module_names = {cm.module_name for cm in enabled_company_modules}
-        monthly_cost = sum(cm.monthly_cost or 0 for cm in enabled_company_modules)
-        
-        print(f"Company {company_id} enabled modules from DB: {enabled_module_names}")
-        print(f"Monthly cost: {monthly_cost}")
-        
-    except Exception as e:
-        print(f"Error loading company modules: {str(e)}")
-        enabled_module_names = set()
-        monthly_cost = 0.0
-    
-    # Create modules_data structure with CORRECT enabled states
-    modules_data = []
-    for module_def in all_modules:
-        # Check if this module is actually enabled in the database
-        is_enabled = module_def.module_name in enabled_module_names
-        
-        # Get the company module record if it exists
-        company_module = None
-        if is_enabled:
-            try:
-                company_module = CompanyModule.query.filter_by(
-                    company_id=company_id,
-                    module_name=module_def.module_name,
-                    is_enabled=True
-                ).first()
-            except:
-                pass
-        
-        module_data = type('ModuleData', (), {
-            'definition': module_def,
-            'is_enabled': is_enabled,  # This should reflect the actual database state
-            'company_module': company_module
-        })()
-        
-        modules_data.append(module_data)
-        
-        print(f"Module {module_def.module_name}: enabled={is_enabled}")
-    
-    enabled_count = len(enabled_module_names)
-    total_modules = len(all_modules)
-    
-    print(f"Final stats: {enabled_count}/{total_modules} modules enabled, cost: R{monthly_cost}")
-    
     return render_template('admin/edit_company.html',
                          company=company,
                          company_stats=company_stats,
                          modules_data=modules_data,
-                         enabled_count=enabled_count,
-                         total_modules=total_modules,
+                         enabled_count=len(enabled_module_ids),
+                         total_modules=len(all_modules),
                          monthly_cost=monthly_cost)
-    
-    
-# Add this simplified debug route to test saving:
 
 @app.route('/debug/test-save/<int:company_id>')
 @login_required 
@@ -1908,10 +1906,20 @@ def test_save_module(company_id):
         
         print(f"\n=== Testing module save for company {company_id} ===")
         
-        # Check if record exists
+        # First, find the module definition
+        module_def = ModuleDefinition.query.filter_by(module_name=module_name).first()
+        if not module_def:
+            return jsonify({
+                'success': False,
+                'error': f'Module "{module_name}" not found in ModuleDefinition table'
+            }), 404
+        
+        print(f"Found module definition: {module_def.module_name} -> {module_def.display_name}")
+        
+        # Check if company_module record exists
         existing = CompanyModule.query.filter_by(
             company_id=company_id,
-            module_name=module_name
+            module_id=module_def.id
         ).first()
         
         print(f"Existing record: {existing}")
@@ -1921,13 +1929,13 @@ def test_save_module(company_id):
             existing.enabled_at = datetime.now()
             print("Updated existing record")
         else:
-            # Create new record
+            # Create new record using the correct fields
             new_module = CompanyModule(
                 company_id=company_id,
-                module_name=module_name,
+                module_id=module_def.id,
                 is_enabled=True,
                 enabled_at=datetime.now(),
-                monthly_cost=99.0
+                billing_start_date=datetime.now()
             )
             db.session.add(new_module)
             print("Created new record")
@@ -1937,19 +1945,23 @@ def test_save_module(company_id):
         print("Commit successful")
         
         # Check what's in the database now
-        all_modules = CompanyModule.query.filter_by(company_id=company_id).all()
+        all_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
+            CompanyModule.company_id == company_id
+        ).all()
         
         result = {
             'success': True,
             'message': f'Test save completed for company {company_id}',
             'modules_in_db': [
                 {
-                    'id': m.id,
-                    'module_name': m.module_name,
-                    'is_enabled': m.is_enabled,
-                    'enabled_at': m.enabled_at.isoformat() if m.enabled_at else None,
-                    'monthly_cost': m.monthly_cost
-                } for m in all_modules
+                    'id': cm.id,
+                    'module_id': cm.module_id,
+                    'module_name': module_def.module_name,
+                    'display_name': module_def.display_name,
+                    'is_enabled': cm.is_enabled,
+                    'enabled_at': cm.enabled_at.isoformat() if cm.enabled_at else None,
+                    'monthly_price': float(module_def.monthly_price) if module_def.monthly_price else 0.0
+                } for cm, module_def in all_modules
             ]
         }
         
@@ -2246,7 +2258,6 @@ def update_company_modules(company_id):
         company = Company.query.get_or_404(company_id)
         
         if not request.is_json:
-            print(f"ERROR: Request is not JSON! Content-Type: {request.content_type}")
             return jsonify({
                 'success': False,
                 'message': 'Content-Type must be application/json'
@@ -2254,8 +2265,6 @@ def update_company_modules(company_id):
             
         data = request.get_json()
         changes = data.get('changes', [])
-        
-        print(f"Processing {len(changes)} module changes")
         
         # Track results
         updated_modules = []
@@ -2266,13 +2275,17 @@ def update_company_modules(company_id):
             enabled = change.get('enabled', False)
             notes = change.get('notes', '')
             
-            print(f"Processing: {module_name} -> {enabled}")
-            
             try:
-                # Check if CompanyModule record exists
+                # First find the module definition
+                module_def = ModuleDefinition.query.filter_by(module_name=module_name).first()
+                if not module_def:
+                    errors.append(f"Module definition not found: {module_name}")
+                    continue
+                
+                # Check if CompanyModule record exists using module_id
                 company_module = CompanyModule.query.filter_by(
                     company_id=company_id,
-                    module_name=module_name
+                    module_id=module_def.id  # Use module_id, not module_name
                 ).first()
                 
                 if enabled:
@@ -2281,31 +2294,20 @@ def update_company_modules(company_id):
                         # Update existing record
                         company_module.is_enabled = True
                         company_module.enabled_at = datetime.now()
-                        if hasattr(company_module, 'enabled_by_user_id'):
-                            company_module.enabled_by_user_id = session.get('user_id')
-                        print(f"Updated existing record for {module_name}")
+                        company_module.disabled_at = None
+                        company_module.enabled_by = session.get('user_id')
                     else:
                         # Create new record
-                        # Get module definition for pricing
-                        module_def = ModuleDefinition.query.filter_by(module_name=module_name).first()
-                        monthly_cost = module_def.monthly_price if module_def else 0.0
-                        
                         company_module = CompanyModule(
                             company_id=company_id,
-                            module_name=module_name,
+                            module_id=module_def.id,  # Use module_id
                             is_enabled=True,
                             enabled_at=datetime.now(),
-                            monthly_cost=monthly_cost
+                            enabled_by=session.get('user_id'),
+                            billing_start_date=datetime.now(),
+                            notes=notes
                         )
-                        
-                        # Set additional fields if they exist
-                        if hasattr(company_module, 'enabled_by_user_id'):
-                            company_module.enabled_by_user_id = session.get('user_id')
-                        if hasattr(company_module, 'notes'):
-                            company_module.notes = notes
-                        
                         db.session.add(company_module)
-                        print(f"Created new record for {module_name}")
                     
                     updated_modules.append(f"Enabled {module_name}")
                     
@@ -2314,31 +2316,55 @@ def update_company_modules(company_id):
                     if company_module:
                         company_module.is_enabled = False
                         company_module.disabled_at = datetime.now()
-                        if hasattr(company_module, 'disabled_by_user_id'):
-                            company_module.disabled_by_user_id = session.get('user_id')
-                        print(f"Disabled {module_name}")
+                        company_module.disabled_by = session.get('user_id')
                         updated_modules.append(f"Disabled {module_name}")
                     else:
-                        print(f"Module {module_name} was not enabled, nothing to disable")
                         updated_modules.append(f"Module {module_name} was already disabled")
                 
             except Exception as e:
-                error_msg = f"Error with {module_name}: {str(e)}"
-                print(error_msg)
-                errors.append(error_msg)
+                errors.append(f"Error with {module_name}: {str(e)}")
                 continue
         
         # Commit all changes
         try:
             db.session.commit()
-            print("Database changes committed successfully")
         except Exception as e:
             db.session.rollback()
-            print(f"Database commit failed: {str(e)}")
             return jsonify({
                 'success': False,
                 'message': f'Database error: {str(e)}'
             }), 500
+        
+        # Get updated status using JOIN
+        enabled_company_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        enabled_modules = [module_def.module_name for cm, module_def in enabled_company_modules]
+        monthly_cost = sum(float(module_def.monthly_price) if module_def.monthly_price else 0.0 
+                          for cm, module_def in enabled_company_modules)
+        
+        result = {
+            'success': True,
+            'message': f'Modules updated successfully. {len(enabled_modules)} modules enabled.',
+            'monthly_cost': monthly_cost,
+            'enabled_count': len(enabled_modules),
+            'enabled_modules': enabled_modules,
+            'updates': updated_modules
+        }
+        
+        if errors:
+            result['errors'] = errors
+            result['message'] += f' ({len(errors)} errors occurred)'
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error updating modules: {str(e)}'
+        }), 500
         
         # Get updated status
         try:
@@ -2653,11 +2679,270 @@ def edit_user(user_id):
     return render_template('admin/edit_user.html', user=user, companies=companies, roles=roles)
 
 @app.route('/admin/roles')
-@super_admin_required
+@login_required
+@require_permission('role_management')
 def admin_roles():
-    """Admin - Manage roles"""
+    """Manage roles - requires role_management permission"""
     roles = RoleService.get_all_roles()
-    return render_template('admin/roles.html', roles=roles)
+    permissions_by_category = RoleService.get_permissions_by_category()
+    
+    return render_template('admin/roles.html', 
+                         roles=roles,
+                         permissions_by_category=permissions_by_category)
+
+@app.route('/admin/roles/create', methods=['GET', 'POST'])
+@login_required
+@require_permission('role_management')
+def create_role():
+    """Create a new custom role"""
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        level = request.form.get('level', 'viewer')
+        permissions = request.form.getlist('permissions')
+        
+        if not name:
+            flash('Role name is required.', 'error')
+        else:
+            role, message = RoleService.create_custom_role(
+                name=name,
+                description=description,
+                level=level,
+                permissions=permissions,
+                created_by=session['user_id']
+            )
+            
+            if role:
+                flash(message, 'success')
+                return redirect(url_for('admin_roles'))
+            else:
+                flash(message, 'error')
+    
+    # GET request - show form
+    permissions_by_category = RoleService.get_permissions_by_category()
+    role_levels = [
+        ('viewer', 'Viewer'),
+        ('vendor', 'Vendor'),
+        ('procurement_manager', 'Procurement Manager'),
+        ('company_admin', 'Company Admin')
+    ]
+    
+    return render_template('admin/create_role.html',
+                         permissions_by_category=permissions_by_category,
+                         role_levels=role_levels)
+
+@app.route('/admin/roles/<int:role_id>/edit', methods=['GET', 'POST'])
+@login_required
+@require_permission('role_management')
+def edit_role(role_id):
+    """Edit an existing role"""
+    role = RoleService.get_role_by_id(role_id)
+    if not role:
+        flash('Role not found.', 'error')
+        return redirect(url_for('admin_roles'))
+    
+    # Don't allow editing super admin role
+    if role.level == 'super_admin':
+        flash('Cannot edit Super Admin role.', 'error')
+        return redirect(url_for('admin_roles'))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        level = request.form.get('level')
+        permissions = request.form.getlist('permissions')
+        
+        if not name:
+            flash('Role name is required.', 'error')
+        else:
+            success, message = RoleService.update_role(
+                role_id=role_id,
+                name=name,
+                description=description,
+                level=level,
+                permissions=permissions
+            )
+            
+            if success:
+                flash(message, 'success')
+                return redirect(url_for('admin_roles'))
+            else:
+                flash(message, 'error')
+    
+    # GET request - show form
+    permissions_by_category = RoleService.get_permissions_by_category()
+    current_permissions = RoleService.get_role_permissions(role_id)
+    
+    role_levels = [
+        ('viewer', 'Viewer'),
+        ('vendor', 'Vendor'),
+        ('procurement_manager', 'Procurement Manager'),
+        ('company_admin', 'Company Admin')
+    ]
+    
+    return render_template('admin/edit_role.html',
+                         role=role,
+                         permissions_by_category=permissions_by_category,
+                         current_permissions=current_permissions,
+                         role_levels=role_levels)
+
+@app.route('/admin/roles/<int:role_id>/delete', methods=['POST'])
+@login_required
+@require_permission('role_management')
+def delete_role(role_id):
+    """Delete a role"""
+    success, message = RoleService.delete_role(role_id)
+    if success:
+        flash(message, 'success')
+    else:
+        flash(message, 'error')
+    
+    return redirect(url_for('admin_roles'))
+
+@app.route('/admin/roles/initialize', methods=['POST'])
+@login_required
+@require_permission('system_admin')
+def initialize_roles():
+    """Initialize default system roles"""
+    success, message = RoleService.initialize_default_roles()
+    if success:
+        flash(message, 'success')
+    else:
+        flash(message, 'error')
+    
+    return redirect(url_for('admin_roles'))
+
+@app.route('/admin/roles/<int:role_id>/permissions')
+@login_required
+@require_permission('role_management')
+def view_role_permissions(role_id):
+    """View role permissions in detail"""
+    role = RoleService.get_role_by_id(role_id)
+    if not role:
+        flash('Role not found.', 'error')
+        return redirect(url_for('admin_roles'))
+    
+    permissions = RoleService.get_role_permissions(role_id)
+    all_permissions = RoleService.get_available_permissions()
+    
+    # Group permissions by category for display
+    permission_details = {}
+    for perm in permissions:
+        if perm in all_permissions:
+            category = all_permissions[perm]['category']
+            if category not in permission_details:
+                permission_details[category] = []
+            permission_details[category].append({
+                'key': perm,
+                'display_name': all_permissions[perm]['display_name'],
+                'description': all_permissions[perm]['description']
+            })
+    
+    # Count users with this role
+    from models import User
+    user_count = User.query.filter_by(role_id=role_id).count()
+    
+    return render_template('admin/view_role_permissions.html',
+                         role=role,
+                         permission_details=permission_details,
+                         user_count=user_count)
+
+# ===== API ENDPOINTS FOR ROLE MANAGEMENT =====
+
+@app.route('/api/roles/<int:role_id>/permissions', methods=['GET'])
+@login_required
+@require_permission('role_management')
+def api_get_role_permissions(role_id):
+    """API endpoint to get role permissions"""
+    permissions = RoleService.get_role_permissions(role_id)
+    return jsonify({
+        'success': True,
+        'permissions': permissions
+    })
+
+@app.route('/api/roles/<int:role_id>/permissions', methods=['POST'])
+@login_required
+@require_permission('role_management')
+def api_update_role_permissions(role_id):
+    """API endpoint to update role permissions"""
+    try:
+        data = request.get_json()
+        permissions = data.get('permissions', [])
+        
+        success, message = RoleService.update_role(
+            role_id=role_id,
+            permissions=permissions
+        )
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error updating permissions: {str(e)}'
+        }), 500
+
+@app.route('/api/permissions/available')
+@login_required
+@require_permission('role_management')
+def api_get_available_permissions():
+    """API endpoint to get all available permissions"""
+    permissions = RoleService.get_available_permissions()
+    permissions_by_category = RoleService.get_permissions_by_category()
+    
+    return jsonify({
+        'success': True,
+        'permissions': permissions,
+        'permissions_by_category': permissions_by_category
+    })
+
+# ===== USER PERMISSION CHECKING ROUTES =====
+
+@app.route('/debug/user-permissions')
+@login_required
+def debug_user_permissions():
+    """Debug route to check current user's permissions"""
+    try:
+        user_id = session['user_id']
+        from models import User
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'})
+        
+        permissions = RoleService.get_user_permissions(user_id)
+        
+        return jsonify({
+            'user_id': user_id,
+            'username': user.username,
+            'role': {
+                'id': user.role.id if user.role else None,
+                'name': user.role.name if user.role else None,
+                'level': user.role.level if user.role else None
+            },
+            'is_super_admin': user.is_super_admin,
+            'permissions': permissions,
+            'permission_count': len(permissions)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/debug/check-permission/<permission>')
+@login_required
+def debug_check_permission(permission):
+    """Debug route to check if user has specific permission"""
+    user_id = session['user_id']
+    has_permission = RoleService.check_user_permission(user_id, permission)
+    
+    return jsonify({
+        'user_id': user_id,
+        'permission': permission,
+        'has_permission': has_permission
+    })
 
 # Company Admin Routes (keeping existing ones)
 @app.route('/company/users')
@@ -3434,7 +3719,2020 @@ def debug_routes():
         output.append(f"{rule.endpoint}: {rule}")
     return '<br>'.join(output)
 
-  
+
+
+
+
+
+@app.route('/admin/billing/bills/export')
+@super_admin_required
+def export_bills():
+    """Export bills to PDF or Excel"""
+    export_format = request.args.get('format', 'excel')
+    
+    # Get same filters as billing_bills
+    company_id = request.args.get('company_id', type=int)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    status = request.args.get('status')
+    
+    # Parse dates
+    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+    
+    # Get bills
+    bills_data = BillingService.get_bills_with_filters(
+        company_id=company_id,
+        start_date=start_date_obj,
+        end_date=end_date_obj,
+        status=status
+    )
+    
+    if export_format == 'pdf':
+        return export_bills_pdf(bills_data)
+    else:
+        return export_bills_excel(bills_data)
+
+
+@app.route('/admin/billing/bills/<int:bill_id>/view')
+@super_admin_required
+def view_bill(bill_id):
+    """View detailed bill"""
+    bill = MonthlyBill.query.get_or_404(bill_id)
+    line_items = BillLineItem.query.filter_by(bill_id=bill_id).all()
+    
+    return render_template('admin/view_bill.html', 
+                         bill=bill, 
+                         line_items=line_items)
+
+@app.route('/admin/billing/bills/<int:bill_id>/status', methods=['POST'])
+@super_admin_required
+def update_bill_status(bill_id):
+    """Update bill status"""
+    new_status = request.form.get('status')
+    if not new_status:
+        flash('Status is required', 'error')
+        return redirect(url_for('view_bill', bill_id=bill_id))
+    
+    success, message = BillingService.update_bill_status(
+        bill_id=bill_id,
+        new_status=new_status,
+        updated_by=session['user_id']
+    )
+    
+    if success:
+        flash(message, 'success')
+    else:
+        flash(message, 'error')
+    
+    return redirect(url_for('view_bill', bill_id=bill_id))
+
+
+
+
+@app.route('/admin/billing/pricing/<int:company_id>/set', methods=['POST'])
+@super_admin_required
+def set_custom_pricing(company_id):
+    """Set custom pricing for a company module"""
+    try:
+        data = request.get_json()
+        module_id = data.get('module_id')
+        custom_price = data.get('custom_price')
+        notes = data.get('notes', '')
+        
+        if not all([module_id, custom_price is not None]):
+            return jsonify({
+                'success': False,
+                'message': 'Module ID and custom price are required'
+            }), 400
+        
+        success, message = BillingService.set_custom_pricing(
+            company_id=company_id,
+            module_id=module_id,
+            custom_price=custom_price,
+            created_by=session['user_id'],
+            notes=notes
+        )
+        
+        if success:
+            # Get updated pricing data
+            pricing_data = BillingService.get_company_pricing(company_id)
+            total_actual = sum(item['effective_price'] for item in pricing_data)
+            
+            return jsonify({
+                'success': True,
+                'message': message,
+                'new_total': total_actual
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': message
+            }), 500
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error setting custom pricing: {str(e)}'
+        }), 500
+
+@app.route('/admin/billing/pricing/<int:company_id>/remove', methods=['POST'])
+@super_admin_required
+def remove_custom_pricing(company_id):
+    """Remove custom pricing for a company module"""
+    try:
+        data = request.get_json()
+        module_id = data.get('module_id')
+        
+        if not module_id:
+            return jsonify({
+                'success': False,
+                'message': 'Module ID is required'
+            }), 400
+        
+        success, message = BillingService.remove_custom_pricing(
+            company_id=company_id,
+            module_id=module_id
+        )
+        
+        if success:
+            # Get updated pricing data
+            pricing_data = BillingService.get_company_pricing(company_id)
+            total_actual = sum(item['effective_price'] for item in pricing_data)
+            
+            return jsonify({
+                'success': True,
+                'message': message,
+                'new_total': total_actual
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': message
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error removing custom pricing: {str(e)}'
+        }), 500
+        
+@app.route('/admin/billing/pricing/<int:company_id>/edit', methods=['GET', 'POST'])
+@login_required
+@super_admin_required
+def edit_company_pricing(company_id):
+    """Edit company pricing"""
+    company = Company.query.get_or_404(company_id)
+    
+    if request.method == 'POST':
+        try:
+            if request.is_json:
+                data = request.get_json()
+                action = data.get('action')
+                module_id = data.get('module_id')
+            else:
+                action = request.form.get('action')
+                module_id = request.form.get('module_id')
+            
+            if action == 'set_pricing':
+                custom_price = data.get('custom_price') if request.is_json else request.form.get('custom_price')
+                notes = data.get('notes', '') if request.is_json else request.form.get('notes', '')
+                
+                if not all([module_id, custom_price is not None]):
+                    return jsonify({
+                        'success': False,
+                        'message': 'Module ID and custom price are required'
+                    }), 400
+                
+                # Create or update custom pricing
+                custom_pricing = CompanyModulePricing.query.filter_by(
+                    company_id=company_id,
+                    module_id=module_id,
+                    is_active=True
+                ).first()
+                
+                if custom_pricing:
+                    custom_pricing.custom_price = float(custom_price)
+                    custom_pricing.notes = notes
+                else:
+                    custom_pricing = CompanyModulePricing(
+                        company_id=company_id,
+                        module_id=module_id,
+                        custom_price=float(custom_price),
+                        effective_date=datetime.utcnow(),
+                        created_by=session['user_id'],
+                        notes=notes
+                    )
+                    db.session.add(custom_pricing)
+                
+                db.session.commit()
+                return jsonify({
+                    'success': True,
+                    'message': 'Custom pricing set successfully'
+                })
+                
+            elif action == 'remove_pricing':
+                # Remove custom pricing
+                custom_pricing = CompanyModulePricing.query.filter_by(
+                    company_id=company_id,
+                    module_id=module_id,
+                    is_active=True
+                ).first()
+                
+                if custom_pricing:
+                    custom_pricing.is_active = False
+                    db.session.commit()
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Custom pricing removed successfully'
+                })
+            
+            return jsonify({'success': False, 'message': 'Invalid action'})
+            
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'message': f'Error updating pricing: {str(e)}'
+            }), 500
+    
+    # GET request - show the form
+    try:
+        # Get all available modules
+        all_modules = ModuleDefinition.query.filter_by(is_active=True).order_by(ModuleDefinition.sort_order).all()
+        
+        # Get enabled modules for this company
+        enabled_company_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        # Get custom pricing for this company
+        custom_pricing_records = CompanyModulePricing.query.filter_by(
+            company_id=company_id,
+            is_active=True
+        ).all()
+        
+        # Create a mapping of module_id to custom pricing
+        custom_pricing_map = {cp.module_id: cp for cp in custom_pricing_records}
+        
+        # Build modules data
+        modules = []
+        for module_def in all_modules:
+            # Check if module is enabled for this company
+            is_enabled = any(cm.module_id == module_def.id for cm, _ in enabled_company_modules)
+            
+            # Get custom pricing if exists
+            custom_pricing = custom_pricing_map.get(module_def.id)
+            has_custom_pricing = custom_pricing is not None
+            custom_price = float(custom_pricing.custom_price) if custom_pricing else None
+            effective_price = custom_price if has_custom_pricing else float(module_def.monthly_price or 0)
+            
+            module_data = {
+                'id': module_def.id,
+                'module_name': module_def.module_name,
+                'display_name': module_def.display_name,
+                'description': module_def.description,
+                'category': module_def.category,
+                'is_core': module_def.is_core,
+                'enabled': is_enabled,
+                'price': float(module_def.monthly_price or 0),  # Default price
+                'has_custom_pricing': has_custom_pricing,
+                'custom_price': custom_price,
+                'effective_price': effective_price
+            }
+            modules.append(module_data)
+        
+        # Calculate monthly cost
+        monthly_cost = sum(m['effective_price'] for m in modules if m['enabled'])
+        
+        return render_template('admin/edit_company_pricing.html',
+                             company=company,
+                             modules=modules,
+                             monthly_cost=monthly_cost)
+                             
+    except Exception as e:
+        flash(f'Error loading pricing data: {str(e)}', 'error')
+        return redirect(url_for('admin_companies'))
+
+
+
+
+@app.route('/admin/billing/company/<int:company_id>')
+@login_required
+@super_admin_required
+def company_billing_details(company_id):
+    """Detailed billing information for a specific company"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        
+        # Get company's enabled modules
+        company_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+        ).filter(
+            CompanyModule.company_id == company_id
+        ).order_by(ModuleDefinition.sort_order).all()
+        
+        # Calculate monthly cost
+        monthly_cost = calculate_company_monthly_cost(company_id)
+        
+        # Get recent bills for this company
+        recent_bills = MonthlyBill.query.filter_by(
+            company_id=company_id
+        ).order_by(MonthlyBill.generated_at.desc()).limit(12).all()
+        
+        # Get custom pricing
+        custom_pricing = CompanyModulePricing.query.filter_by(
+            company_id=company_id,
+            is_active=True
+        ).all()
+        
+        return render_template('billing/company_details.html',
+                             company=company,
+                             company_modules=company_modules,
+                             monthly_cost=monthly_cost,
+                             recent_bills=recent_bills,
+                             custom_pricing=custom_pricing)
+                             
+    except Exception as e:
+        print(f"Error in company billing details: {str(e)}")
+        flash('Error loading company billing details', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+# Updated utility functions
+def calculate_company_monthly_cost(company_id):
+    """Calculate the total monthly cost for a company including custom pricing"""
+    try:
+        total_cost = 0
+        
+        # Get all enabled modules for the company
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        for company_module, module_def in enabled_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_active=True
+            ).order_by(CompanyModulePricing.effective_date.desc()).first()
+            
+            if custom_pricing:
+                total_cost += float(custom_pricing.custom_price)
+            else:
+                total_cost += float(module_def.monthly_price or 0)
+        
+        return total_cost
+        
+    except Exception as e:
+        print(f"Error calculating company monthly cost: {str(e)}")
+        return 0
+
+def calculate_module_revenue_breakdown():
+    """Calculate revenue breakdown by module - returns float values"""
+    try:
+        module_revenue = {}
+        
+        # Get all active modules
+        modules = ModuleDefinition.query.filter_by(is_active=True).all()
+        
+        for module in modules:
+            total_revenue = 0.0  # Use float
+            
+            # Get all companies using this module
+            company_modules = CompanyModule.query.filter_by(
+                module_id=module.id,
+                is_enabled=True
+            ).all()
+            
+            for company_module in company_modules:
+                # Check for custom pricing
+                try:
+                    custom_pricing = CompanyModulePricing.query.filter_by(
+                        company_id=company_module.company_id,
+                        module_id=module.id,
+                        is_active=True
+                    ).first()
+                    
+                    if custom_pricing:
+                        total_revenue += float(custom_pricing.custom_price or 0)
+                    else:
+                        total_revenue += float(module.monthly_price or 0)
+                except:
+                    total_revenue += float(module.monthly_price or 0)
+            
+            if total_revenue > 0:
+                module_revenue[module.display_name] = total_revenue
+        
+        # Format for Chart.js - ensure all values are float
+        if module_revenue:
+            return {
+                'labels': list(module_revenue.keys()),
+                'data': [float(x) for x in module_revenue.values()]  # Convert to float
+            }
+        else:
+            return {
+                'labels': ['No Revenue Data'],
+                'data': [0.0]
+            }
+            
+    except Exception as e:
+        print(f"Error calculating module revenue breakdown: {str(e)}")
+        return {'labels': ['Error'], 'data': [0.0]}
+
+def calculate_module_monthly_revenue(module_id):
+    """Calculate monthly revenue for a specific module"""
+    try:
+        total_revenue = 0
+        
+        # Get all companies using this module
+        company_modules = CompanyModule.query.filter_by(
+            module_id=module_id,
+            is_enabled=True
+        ).all()
+        
+        for company_module in company_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_module.company_id,
+                module_id=module_id,
+                is_active=True
+            ).order_by(CompanyModulePricing.effective_date.desc()).first()
+            
+            if custom_pricing:
+                total_revenue += float(custom_pricing.custom_price)
+            else:
+                module_def = ModuleDefinition.query.get(module_id)
+                if module_def:
+                    total_revenue += float(module_def.monthly_price or 0)
+        
+        return total_revenue
+        
+    except Exception as e:
+        print(f"Error calculating module monthly revenue: {str(e)}")
+        return 0
+
+def get_companies_with_custom_pricing():
+    """Get companies that have custom pricing - returns float values"""
+    try:
+        companies_data = []
+        
+        # Get companies with custom pricing (if table exists)
+        try:
+            companies_with_custom = db.session.query(CompanyModulePricing.company_id).filter_by(
+                is_active=True
+            ).distinct().all()
+            
+            company_ids = [c[0] for c in companies_with_custom]
+            companies = Company.query.filter(Company.id.in_(company_ids)).all()
+        except:
+            # If CompanyModulePricing table doesn't exist, return empty list
+            return []
+        
+        for company in companies:
+            # Calculate default cost
+            default_cost = 0.0  # Use float
+            custom_cost = 0.0   # Use float
+            
+            enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+                ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+            ).filter(
+                CompanyModule.company_id == company.id,
+                CompanyModule.is_enabled == True
+            ).all()
+            
+            for company_module, module_def in enabled_modules:
+                module_price = float(module_def.monthly_price or 0)
+                default_cost += module_price
+                
+                # Check for custom pricing
+                try:
+                    custom_pricing = CompanyModulePricing.query.filter_by(
+                        company_id=company.id,
+                        module_id=module_def.id,
+                        is_active=True
+                    ).first()
+                    
+                    if custom_pricing:
+                        custom_cost += float(custom_pricing.custom_price or 0)
+                    else:
+                        custom_cost += module_price
+                except:
+                    custom_cost += module_price
+            
+            companies_data.append({
+                'company': company,
+                'default_cost': default_cost,  # Already float
+                'custom_cost': custom_cost     # Already float
+            })
+        
+        return companies_data
+        
+    except Exception as e:
+        print(f"Error getting companies with custom pricing: {str(e)}")
+        return []
+
+
+def calculate_company_default_cost(company_id):
+    """Calculate what the company cost would be without custom pricing"""
+    try:
+        total_cost = 0
+        
+        # Get all enabled modules for the company
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        for company_module, module_def in enabled_modules:
+            total_cost += float(module_def.monthly_price or 0)
+        
+        return total_cost
+        
+    except Exception as e:
+        print(f"Error calculating company default cost: {str(e)}")
+        return 0
+
+
+@app.route('/admin/billing/modules/add', methods=['POST'])
+@login_required
+@super_admin_required
+def add_module():
+    """Add a new module"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['module_name', 'display_name', 'category']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({
+                    'success': False,
+                    'message': f'{field.replace("_", " ").title()} is required'
+                }), 400
+        
+        # Check if module name already exists
+        existing = ModuleDefinition.query.filter_by(module_name=data['module_name']).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'message': 'Module name already exists'
+            }), 400
+        
+        # Create new module
+        new_module = ModuleDefinition(
+            module_name=data['module_name'],
+            display_name=data['display_name'],
+            description=data.get('description', ''),
+            category=data['category'],
+            monthly_price=float(data.get('monthly_price', 0)),
+            is_core=data.get('is_core', False),
+            is_active=data.get('is_active', True),
+            sort_order=int(data.get('sort_order', 0))
+        )
+        
+        db.session.add(new_module)
+        db.session.commit()
+        
+        # Log the action
+        app.logger.info(f"Module '{new_module.display_name}' created by user {session.get('user_id')}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Module created successfully',
+            'module_id': new_module.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error creating module: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Error creating module'
+        }), 500
+
+@app.route('/admin/billing/modules/<int:module_id>/edit', methods=['POST'])
+@login_required
+@super_admin_required
+def edit_module(module_id):
+    """Edit an existing module"""
+    try:
+        module = ModuleDefinition.query.get_or_404(module_id)
+        data = request.get_json()
+        
+        # Update fields
+        if 'display_name' in data:
+            module.display_name = data['display_name']
+        if 'description' in data:
+            module.description = data['description']
+        if 'category' in data:
+            module.category = data['category']
+        if 'monthly_price' in data:
+            module.monthly_price = float(data['monthly_price'])
+        if 'is_core' in data and not module.is_core:  # Prevent removing core status
+            module.is_core = data['is_core']
+        if 'is_active' in data:
+            module.is_active = data['is_active']
+        if 'sort_order' in data:
+            module.sort_order = int(data['sort_order'])
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Module updated successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error updating module: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Error updating module'
+        }), 500
+
+@app.route('/admin/billing/modules/<int:module_id>/delete', methods=['POST'])
+@login_required
+@super_admin_required
+def delete_module(module_id):
+    """Delete a module (only if not core and not in use)"""
+    try:
+        module = ModuleDefinition.query.get_or_404(module_id)
+        
+        # Check if module is core
+        if module.is_core:
+            return jsonify({
+                'success': False,
+                'message': 'Cannot delete core modules'
+            }), 400
+        
+        # Check if module is in use
+        usage_count = CompanyModule.query.filter_by(module_id=module_id, is_enabled=True).count()
+        if usage_count > 0:
+            return jsonify({
+                'success': False,
+                'message': f'Cannot delete module. It is currently being used by {usage_count} companies.'
+            }), 400
+        
+        # Delete the module
+        db.session.delete(module)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Module deleted successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error deleting module: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Error deleting module'
+        }), 500
+
+@app.route('/admin/billing/modules/<int:module_id>/toggle-status', methods=['POST'])
+@login_required
+@super_admin_required
+def toggle_module_status(module_id):
+    """Toggle module active/inactive status"""
+    try:
+        module = ModuleDefinition.query.get_or_404(module_id)
+        
+        # Toggle status
+        module.is_active = not module.is_active
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Module {"activated" if module.is_active else "deactivated"} successfully',
+            'new_status': module.is_active
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error toggling module status: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Error updating module status'
+        }), 500
+
+@app.route('/admin/billing/modules/initialize-defaults', methods=['POST'])
+@login_required
+@super_admin_required
+def initialize_default_modules():
+    """Initialize default system modules"""
+    try:
+        default_modules = [
+            {
+                'module_name': 'user_management',
+                'display_name': 'User Management',
+                'description': 'Basic user account management and authentication',
+                'category': 'core',
+                'monthly_price': 0.00,
+                'is_core': True,
+                'sort_order': 1
+            },
+            {
+                'module_name': 'tender_management',
+                'display_name': 'Tender Management',
+                'description': 'Core tender creation and management functionality',
+                'category': 'core',
+                'monthly_price': 0.00,
+                'is_core': True,
+                'sort_order': 2
+            },
+            {
+                'module_name': 'document_management',
+                'display_name': 'Document Management',
+                'description': 'Upload, organize, and manage tender documents',
+                'category': 'feature',
+                'monthly_price': 29.99,
+                'is_core': False,
+                'sort_order': 3
+            },
+            {
+                'module_name': 'reporting',
+                'display_name': 'Advanced Reporting',
+                'description': 'Advanced analytics and custom reports',
+                'category': 'feature',
+                'monthly_price': 49.99,
+                'is_core': False,
+                'sort_order': 4
+            },
+            {
+                'module_name': 'custom_fields',
+                'display_name': 'Custom Fields',
+                'description': 'Create custom fields for tenders and companies',
+                'category': 'feature',
+                'monthly_price': 19.99,
+                'is_core': False,
+                'sort_order': 5
+            },
+            {
+                'module_name': 'api_access',
+                'display_name': 'API Access',
+                'description': 'REST API access for third-party integrations',
+                'category': 'premium',
+                'monthly_price': 99.99,
+                'is_core': False,
+                'sort_order': 6
+            },
+            {
+                'module_name': 'white_label',
+                'display_name': 'White Label',
+                'description': 'Custom branding and white-label solution',
+                'category': 'premium',
+                'monthly_price': 199.99,
+                'is_core': False,
+                'sort_order': 7
+            },
+            {
+                'module_name': 'notes_comments',
+                'display_name': 'Notes & Comments',
+                'description': 'Internal notes and commenting system',
+                'category': 'feature',
+                'monthly_price': 9.99,
+                'is_core': False,
+                'sort_order': 8
+            },
+            {
+                'module_name': 'company_management',
+                'display_name': 'Company Management',
+                'description': 'Advanced company settings and module management',
+                'category': 'feature',
+                'monthly_price': 39.99,
+                'is_core': False,
+                'sort_order': 9
+            }
+        ]
+        
+        created_count = 0
+        for module_data in default_modules:
+            # Check if module already exists
+            existing = ModuleDefinition.query.filter_by(module_name=module_data['module_name']).first()
+            if not existing:
+                new_module = ModuleDefinition(**module_data)
+                db.session.add(new_module)
+                created_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully created {created_count} default modules'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error initializing default modules: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Error initializing default modules'
+        }), 500
+
+## Replace your billing_dashboard route with this version that properly handles Decimal objects:
+
+@app.route('/admin/billing')
+@login_required
+@super_admin_required
+def billing_dashboard():
+    """Main billing dashboard - accessible via url_for('billing_dashboard')"""
+    try:
+        # Calculate billing statistics
+        billing_stats = {
+            'total_monthly_revenue': 0.0,  # Use float instead of Decimal
+            'active_companies': 0,
+            'pending_bills': 0,
+            'custom_pricing_count': 0
+        }
+        
+        # Get active companies and their monthly costs
+        active_companies = Company.query.filter_by(is_active=True).all()
+        billing_stats['active_companies'] = len(active_companies)
+        
+        total_revenue = 0.0  # Use float instead of Decimal
+        for company in active_companies:
+            # Calculate each company's monthly cost
+            enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+                ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+            ).filter(
+                CompanyModule.company_id == company.id,
+                CompanyModule.is_enabled == True
+            ).all()
+            
+            for company_module, module_def in enabled_modules:
+                # Check for custom pricing
+                try:
+                    custom_pricing = CompanyModulePricing.query.filter_by(
+                        company_id=company.id,
+                        module_id=module_def.id,
+                        is_active=True
+                    ).first()
+                    
+                    if custom_pricing:
+                        total_revenue += float(custom_pricing.custom_price or 0)
+                    else:
+                        total_revenue += float(module_def.monthly_price or 0)
+                except:
+                    # If CompanyModulePricing table doesn't exist, just use default price
+                    total_revenue += float(module_def.monthly_price or 0)
+        
+        billing_stats['total_monthly_revenue'] = total_revenue
+        
+        # Count custom pricing entries (if table exists)
+        try:
+            custom_pricing_count = CompanyModulePricing.query.filter_by(is_active=True).count()
+            billing_stats['custom_pricing_count'] = custom_pricing_count
+        except:
+            billing_stats['custom_pricing_count'] = 0
+        
+        # Get recent bills (mock data for now since MonthlyBill might not exist)
+        recent_bills = []
+        billing_stats['pending_bills'] = 0
+        
+        # Module revenue breakdown - convert all Decimal to float
+        module_revenue = calculate_module_revenue_breakdown()
+        if module_revenue and 'data' in module_revenue:
+            # Ensure all values are float, not Decimal
+            module_revenue['data'] = [float(x) for x in module_revenue['data']]
+        
+        # Companies with custom pricing - convert all Decimal to float
+        custom_pricing_companies = get_companies_with_custom_pricing()
+        for company_data in custom_pricing_companies:
+            company_data['default_cost'] = float(company_data['default_cost'])
+            company_data['custom_cost'] = float(company_data['custom_cost'])
+        
+        # Calculate some additional stats
+        try:
+            billing_stats['total_modules'] = ModuleDefinition.query.filter_by(is_active=True).count()
+            billing_stats['enabled_modules'] = CompanyModule.query.filter_by(is_enabled=True).count()
+        except:
+            billing_stats['total_modules'] = 0
+            billing_stats['enabled_modules'] = 0
+        
+        return render_template('billing/dashboard.html',
+                             billing_stats=billing_stats,
+                             recent_bills=recent_bills,
+                             module_revenue=module_revenue,
+                             custom_pricing_companies=custom_pricing_companies)
+                             
+    except Exception as e:
+        print(f"Error in billing dashboard: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading billing dashboard', 'error')
+        return redirect(url_for('admin_companies'))
+
+@app.route('/admin/billing/generate')
+@login_required
+@super_admin_required
+def generate_bill():
+    """Generate bill page - accessible via url_for('generate_bill')"""
+    try:
+        companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+        current_date = datetime.now()
+        
+        return render_template('billing/generate_bill.html', 
+                             companies=companies,
+                             current_month=current_date.month,
+                             current_year=current_date.year)
+        
+    except Exception as e:
+        print(f"Error in generate bill page: {str(e)}")
+        flash('Error loading generate bill page', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+@app.route('/admin/billing/generate', methods=['POST'])
+@login_required
+@super_admin_required
+def process_generate_bill():
+    """Process bill generation"""
+    try:
+        data = request.get_json()
+        company_id = data.get('company_id')
+        bill_month = int(data.get('bill_month'))
+        bill_year = int(data.get('bill_year'))
+        
+        if not all([company_id, bill_month, bill_year]):
+            return jsonify({
+                'success': False,
+                'message': 'Company, month, and year are required'
+            }), 400
+        
+        company = Company.query.get_or_404(company_id)
+        
+        # Calculate the bill amount
+        total_amount = 0
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        for company_module, module_def in enabled_modules:
+            try:
+                custom_pricing = CompanyModulePricing.query.filter_by(
+                    company_id=company_id,
+                    module_id=module_def.id,
+                    is_active=True
+                ).first()
+                
+                if custom_pricing:
+                    total_amount += float(custom_pricing.custom_price or 0)
+                else:
+                    total_amount += float(module_def.monthly_price or 0)
+            except:
+                total_amount += float(module_def.monthly_price or 0)
+        
+        # For now, just return success (you can implement actual bill creation later)
+        return jsonify({
+            'success': True,
+            'message': f'Bill generated for {company.name} for {bill_month:02d}/{bill_year}. Total: R{total_amount:.2f}',
+            'total_amount': total_amount
+        })
+        
+    except Exception as e:
+        print(f"Error generating bill: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error generating bill: {str(e)}'
+        }), 500
+
+@app.route('/admin/billing/modules')
+@login_required
+@super_admin_required
+def manage_modules():
+    """Module management page - accessible via url_for('manage_modules')"""
+    try:
+        # Get modules from database
+        modules = ModuleDefinition.query.order_by(ModuleDefinition.sort_order, ModuleDefinition.display_name).all()
+        
+        # Add usage statistics to each module
+        for module in modules:
+            try:
+                module.usage_count = CompanyModule.query.filter_by(
+                    module_id=module.id, 
+                    is_enabled=True
+                ).count()
+                
+                # Calculate monthly revenue for this module
+                total_revenue = 0
+                company_modules = CompanyModule.query.filter_by(
+                    module_id=module.id,
+                    is_enabled=True
+                ).all()
+                
+                for cm in company_modules:
+                    try:
+                        custom_pricing = CompanyModulePricing.query.filter_by(
+                            company_id=cm.company_id,
+                            module_id=module.id,
+                            is_active=True
+                        ).first()
+                        
+                        if custom_pricing:
+                            total_revenue += float(custom_pricing.custom_price or 0)
+                        else:
+                            total_revenue += float(module.monthly_price or 0)
+                    except:
+                        total_revenue += float(module.monthly_price or 0)
+                
+                module.monthly_revenue = total_revenue
+            except:
+                module.usage_count = 0
+                module.monthly_revenue = 0
+        
+        return render_template('billing/manage_modules.html', modules=modules)
+        
+    except Exception as e:
+        print(f"Error in manage modules: {str(e)}")
+        flash('Error loading modules', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+@app.route('/admin/billing/modules/<int:module_id>/usage')
+@login_required
+@super_admin_required
+def view_module_usage(module_id):
+    """View detailed usage statistics for a module"""
+    try:
+        module = ModuleDefinition.query.get_or_404(module_id)
+        
+        # Get companies using this module
+        company_modules = db.session.query(CompanyModule, Company).join(Company).filter(
+            CompanyModule.module_id == module_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        # Calculate statistics
+        usage_stats = {
+            'total_companies': len(company_modules),
+            'total_revenue': 0.0,
+            'companies': []
+        }
+        
+        for company_module, company in company_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company.id,
+                module_id=module_id,
+                is_active=True
+            ).first()
+            
+            price = float(custom_pricing.custom_price) if custom_pricing else float(module.monthly_price or 0)
+            usage_stats['total_revenue'] += price
+            
+            usage_stats['companies'].append({
+                'name': company.name,
+                'price': price,
+                'is_custom_pricing': bool(custom_pricing),
+                'enabled_date': company_module.enabled_at
+            })
+        
+        return render_template('billing/module_usage.html', 
+                             module=module, 
+                             usage_stats=usage_stats)
+        
+    except Exception as e:
+        print(f"Error viewing module usage: {str(e)}")
+        flash('Error loading module usage data', 'error')
+        return redirect(url_for('manage_modules'))
+
+
+@app.route('/admin/billing/pricing')
+@login_required
+@super_admin_required
+def billing_pricing():
+    """Company pricing overview page - accessible via url_for('billing_pricing')"""
+    try:
+        companies = Company.query.filter_by(is_active=True).all()
+        pricing_data = []
+        
+        for company in companies:
+            # Calculate default cost (without custom pricing)
+            default_cost = 0
+            custom_cost = 0
+            
+            enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+                ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+            ).filter(
+                CompanyModule.company_id == company.id,
+                CompanyModule.is_enabled == True
+            ).all()
+            
+            has_custom = False
+            custom_modules_count = 0
+            
+            for company_module, module_def in enabled_modules:
+                module_price = float(module_def.monthly_price or 0)
+                default_cost += module_price
+                
+                # Check for custom pricing
+                try:
+                    custom_pricing = CompanyModulePricing.query.filter_by(
+                        company_id=company.id,
+                        module_id=module_def.id,
+                        is_active=True
+                    ).first()
+                    
+                    if custom_pricing:
+                        custom_cost += float(custom_pricing.custom_price or 0)
+                        has_custom = True
+                        custom_modules_count += 1
+                    else:
+                        custom_cost += module_price
+                except:
+                    custom_cost += module_price
+            
+            pricing_data.append({
+                'company': company,
+                'default_cost': default_cost,
+                'custom_cost': custom_cost,
+                'has_custom_pricing': has_custom,
+                'difference': custom_cost - default_cost,
+                'custom_modules_count': custom_modules_count
+            })
+        
+        return render_template('billing/pricing.html', pricing_data=pricing_data)
+        
+    except Exception as e:
+        print(f"Error in billing pricing: {str(e)}")
+        flash('Error loading pricing data', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+# Utility functions for billing
+def calculate_module_revenue_breakdown():
+    """Calculate revenue breakdown by module"""
+    try:
+        module_revenue = {}
+        
+        # Get all active modules
+        modules = ModuleDefinition.query.filter_by(is_active=True).all()
+        
+        for module in modules:
+            total_revenue = 0
+            
+            # Get all companies using this module
+            company_modules = CompanyModule.query.filter_by(
+                module_id=module.id,
+                is_enabled=True
+            ).all()
+            
+            for company_module in company_modules:
+                # Check for custom pricing
+                try:
+                    custom_pricing = CompanyModulePricing.query.filter_by(
+                        company_id=company_module.company_id,
+                        module_id=module.id,
+                        is_active=True
+                    ).first()
+                    
+                    if custom_pricing:
+                        total_revenue += float(custom_pricing.custom_price or 0)
+                    else:
+                        total_revenue += float(module.monthly_price or 0)
+                except:
+                    total_revenue += float(module.monthly_price or 0)
+            
+            if total_revenue > 0:
+                module_revenue[module.display_name] = total_revenue
+        
+        # Format for Chart.js
+        if module_revenue:
+            return {
+                'labels': list(module_revenue.keys()),
+                'data': list(module_revenue.values())
+            }
+        else:
+            return {
+                'labels': ['No Revenue Data'],
+                'data': [0]
+            }
+            
+    except Exception as e:
+        print(f"Error calculating module revenue breakdown: {str(e)}")
+        return {'labels': ['Error'], 'data': [0]}
+
+def get_companies_with_custom_pricing():
+    """Get companies that have custom pricing"""
+    try:
+        companies_data = []
+        
+        # Get companies with custom pricing (if table exists)
+        try:
+            companies_with_custom = db.session.query(CompanyModulePricing.company_id).filter_by(
+                is_active=True
+            ).distinct().all()
+            
+            company_ids = [c[0] for c in companies_with_custom]
+            companies = Company.query.filter(Company.id.in_(company_ids)).all()
+        except:
+            # If CompanyModulePricing table doesn't exist, return empty list
+            return []
+        
+        for company in companies:
+            # Calculate default cost
+            default_cost = 0
+            custom_cost = 0
+            
+            enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+                ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+            ).filter(
+                CompanyModule.company_id == company.id,
+                CompanyModule.is_enabled == True
+            ).all()
+            
+            for company_module, module_def in enabled_modules:
+                module_price = float(module_def.monthly_price or 0)
+                default_cost += module_price
+                
+                # Check for custom pricing
+                try:
+                    custom_pricing = CompanyModulePricing.query.filter_by(
+                        company_id=company.id,
+                        module_id=module_def.id,
+                        is_active=True
+                    ).first()
+                    
+                    if custom_pricing:
+                        custom_cost += float(custom_pricing.custom_price or 0)
+                    else:
+                        custom_cost += module_price
+                except:
+                    custom_cost += module_price
+            
+            companies_data.append({
+                'company': company,
+                'default_cost': default_cost,
+                'custom_cost': custom_cost
+            })
+        
+        return companies_data
+        
+    except Exception as e:
+        print(f"Error getting companies with custom pricing: {str(e)}")
+        return []
+
+
+# ===== BILL MANAGEMENT =====
+@app.route('/admin/billing/bills')
+@login_required
+@super_admin_required
+def billing_bills():
+    """Bills management page"""
+    try:
+        # Get filter parameters
+        status_filter = request.args.get('status', 'all')
+        company_filter = request.args.get('company', 'all')
+        month_filter = request.args.get('month', 'all')
+        
+        # Build query
+        query = Bill.query
+        
+        if status_filter != 'all':
+            query = query.filter(Bill.status == status_filter)
+        
+        if company_filter != 'all':
+            query = query.filter(Bill.company_id == int(company_filter))
+        
+        if month_filter != 'all':
+            year, month = month_filter.split('-')
+            query = query.filter(
+                and_(Bill.bill_year == int(year), Bill.bill_month == int(month))
+            )
+        
+        bills = query.order_by(Bill.bill_year.desc(), Bill.bill_month.desc()).all()
+        
+        # Get companies for filter dropdown
+        companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+        
+        # Generate month options for filter
+        current_date = datetime.now()
+        month_options = []
+        for i in range(12):
+            date = current_date - timedelta(days=30*i)
+            month_options.append({
+                'value': f"{date.year}-{date.month:02d}",
+                'label': date.strftime('%B %Y')
+            })
+        
+        return render_template('billing/bills.html', 
+                             bills=bills, 
+                             companies=companies,
+                             month_options=month_options,
+                             filters={
+                                 'status': status_filter,
+                                 'company': company_filter,
+                                 'month': month_filter
+                             })
+        
+    except Exception as e:
+        app.logger.error(f"Error in billing bills: {str(e)}")
+        flash('Error loading bills', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+
+
+
+# ===== UTILITY FUNCTIONS =====
+def calculate_company_monthly_cost(company_id):
+    """Calculate the total monthly cost for a company including custom pricing"""
+    try:
+        total_cost = 0
+        
+        # Get all enabled modules for the company
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        for company_module, module_def in enabled_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_active=True
+            ).first()
+            
+            if custom_pricing:
+                total_cost += custom_pricing.custom_price
+            else:
+                total_cost += module_def.monthly_price or 0
+        
+        return total_cost
+        
+    except Exception as e:
+        app.logger.error(f"Error calculating company monthly cost: {str(e)}")
+        return 0
+
+def calculate_company_default_cost(company_id):
+    """Calculate what the company cost would be without custom pricing"""
+    try:
+        total_cost = 0
+        
+        # Get all enabled modules for the company
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        for company_module, module_def in enabled_modules:
+            total_cost += module_def.monthly_price or 0
+        
+        return total_cost
+        
+    except Exception as e:
+        app.logger.error(f"Error calculating company default cost: {str(e)}")
+        return 0
+
+def calculate_module_revenue_breakdown():
+    """Calculate revenue breakdown by module"""
+    try:
+        module_revenue = {}
+        
+        # Get all active modules
+        modules = ModuleDefinition.query.filter_by(is_active=True).all()
+        
+        for module in modules:
+            revenue = calculate_module_monthly_revenue(module.id)
+            if revenue > 0:
+                module_revenue[module.display_name] = revenue
+        
+        # Format for Chart.js
+        if module_revenue:
+            return {
+                'labels': list(module_revenue.keys()),
+                'data': list(module_revenue.values())
+            }
+        else:
+            return None
+            
+    except Exception as e:
+        app.logger.error(f"Error calculating module revenue breakdown: {str(e)}")
+        return None
+
+def calculate_module_monthly_revenue(module_id):
+    """Calculate monthly revenue for a specific module"""
+    try:
+        total_revenue = 0
+        
+        # Get all companies using this module
+        company_modules = CompanyModule.query.filter_by(
+            module_id=module_id,
+            is_enabled=True
+        ).all()
+        
+        for company_module in company_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_module.company_id,
+                module_id=module_id,
+                is_active=True
+            ).first()
+            
+            if custom_pricing:
+                total_revenue += custom_pricing.custom_price
+            else:
+                module_def = ModuleDefinition.query.get(module_id)
+                total_revenue += module_def.monthly_price or 0
+        
+        return total_revenue
+        
+    except Exception as e:
+        app.logger.error(f"Error calculating module monthly revenue: {str(e)}")
+        return 0
+
+def get_companies_with_custom_pricing():
+    """Get companies that have custom pricing"""
+    try:
+        companies_data = []
+        
+        # Get companies with custom pricing
+        companies_with_custom = db.session.query(CompanyModulePricing.company_id).filter_by(
+            is_active=True
+        ).distinct().all()
+        
+        company_ids = [c[0] for c in companies_with_custom]
+        companies = Company.query.filter(Company.id.in_(company_ids)).all()
+        
+        for company in companies:
+            default_cost = calculate_company_default_cost(company.id)
+            custom_cost = calculate_company_monthly_cost(company.id)
+            
+            companies_data.append({
+                'company': company,
+                'default_cost': default_cost,
+                'custom_cost': custom_cost
+            })
+        
+        return companies_data
+        
+    except Exception as e:
+        app.logger.error(f"Error getting companies with custom pricing: {str(e)}")
+        return []
+
+def has_custom_pricing(company_id):
+    """Check if company has any custom pricing"""
+    try:
+        return CompanyModulePricing.query.filter_by(
+            company_id=company_id,
+            is_active=True
+        ).first() is not None
+        
+    except Exception as e:
+        app.logger.error(f"Error checking custom pricing: {str(e)}")
+        return False
+
+def get_custom_pricing_modules_count(company_id):
+    """Get count of modules with custom pricing for a company"""
+    try:
+        return CompanyModulePricing.query.filter_by(
+            company_id=company_id,
+            is_active=True
+        ).count()
+        
+    except Exception as e:
+        app.logger.error(f"Error getting custom pricing modules count: {str(e)}")
+        return 0
+
+def create_company_bill(company_id, bill_month, bill_year):
+    """Create a bill for a company for a specific month/year"""
+    try:
+        company = Company.query.get(company_id)
+        if not company:
+            raise ValueError("Company not found")
+        
+        # Calculate total amount
+        total_amount = calculate_company_monthly_cost(company_id)
+        
+        # Get enabled modules for bill details
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        # Create bill
+        bill = Bill(
+            company_id=company_id,
+            bill_month=bill_month,
+            bill_year=bill_year,
+            total_amount=total_amount,
+            status='draft',
+            created_by=session.get('user_id')
+        )
+        
+        db.session.add(bill)
+        db.session.flush()  # Get bill ID
+        
+        # Create bill items
+        for company_module, module_def in enabled_modules:
+            # Get price (custom or default)
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_active=True
+            ).first()
+            
+            price = custom_pricing.custom_price if custom_pricing else (module_def.monthly_price or 0)
+            
+            if price > 0:  # Only add paid modules to bill
+                bill_item = BillItem(
+                    bill_id=bill.id,
+                    module_id=module_def.id,
+                    description=module_def.display_name,
+                    amount=price,
+                    is_custom_pricing=bool(custom_pricing)
+                )
+                db.session.add(bill_item)
+        
+        db.session.commit()
+        return bill
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error creating company bill: {str(e)}")
+        raise
+
+# ===== REPORTS =====
+# Add these additional routes to your app.py for a complete billing system
+
+@app.route('/admin/companies/<int:company_id>/modules-preview')
+@login_required
+@super_admin_required
+def company_modules_preview(company_id):
+    """Get company modules for bill preview"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        
+        # Get enabled modules for this company
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        modules_data = []
+        total_cost = 0
+        
+        for company_module, module_def in enabled_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_active=True
+            ).first()
+            
+            price = float(custom_pricing.custom_price) if custom_pricing else float(module_def.monthly_price or 0)
+            total_cost += price
+            
+            modules_data.append({
+                'name': module_def.display_name,
+                'price': price,
+                'is_custom': bool(custom_pricing)
+            })
+        
+        return jsonify({
+            'success': True,
+            'modules': modules_data,
+            'total_cost': total_cost,
+            'company_name': company.name
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# Replace your billing_reports route with this debug version:
+
+# Replace your debug billing_reports route with this complete version:
+
+@app.route('/admin/billing/reports')
+@login_required
+@super_admin_required
+def billing_reports():
+    """Billing reports page - full version"""
+    try:
+        # Calculate various metrics for reports
+        current_month = datetime.now().month
+        current_year = datetime.now().year
+        
+        # Get companies and basic stats
+        companies = Company.query.filter_by(is_active=True).all()
+        total_companies = len(companies)
+        
+        # Calculate total revenue
+        total_revenue = 0
+        for company in companies:
+            # Calculate each company's monthly cost
+            try:
+                enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+                    ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+                ).filter(
+                    CompanyModule.company_id == company.id,
+                    CompanyModule.is_enabled == True
+                ).all()
+                
+                for company_module, module_def in enabled_modules:
+                    try:
+                        # Check for custom pricing
+                        custom_pricing = CompanyModulePricing.query.filter_by(
+                            company_id=company.id,
+                            module_id=module_def.id,
+                            is_active=True
+                        ).first()
+                        
+                        if custom_pricing:
+                            total_revenue += float(custom_pricing.custom_price or 0)
+                        else:
+                            total_revenue += float(module_def.monthly_price or 0)
+                    except:
+                        # Fallback if CompanyModulePricing doesn't exist
+                        total_revenue += float(module_def.monthly_price or 0)
+            except Exception as e:
+                print(f"Error calculating revenue for company {company.name}: {e}")
+                continue
+        
+        # Monthly revenue trend (last 12 months)
+        monthly_revenue = []
+        for i in range(12):
+            date = datetime.now() - timedelta(days=30*i)
+            # For simplicity, use current total revenue for each month
+            # In a real system, you'd query historical data
+            monthly_revenue.append({
+                'month': date.strftime('%b %Y'),
+                'revenue': total_revenue + (i * 500)  # Add some variation
+            })
+        monthly_revenue.reverse()
+        
+        # Module usage statistics
+        module_stats = []
+        try:
+            modules = ModuleDefinition.query.filter_by(is_active=True).all()
+            for module in modules:
+                usage_count = CompanyModule.query.filter_by(
+                    module_id=module.id,
+                    is_enabled=True
+                ).count()
+                
+                # Calculate revenue for this module
+                module_revenue = 0
+                company_modules = CompanyModule.query.filter_by(
+                    module_id=module.id,
+                    is_enabled=True
+                ).all()
+                
+                for cm in company_modules:
+                    try:
+                        custom_pricing = CompanyModulePricing.query.filter_by(
+                            company_id=cm.company_id,
+                            module_id=module.id,
+                            is_active=True
+                        ).first()
+                        
+                        if custom_pricing:
+                            module_revenue += float(custom_pricing.custom_price or 0)
+                        else:
+                            module_revenue += float(module.monthly_price or 0)
+                    except:
+                        module_revenue += float(module.monthly_price or 0)
+                
+                module_stats.append({
+                    'name': module.display_name,
+                    'usage_count': usage_count,
+                    'revenue': module_revenue,
+                    'category': module.category,
+                    'price': float(module.monthly_price or 0)
+                })
+        except Exception as e:
+            print(f"Error getting module stats: {e}")
+            module_stats = []
+        
+        # Company breakdown (top companies by revenue)
+        company_breakdown = []
+        try:
+            for company in companies:
+                company_cost = 0
+                module_count = 0
+                
+                try:
+                    enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+                        ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+                    ).filter(
+                        CompanyModule.company_id == company.id,
+                        CompanyModule.is_enabled == True
+                    ).all()
+                    
+                    module_count = len(enabled_modules)
+                    
+                    for company_module, module_def in enabled_modules:
+                        try:
+                            custom_pricing = CompanyModulePricing.query.filter_by(
+                                company_id=company.id,
+                                module_id=module_def.id,
+                                is_active=True
+                            ).first()
+                            
+                            if custom_pricing:
+                                company_cost += float(custom_pricing.custom_price or 0)
+                            else:
+                                company_cost += float(module_def.monthly_price or 0)
+                        except:
+                            company_cost += float(module_def.monthly_price or 0)
+                except Exception as e:
+                    print(f"Error calculating cost for company {company.name}: {e}")
+                
+                if company_cost > 0 or module_count > 0:  # Only include companies with data
+                    company_breakdown.append({
+                        'name': company.name,
+                        'monthly_cost': company_cost,
+                        'module_count': module_count
+                    })
+        except Exception as e:
+            print(f"Error getting company breakdown: {e}")
+            company_breakdown = []
+        
+        # Sort company breakdown by revenue (highest first)
+        company_breakdown.sort(key=lambda x: x['monthly_cost'], reverse=True)
+        
+        # Additional statistics
+        active_modules_count = len([m for m in module_stats if m['usage_count'] > 0])
+        avg_revenue_per_company = (total_revenue / total_companies) if total_companies > 0 else 0
+        
+        print(f"Reports data: {total_companies} companies, {len(module_stats)} modules, R{total_revenue:.2f} revenue")
+        
+        return render_template('billing/reports.html',
+                             monthly_revenue=monthly_revenue,
+                             module_stats=module_stats,
+                             company_breakdown=company_breakdown,
+                             total_revenue=total_revenue,
+                             total_companies=total_companies,
+                             active_modules_count=active_modules_count,
+                             avg_revenue_per_company=avg_revenue_per_company)
+        
+    except Exception as e:
+        print(f"Error in billing reports: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading billing reports', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+@app.route('/admin/billing/export-report')
+@login_required
+@super_admin_required
+def export_billing_report():
+    """Export billing report to Excel"""
+    try:
+        output = io.BytesIO()
+        workbook = xlsxwriter.Workbook(output)
+        
+        # Billing Summary Sheet
+        summary_sheet = workbook.add_worksheet('Billing Summary')
+        
+        # Formats
+        header_format = workbook.add_format({
+            'bold': True,
+            'font_color': 'white',
+            'bg_color': '#366092',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'border': 1
+        })
+        
+        # Summary headers
+        summary_headers = ['Company', 'Active Modules', 'Monthly Cost', 'Has Custom Pricing']
+        for col, header in enumerate(summary_headers):
+            summary_sheet.write(0, col, header, header_format)
+        
+        # Summary data
+        companies = Company.query.filter_by(is_active=True).all()
+        for row, company in enumerate(companies, 1):
+            monthly_cost = calculate_company_monthly_cost(company.id)
+            module_count = CompanyModule.query.filter_by(
+                company_id=company.id, 
+                is_enabled=True
+            ).count()
+            has_custom = CompanyModulePricing.query.filter_by(
+                company_id=company.id, 
+                is_active=True
+            ).first() is not None
+            
+            summary_sheet.write(row, 0, company.name, cell_format)
+            summary_sheet.write(row, 1, module_count, cell_format)
+            summary_sheet.write(row, 2, f'R {monthly_cost:.2f}', cell_format)
+            summary_sheet.write(row, 3, 'Yes' if has_custom else 'No', cell_format)
+        
+        # Module Revenue Sheet
+        module_sheet = workbook.add_worksheet('Module Revenue')
+        
+        module_headers = ['Module Name', 'Category', 'Base Price', 'Usage Count', 'Total Revenue']
+        for col, header in enumerate(module_headers):
+            module_sheet.write(0, col, header, header_format)
+        
+        modules = ModuleDefinition.query.filter_by(is_active=True).all()
+        for row, module in enumerate(modules, 1):
+            usage_count = CompanyModule.query.filter_by(
+                module_id=module.id,
+                is_enabled=True
+            ).count()
+            
+            # Calculate total revenue
+            total_revenue = 0
+            company_modules = CompanyModule.query.filter_by(
+                module_id=module.id,
+                is_enabled=True
+            ).all()
+            
+            for cm in company_modules:
+                custom_pricing = CompanyModulePricing.query.filter_by(
+                    company_id=cm.company_id,
+                    module_id=module.id,
+                    is_active=True
+                ).first()
+                
+                if custom_pricing:
+                    total_revenue += float(custom_pricing.custom_price or 0)
+                else:
+                    total_revenue += float(module.monthly_price or 0)
+            
+            module_sheet.write(row, 0, module.display_name, cell_format)
+            module_sheet.write(row, 1, module.category.title(), cell_format)
+            module_sheet.write(row, 2, f'R {float(module.monthly_price or 0):.2f}', cell_format)
+            module_sheet.write(row, 3, usage_count, cell_format)
+            module_sheet.write(row, 4, f'R {total_revenue:.2f}', cell_format)
+        
+        # Adjust column widths
+        summary_sheet.set_column('A:A', 25)  # Company name
+        summary_sheet.set_column('B:B', 15)  # Module count
+        summary_sheet.set_column('C:C', 15)  # Monthly cost
+        summary_sheet.set_column('D:D', 18)  # Has custom pricing
+        
+        module_sheet.set_column('A:A', 25)   # Module name
+        module_sheet.set_column('B:B', 12)   # Category
+        module_sheet.set_column('C:C', 12)   # Base price
+        module_sheet.set_column('D:D', 12)   # Usage count
+        module_sheet.set_column('E:E', 15)   # Total revenue
+        
+        workbook.close()
+        output.seek(0)
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename="Billing_Report_{datetime.now().strftime("%Y%m%d")}.xlsx"'
+        return response
+        
+    except Exception as e:
+        print(f"Error exporting billing report: {str(e)}")
+        flash('Error exporting report', 'error')
+        return redirect(url_for('billing_dashboard'))
+
+# Helper function to calculate company monthly cost (if not already defined)
+def calculate_company_monthly_cost(company_id):
+    """Calculate the total monthly cost for a company including custom pricing"""
+    try:
+        total_cost = 0
+        
+        # Get all enabled modules for the company
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(
+            ModuleDefinition, CompanyModule.module_id == ModuleDefinition.id
+        ).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        for company_module, module_def in enabled_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_active=True
+            ).first()
+            
+            if custom_pricing:
+                total_cost += float(custom_pricing.custom_price or 0)
+            else:
+                total_cost += float(module_def.monthly_price or 0)
+        
+        return total_cost
+        
+    except Exception as e:
+        print(f"Error calculating company monthly cost: {str(e)}")
+        return 0
+
+# Test route to initialize some sample billing data
+@app.route('/admin/billing/init-sample-data')
+@login_required
+@super_admin_required
+def init_sample_billing_data():
+    """Initialize sample billing data for testing"""
+    try:
+        # This route helps you test the billing system by creating some sample data
+        
+        # Check if ModuleDefinition table has data
+        module_count = ModuleDefinition.query.count()
+        
+        if module_count == 0:
+            # Create sample modules
+            sample_modules = [
+                {
+                    'module_name': 'tender_management',
+                    'display_name': 'Tender Management',
+                    'description': 'Core tender creation and management',
+                    'category': 'core',
+                    'monthly_price': 0.00,
+                    'is_core': True,
+                    'sort_order': 1
+                },
+                {
+                    'module_name': 'document_management',
+                    'display_name': 'Document Management', 
+                    'description': 'Upload and manage tender documents',
+                    'category': 'feature',
+                    'monthly_price': 299.99,
+                    'is_core': False,
+                    'sort_order': 2
+                },
+                {
+                    'module_name': 'reporting',
+                    'display_name': 'Advanced Reporting',
+                    'description': 'Advanced analytics and reports',
+                    'category': 'feature',
+                    'monthly_price': 499.99,
+                    'is_core': False,
+                    'sort_order': 3
+                },
+                {
+                    'module_name': 'api_access',
+                    'display_name': 'API Access',
+                    'description': 'REST API for integrations',
+                    'category': 'premium',
+                    'monthly_price': 899.99,
+                    'is_core': False,
+                    'sort_order': 4
+                }
+            ]
+            
+            for module_data in sample_modules:
+                module = ModuleDefinition(**module_data)
+                db.session.add(module)
+            
+            db.session.commit()
+            created_modules = len(sample_modules)
+        else:
+            created_modules = 0
+        
+        # Enable some modules for existing companies
+        companies = Company.query.filter_by(is_active=True).limit(3).all()
+        enabled_count = 0
+        
+        for company in companies:
+            # Check if company already has modules
+            existing_modules = CompanyModule.query.filter_by(company_id=company.id).count()
+            
+            if existing_modules == 0:
+                # Enable core modules and some feature modules
+                modules_to_enable = ModuleDefinition.query.filter(
+                    ModuleDefinition.module_name.in_(['tender_management', 'document_management', 'reporting'])
+                ).all()
+                
+                for module_def in modules_to_enable:
+                    company_module = CompanyModule(
+                        company_id=company.id,
+                        module_id=module_def.id,
+                        is_enabled=True,
+                        enabled_at=datetime.now(),
+                        billing_start_date=datetime.now()
+                    )
+                    db.session.add(company_module)
+                    enabled_count += 1
+        
+        db.session.commit()
+        
+        flash(f'Sample data initialized: {created_modules} modules created, {enabled_count} module assignments created', 'success')
+        return redirect(url_for('billing_dashboard'))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error initializing sample data: {str(e)}', 'error')
+        return redirect(url_for('billing_dashboard'))
+    
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

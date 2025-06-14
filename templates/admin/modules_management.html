@@ -1,0 +1,509 @@
+<!-- admin/modules_management.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .module-card {
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+        .module-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .category-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px 10px 0 0;
+        }
+        .usage-bar {
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .icon-picker {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .icon-option {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .icon-option:hover {
+            background-color: #f8f9fa;
+            border-color: #007bff;
+        }
+        .icon-option.selected {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .revenue-card {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        .usage-card {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+        .module-count-card {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col">
+                <h2><i class="fas fa-puzzle-piece"></i> Module Management</h2>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('admin_billing') }}">Billing</a></li>
+                        <li class="breadcrumb-item active">Module Management</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card module-count-card text-center p-3">
+                    <div class="card-body">
+                        <i class="fas fa-puzzle-piece fa-2x mb-2"></i>
+                        <h4>{{ modules_by_category.values() | sum(attribute='|length') | default(0) }}</h4>
+                        <p class="mb-0">Total Modules</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card usage-card text-center p-3">
+                    <div class="card-body">
+                        <i class="fas fa-chart-line fa-2x mb-2"></i>
+                        <h4>{{ (module_stats.values() | map(attribute='usage_percentage') | sum / module_stats.values() | length) | round(1) if module_stats else 0 }}%</h4>
+                        <p class="mb-0">Avg Usage</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card revenue-card text-center p-3">
+                    <div class="card-body">
+                        <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+                        <h4>R {{ "%.0f"|format(modules_by_category.values() | flatten | map(attribute='monthly_price') | select | sum | default(0)) }}</h4>
+                        <p class="mb-0">Total Revenue Potential</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white text-center p-3">
+                    <div class="card-body">
+                        <i class="fas fa-building fa-2x mb-2"></i>
+                        <h4>{{ module_stats.values() | first | attr('total_companies') | default(0) }}</h4>
+                        <p class="mb-0">Active Companies</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-bolt"></i> Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <a href="{{ url_for('create_module_definition') }}" class="btn btn-success">
+                            <i class="fas fa-plus"></i> Create New Module
+                        </a>
+                        <button class="btn btn-outline-primary" onclick="refreshModuleStats()">
+                            <i class="fas fa-sync-alt"></i> Refresh Statistics
+                        </button>
+                        <button class="btn btn-outline-warning" onclick="bulkEditPricing()">
+                            <i class="fas fa-dollar-sign"></i> Bulk Edit Pricing
+                        </button>
+                        <a href="{{ url_for('admin_billing') }}" class="btn btn-outline-info">
+                            <i class="fas fa-chart-line"></i> View Billing Dashboard
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="exportModules()">
+                            <i class="fas fa-download"></i> Export Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module Categories -->
+        {% for category, modules in modules_by_category.items() %}
+        <div class="card mb-4">
+            <div class="card-header category-header">
+                <h5 class="mb-0">
+                    {% if category == 'core' %}
+                        <i class="fas fa-shield-alt"></i> Core Modules
+                    {% elif category == 'feature' %}
+                        <i class="fas fa-star"></i> Feature Modules
+                    {% elif category == 'premium' %}
+                        <i class="fas fa-crown"></i> Premium Modules
+                    {% else %}
+                        <i class="fas fa-puzzle-piece"></i> {{ category|title }} Modules
+                    {% endif %}
+                    <span class="badge bg-light text-dark ms-2">{{ modules|length }} modules</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for module in modules %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card module-card border-{{ 'success' if module.is_active else 'secondary' }}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0">
+                                        <i class="{{ module.icon_class or 'fas fa-puzzle-piece' }}"></i>
+                                        {{ module.display_name }}
+                                    </h6>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item" href="{{ url_for('edit_module_definition', module_id=module.id) }}">
+                                                <i class="fas fa-edit"></i> Edit Module
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="{{ url_for('module_usage', module_id=module.id) }}">
+                                                <i class="fas fa-chart-bar"></i> View Usage
+                                            </a></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><a class="dropdown-item text-{% if module.is_active %}danger{% else %}success{% endif %}" 
+                                                   href="#" onclick="toggleModuleStatus({{ module.id }}, {{ module.is_active|lower }})">
+                                                <i class="fas fa-{% if module.is_active %}ban{% else %}check{% endif %}"></i> 
+                                                {% if module.is_active %}Deactivate{% else %}Activate{% endif %}
+                                            </a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <p class="card-text text-muted small mb-2">
+                                    {{ module.description or 'No description available' }}
+                                </p>
+                                
+                                <!-- Module Details -->
+                                <div class="mb-2">
+                                    <span class="badge bg-{{ 'primary' if module.category == 'core' else 'info' if module.category == 'feature' else 'warning' }} me-1">
+                                        {{ module.category|title }}
+                                    </span>
+                                    {% if module.is_core %}
+                                    <span class="badge bg-success">Core</span>
+                                    {% endif %}
+                                    {% if not module.is_active %}
+                                    <span class="badge bg-danger">Inactive</span>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Pricing -->
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="h6 mb-0 text-success">
+                                        {% if module.monthly_price > 0 %}
+                                            R {{ "%.2f"|format(module.monthly_price) }}/month
+                                        {% else %}
+                                            Free
+                                        {% endif %}
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-warning" 
+                                            onclick="editModulePrice({{ module.id }}, '{{ module.display_name }}', {{ module.monthly_price }})">
+                                        <i class="fas fa-dollar-sign"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- Usage Statistics -->
+                                {% set stats = module_stats[module.id] %}
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between text-muted small mb-1">
+                                        <span>Usage: {{ stats.enabled_count }}/{{ stats.total_companies }} companies</span>
+                                        <span>{{ "%.1f"|format(stats.usage_percentage) }}%</span>
+                                    </div>
+                                    <div class="usage-bar bg-light">
+                                        <div class="bg-primary h-100" style="width: {{ stats.usage_percentage }}%"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Revenue Estimate -->
+                                {% if module.monthly_price > 0 %}
+                                <div class="text-muted small">
+                                    Est. Monthly Revenue: R {{ "%.2f"|format(module.monthly_price * stats.enabled_count) }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Edit Price Modal -->
+    <div class="modal fade" id="editPriceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Module Price</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editPriceForm">
+                        <input type="hidden" id="edit_module_id">
+                        <div class="mb-3">
+                            <label class="form-label">Module Name</label>
+                            <input type="text" class="form-control" id="edit_module_name" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Monthly Price</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R</span>
+                                <input type="number" class="form-control" id="edit_module_price" step="0.01" min="0">
+                                <span class="input-group-text">/month</span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveModulePrice()">Save Price</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Edit Pricing Modal -->
+    <div class="modal fade" id="bulkPricingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Bulk Edit Module Pricing</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Apply to Category</label>
+                            <select class="form-select" id="bulk_category">
+                                <option value="">All Categories</option>
+                                <option value="core">Core Modules</option>
+                                <option value="feature">Feature Modules</option>
+                                <option value="premium">Premium Modules</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Price Action</label>
+                            <select class="form-select" id="bulk_action">
+                                <option value="set">Set Fixed Price</option>
+                                <option value="increase">Increase by %</option>
+                                <option value="decrease">Decrease by %</option>
+                                <option value="multiply">Multiply by</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Value</label>
+                            <div class="input-group">
+                                <span class="input-group-text" id="bulk_currency">R</span>
+                                <input type="number" class="form-control" id="bulk_value" step="0.01" min="0">
+                                <span class="input-group-text" id="bulk_unit">/month</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Preview:</strong> This will affect <span id="affected_modules">0</span> modules.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" onclick="applyBulkPricing()">Apply Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let editPriceModal, bulkPricingModal;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            editPriceModal = new bootstrap.Modal(document.getElementById('editPriceModal'));
+            bulkPricingModal = new bootstrap.Modal(document.getElementById('bulkPricingModal'));
+            
+            // Update bulk pricing preview
+            document.getElementById('bulk_action').addEventListener('change', updateBulkPricingUI);
+            document.getElementById('bulk_category').addEventListener('change', updateAffectedModules);
+        });
+
+        function editModulePrice(moduleId, moduleName, currentPrice) {
+            document.getElementById('edit_module_id').value = moduleId;
+            document.getElementById('edit_module_name').value = moduleName;
+            document.getElementById('edit_module_price').value = currentPrice;
+            editPriceModal.show();
+        }
+
+        function saveModulePrice() {
+            const moduleId = document.getElementById('edit_module_id').value;
+            const newPrice = document.getElementById('edit_module_price').value;
+            
+            if (!newPrice || newPrice < 0) {
+                alert('Please enter a valid price');
+                return;
+            }
+            
+            fetch(`/admin/modules/${moduleId}/update-price`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    monthly_price: parseFloat(newPrice)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    editPriceModal.hide();
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Error updating price: ' + error.message);
+            });
+        }
+
+        function toggleModuleStatus(moduleId, currentStatus) {
+            const action = currentStatus ? 'deactivate' : 'activate';
+            if (confirm(`Are you sure you want to ${action} this module?`)) {
+                fetch(`/admin/modules/${moduleId}/toggle-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        is_active: !currentStatus
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Error toggling module status: ' + error.message);
+                });
+            }
+        }
+
+        function bulkEditPricing() {
+            bulkPricingModal.show();
+            updateAffectedModules();
+        }
+
+        function updateBulkPricingUI() {
+            const action = document.getElementById('bulk_action').value;
+            const currencySpan = document.getElementById('bulk_currency');
+            const unitSpan = document.getElementById('bulk_unit');
+            
+            switch(action) {
+                case 'set':
+                    currencySpan.textContent = 'R';
+                    unitSpan.textContent = '/month';
+                    break;
+                case 'increase':
+                case 'decrease':
+                    currencySpan.textContent = '';
+                    unitSpan.textContent = '%';
+                    break;
+                case 'multiply':
+                    currencySpan.textContent = '×';
+                    unitSpan.textContent = '';
+                    break;
+            }
+        }
+
+        function updateAffectedModules() {
+            const category = document.getElementById('bulk_category').value;
+            let count = 0;
+            
+            document.querySelectorAll('.module-card').forEach(card => {
+                if (!category || card.closest('[data-category="' + category + '"]')) {
+                    count++;
+                }
+            });
+            
+            document.getElementById('affected_modules').textContent = count;
+        }
+
+        function applyBulkPricing() {
+            const category = document.getElementById('bulk_category').value;
+            const action = document.getElementById('bulk_action').value;
+            const value = document.getElementById('bulk_value').value;
+            
+            if (!value || value < 0) {
+                alert('Please enter a valid value');
+                return;
+            }
+            
+            if (confirm('Are you sure you want to apply these pricing changes?')) {
+                fetch('/admin/modules/bulk-update-pricing', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        category: category,
+                        action: action,
+                        value: parseFloat(value)
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        bulkPricingModal.hide();
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Error applying bulk pricing: ' + error.message);
+                });
+            }
+        }
+
+        function refreshModuleStats() {
+            location.reload();
+        }
+
+        function exportModules() {
+            window.open('/admin/modules/export', '_blank');
+        }
+    </script>
+</body>
+</html>

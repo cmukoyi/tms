@@ -1,0 +1,488 @@
+<!-- templates/admin/edit_role.html -->
+{% extends "base.html" %}
+
+{% block title %}Edit Role - {{ role.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-edit"></i> Edit Role: {{ role.name }}</h2>
+                <a href="{{ url_for('admin_roles') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Roles
+                </a>
+            </div>
+
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Role Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="name" class="form-label">Role Name *</label>
+                                            <input type="text" class="form-control" id="name" name="name" 
+                                                   value="{{ role.name }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="level" class="form-label">Role Level *</label>
+                                            <select class="form-select" id="level" name="level" required>
+                                                {% for value, label in role_levels %}
+                                                <option value="{{ value }}" {% if role.level == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="description" name="description" rows="2">{{ role.description or '' }}</textarea>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">Permissions *</label>
+                                    <div class="form-text mb-3">Select the permissions this role should have</div>
+                                    
+                                    <!-- Permission Categories -->
+                                    {% for category, permissions in permissions_by_category.items() %}
+                                    <div class="card border-light mb-3">
+                                        <div class="card-header bg-light">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <h6 class="mb-0">
+                                                    <i class="fas fa-folder"></i> {{ category }}
+                                                </h6>
+                                                <div>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                            onclick="selectCategoryPermissions('{{ category }}', true)">
+                                                        Select All
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                                            onclick="selectCategoryPermissions('{{ category }}', false)">
+                                                        Deselect All
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                {% for permission in permissions %}
+                                                <div class="col-md-6 mb-2">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input permission-checkbox" 
+                                                               type="checkbox" 
+                                                               name="permissions" 
+                                                               value="{{ permission.key }}" 
+                                                               id="perm_{{ permission.key }}"
+                                                               data-category="{{ category }}"
+                                                               {% if permission.key in current_permissions %}checked{% endif %}>
+                                                        <label class="form-check-label" for="perm_{{ permission.key }}">
+                                                            <strong>{{ permission.display_name }}</strong>
+                                                            <br><small class="text-muted">{{ permission.description }}</small>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <button type="button" class="btn btn-outline-success" onclick="selectAllPermissions()">
+                                            <i class="fas fa-check-double"></i> Select All
+                                        </button>
+                                        <button type="button" class="btn btn-outline-warning" onclick="clearAllPermissions()">
+                                            <i class="fas fa-times"></i> Clear All
+                                        </button>
+                                    </div>
+                                    <div>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-save"></i> Update Role
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <!-- Role Info -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Role Details</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <strong>Current Level:</strong> 
+                                <span class="badge bg-secondary">{{ role.level.replace('_', ' ').title() }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <strong>Users with this role:</strong> 
+                                <span class="badge bg-info">{{ role.users|length if role.users else 0 }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <strong>Current permissions:</strong> 
+                                <span id="selectedCount" class="badge bg-primary">{{ current_permissions|length }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Permission Summary -->
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Selected Permissions</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="selectedPermissions" class="small">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Initialize with current permissions
+let selectedPermissions = new Set({{ current_permissions|tojson }});
+
+// Update permission summary
+function updatePermissionSummary() {
+    const count = selectedPermissions.size;
+    document.getElementById('selectedCount').textContent = count;
+    
+    const summaryDiv = document.getElementById('selectedPermissions');
+    if (count === 0) {
+        summaryDiv.innerHTML = '<em class="text-muted">No permissions selected</em>';
+    } else {
+        const permissionNames = Array.from(selectedPermissions).map(perm => {
+            const checkbox = document.getElementById(`perm_${perm}`);
+            if (checkbox) {
+                const label = checkbox.nextElementSibling.querySelector('strong').textContent;
+                return `<div class="badge bg-light text-dark me-1 mb-1">${label}</div>`;
+            }
+            return '';
+        }).join('');
+        summaryDiv.innerHTML = permissionNames;
+    }
+}
+
+// Handle checkbox changes
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('permission-checkbox')) {
+        if (e.target.checked) {
+            selectedPermissions.add(e.target.value);
+        } else {
+            selectedPermissions.delete(e.target.value);
+        }
+        updatePermissionSummary();
+    }
+});
+
+// Select/deselect category permissions
+function selectCategoryPermissions(category, select) {
+    const checkboxes = document.querySelectorAll(`input[data-category="${category}"]`);
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = select;
+        if (select) {
+            selectedPermissions.add(checkbox.value);
+        } else {
+            selectedPermissions.delete(checkbox.value);
+        }
+    });
+    updatePermissionSummary();
+}
+
+// Select all permissions
+function selectAllPermissions() {
+    const checkboxes = document.querySelectorAll('.permission-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+        selectedPermissions.add(checkbox.value);
+    });
+    updatePermissionSummary();
+}
+
+// Clear all permissions
+function clearAllPermissions() {
+    const checkboxes = document.querySelectorAll('.permission-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    selectedPermissions.clear();
+    updatePermissionSummary();
+}
+
+// Initialize
+updatePermissionSummary();
+</script>
+{% endblock %}
+
+<!-- templates/admin/view_role_permissions.html -->
+{% extends "base.html" %}
+
+{% block title %}Role Permissions - {{ role.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-shield-alt"></i> {{ role.name }} Permissions</h2>
+                <div>
+                    <a href="{{ url_for('edit_role', role_id=role.id) }}" class="btn btn-primary me-2">
+                        <i class="fas fa-edit"></i> Edit Role
+                    </a>
+                    <a href="{{ url_for('admin_roles') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Roles
+                    </a>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-lg-8">
+                    <!-- Role Information -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">Role Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <strong>Role Name:</strong><br>
+                                    {{ role.name }}
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Level:</strong><br>
+                                    <span class="badge bg-secondary">{{ role.level.replace('_', ' ').title() }}</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Users:</strong><br>
+                                    <span class="badge bg-info">{{ user_count }}</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Permissions:</strong><br>
+                                    <span class="badge bg-primary">{{ permission_details.values()|sum(start=[])|length }}</span>
+                                </div>
+                            </div>
+                            {% if role.description %}
+                            <div class="mt-3">
+                                <strong>Description:</strong><br>
+                                {{ role.description }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Permissions by Category -->
+                    {% for category, permissions in permission_details.items() %}
+                    <div class="card mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-folder"></i> {{ category }}
+                                <span class="badge bg-light text-dark ms-2">{{ permissions|length }} permissions</span>
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for permission in permissions %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="d-flex align-items-start">
+                                        <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                        <div>
+                                            <strong>{{ permission.display_name }}</strong>
+                                            <br><small class="text-muted">{{ permission.description }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% if not permission_details %}
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                            <h5>No Permissions Assigned</h5>
+                            <p class="text-muted">This role has no permissions assigned. Users with this role will have very limited access.</p>
+                            <a href="{{ url_for('edit_role', role_id=role.id) }}" class="btn btn-primary">
+                                <i class="fas fa-edit"></i> Add Permissions
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-lg-4">
+                    <!-- Quick Stats -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Permission Summary</h6>
+                        </div>
+                        <div class="card-body">
+                            {% set total_permissions = permission_details.values()|sum(start=[])|length %}
+                            <canvas id="permissionChart" width="200" height="200"></canvas>
+                            
+                            <div class="mt-3">
+                                {% for category, permissions in permission_details.items() %}
+                                <div class="d-flex justify-content-between mb-1">
+                                    <small>{{ category }}</small>
+                                    <small><strong>{{ permissions|length }}</strong></small>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users with this Role -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Users with this Role</h6>
+                        </div>
+                        <div class="card-body">
+                            {% if user_count > 0 %}
+                                <p><strong>{{ user_count }}</strong> users have this role</p>
+                                <a href="{{ url_for('admin_users') }}?role={{ role.id }}" class="btn btn-sm btn-outline-primary">
+                                    View Users
+                                </a>
+                            {% else %}
+                                <p class="text-muted">No users currently have this role</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Role Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Actions</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <a href="{{ url_for('edit_role', role_id=role.id) }}" class="btn btn-primary">
+                                    <i class="fas fa-edit"></i> Edit Role
+                                </a>
+                                <button class="btn btn-outline-info" onclick="exportPermissions()">
+                                    <i class="fas fa-download"></i> Export Permissions
+                                </button>
+                                {% if role.level not in ['super_admin', 'company_admin', 'procurement_manager', 'vendor', 'viewer'] %}
+                                <button class="btn btn-outline-danger" onclick="confirmDelete()">
+                                    <i class="fas fa-trash"></i> Delete Role
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the role <strong>{{ role.name }}</strong>?</p>
+                {% if user_count > 0 %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    This role is currently assigned to {{ user_count }} user(s). 
+                    You must reassign these users before deleting this role.
+                </div>
+                {% else %}
+                <p class="text-danger"><small>This action cannot be undone.</small></p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                {% if user_count == 0 %}
+                <form action="{{ url_for('delete_role', role_id=role.id) }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Delete Role</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Create permission chart
+const ctx = document.getElementById('permissionChart').getContext('2d');
+const permissionData = {
+    {% for category, permissions in permission_details.items() %}
+    '{{ category }}': {{ permissions|length }},
+    {% endfor %}
+};
+
+const chart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: Object.keys(permissionData),
+        datasets: [{
+            data: Object.values(permissionData),
+            backgroundColor: [
+                '#007bff', '#28a745', '#ffc107', '#dc3545', 
+                '#6f42c1', '#20c997', '#fd7e14', '#e83e8c'
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+function confirmDelete() {
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+function exportPermissions() {
+    const permissions = {{ permission_details|tojson }};
+    const roleData = {
+        name: '{{ role.name }}',
+        level: '{{ role.level }}',
+        description: '{{ role.description or "" }}',
+        permissions: permissions
+    };
+    
+    const dataStr = JSON.stringify(roleData, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(dataBlob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '{{ role.name.replace(" ", "_") }}_permissions.json';
+    link.click();
+    
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

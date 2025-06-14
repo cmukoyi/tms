@@ -501,10 +501,6 @@ class ModuleDefinition(db.Model):
     def __repr__(self):
         return f'<ModuleDefinition {self.display_name}>'
 
-
-# Add this CompanyModule class to your models/__init__.py file
-# Place it AFTER the ModuleDefinition class and BEFORE the Feature class
-
 class CompanyModule(db.Model):
     """Company module assignments with pricing support"""
     __tablename__ = 'company_modules'
@@ -513,20 +509,17 @@ class CompanyModule(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
     module_id = db.Column(db.Integer, db.ForeignKey('module_definitions.id'), nullable=False)
     is_enabled = db.Column(db.Boolean, default=True, nullable=False)
-    enabled_at = db.Column(db.DateTime, default=datetime.utcnow)
+    enabled_at = db.Column(db.DateTime)
     enabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     disabled_at = db.Column(db.DateTime)
     disabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    monthly_cost = db.Column(db.Numeric(10, 2), default=0.00)
+    billing_start_date = db.Column(db.DateTime)
     notes = db.Column(db.Text)
-    billing_start_date = db.Column(db.DateTime, default=datetime.utcnow)
-    billing_end_date = db.Column(db.DateTime)
-    monthly_cost = db.Column(Numeric(10, 2), default=0.00)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
+    # FIXED: Clean relationships without conflicts
     company = db.relationship('Company', backref='company_modules')
-    module_definition = db.relationship('ModuleDefinition', backref='company_module_assignments')
+    module_definition = db.relationship('ModuleDefinition', backref='company_modules')
     enabled_by_user = db.relationship('User', foreign_keys=[enabled_by])
     disabled_by_user = db.relationship('User', foreign_keys=[disabled_by])
     
@@ -548,6 +541,136 @@ class CompanyModule(db.Model):
         # Return default price from module definition
         if self.module_definition:
             return float(self.module_definition.monthly_price) if self.module_definition.monthly_price else 0.0
+        
+        return 0.0
+    
+    def has_custom_pricing(self):
+        """Check if this company module has custom pricing"""
+        return CompanyModulePricing.query.filter_by(
+            company_id=self.company_id,
+            module_id=self.module_id,
+            is_active=True
+        ).first() is not None
+    
+    def get_pricing_history(self):
+        """Get pricing history for this company module"""
+        return CompanyModulePricing.query.filter_by(
+            company_id=self.company_id,
+            module_id=self.module_id
+        ).order_by(CompanyModulePricing.effective_date.desc()).all()
+    
+    @staticmethod
+    def get_enabled_modules(company_id):
+        """Get list of enabled module names for a company"""
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        return [module_def.module_name for cm, module_def in enabled_modules]
+    
+    @staticmethod
+    def get_monthly_cost(company_id):
+        """Get total monthly cost for a company"""
+        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
+            CompanyModule.company_id == company_id,
+            CompanyModule.is_enabled == True
+        ).all()
+        
+        total_cost = 0.0
+        for cm, module_def in enabled_modules:
+            # Check for custom pricing
+            custom_pricing = CompanyModulePricing.query.filter_by(
+                company_id=company_id,
+                module_id=module_def.id,
+                is_active=True
+            ).order_by(CompanyModulePricing.effective_date.desc()).first()
+            
+            if custom_pricing:
+                total_cost += float(custom_pricing.custom_price)
+            else:
+                total_cost += float(module_def.monthly_price) if module_def.monthly_price else 0.0
+        
+        return total_cost
+    
+    @staticmethod
+    def is_module_enabled(company_id, module_name):
+        """Check if a specific module is enabled for a company"""
+        result = db.session.query(CompanyModule).join(ModuleDefinition).filter(
+            CompanyModule.company_id == company_id,
+            ModuleDefinition.module_name == module_name,
+            CompanyModule.is_enabled == True
+        ).first()
+        
+        return result is not None
+    
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'company_id': self.company_id,
+            'module_id': self.module_id,
+            'module_name': self.module_definition.module_name if self.module_definition else None,
+            'module_display_name': self.module_definition.display_name if self.module_definition else None,
+            'is_enabled': self.is_enabled,
+            'enabled_at': self.enabled_at.isoformat() if self.enabled_at else None,
+            'monthly_cost': float(self.monthly_cost) if self.monthly_cost else 0.0,
+            'effective_price': self.get_effective_price(),
+            'has_custom_pricing': self.has_custom_pricing(),
+            'billing_start_date': self.billing_start_date.isoformat() if self.billing_start_date else None,
+            'notes': self.notes
+        }
+    
+    def __repr__(self):
+        return f'<CompanyModule {self.company_id}-{self.module_id}>'
+
+    def __str__(self):
+        module_name = self.module_definition.module_name if self.module_definition else f'Module#{self.module_id}'
+        return f"Company {self.company_id} - {module_name}"
+
+class CompanyModule(db.Model):
+    """Company module assignments with pricing support"""
+    __tablename__ = 'company_modules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    module_id = db.Column(db.Integer, db.ForeignKey('module_definitions.id'), nullable=False)
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    enabled_at = db.Column(db.DateTime)
+    enabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    disabled_at = db.Column(db.DateTime)
+    disabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    monthly_cost = db.Column(db.Numeric(10, 2), default=0.00)
+    billing_start_date = db.Column(db.DateTime)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships - FIXED: Changed backref name to avoid conflict
+    company = db.relationship('Company', backref='company_modules')
+    module = db.relationship('ModuleDefinition', backref='module_assignments')  # Changed from 'company_modules'
+    enabled_by_user = db.relationship('User', foreign_keys=[enabled_by])
+    disabled_by_user = db.relationship('User', foreign_keys=[disabled_by])
+    
+   
+    # Unique constraint
+    __table_args__ = (db.UniqueConstraint('company_id', 'module_id', name='unique_company_module'),)
+    
+    def get_effective_price(self):
+        """Get the effective price for this company module (custom or default)"""
+        # Check for custom pricing
+        custom_pricing = CompanyModulePricing.query.filter_by(
+            company_id=self.company_id,
+            module_id=self.module_id,
+            is_active=True
+        ).order_by(CompanyModulePricing.effective_date.desc()).first()
+        
+        if custom_pricing:
+            return float(custom_pricing.custom_price)
+        
+        # Return default price from module definition
+        if self.module:
+            return float(self.module.monthly_price) if self.module.monthly_price else 0.0
         
         return 0.0
     
@@ -693,8 +816,8 @@ class CompanyModule(db.Model):
             'id': self.id,
             'company_id': self.company_id,
             'module_id': self.module_id,
-            'module_name': self.module_definition.module_name if self.module_definition else None,
-            'module_display_name': self.module_definition.display_name if self.module_definition else None,
+            'module_name': self.module.module_name if self.module else None,
+            'module_display_name': self.module.display_name if self.module else None,
             'is_enabled': self.is_enabled,
             'enabled_at': self.enabled_at.isoformat() if self.enabled_at else None,
             'monthly_cost': float(self.monthly_cost) if self.monthly_cost else 0.0,
@@ -708,10 +831,8 @@ class CompanyModule(db.Model):
         return f'<CompanyModule {self.company_id}-{self.module_id}>'
 
     def __str__(self):
-        module_name = self.module_definition.module_name if self.module_definition else f'Module#{self.module_id}'
+        module_name = self.module.module_name if self.module else f'Module#{self.module_id}'
         return f"Company {self.company_id} - {module_name}"
-
-
 
 class Feature(db.Model):
     """Legacy feature model"""
