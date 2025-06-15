@@ -470,6 +470,11 @@
                     <i class="fas fa-user me-2"></i> My Profile
                   </a>
                 </li>
+                 <li>
+                  <a class="dropdown-item" href="{{ url_for('my_company_profile') }}">
+                    <i class="fas fa-user me-2"></i> Company Profile
+                  </a>
+                </li>
                 {% if session.is_super_admin %}
                 <li>
                   <a class="dropdown-item" href="{{ url_for('admin_users') }}">

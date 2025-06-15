@@ -58,18 +58,17 @@ document.querySelectorAll('input[name="setup_option"]').forEach(radio => {
             document.querySelectorAll('.module-checkbox:not(:disabled)').forEach(cb => {
                 cb.checked = false;
             });
-        } else if (this.value === 'standard') {
-            customSelection.style.display = 'none';
-            includeFeatures.checked = true;
-            // Check feature modules, uncheck premium
-            document.querySelectorAll('.module-checkbox').forEach(cb => {
-                const moduleName = cb.value;
-                const module = {{ available_modules | tojson }}.find(m => m.module_name === moduleName);
-
-                if (module) {
-                    cb.checked = module.is_core || module.category === 'feature';
-                }
-            });
+       } else if (this.value === 'standard') {
+    customSelection.style.display = 'none';
+    includeFeatures.checked = true;
+    // Check feature modules, uncheck premium
+    document.querySelectorAll('.module-checkbox').forEach(cb => {
+        const moduleName = cb.value;
+        const module = {{ available_modules | tojson }}.find(m => m.module_name === moduleName);
+        if (module) {
+            cb.checked = module.is_core || module.category === 'feature';
+        }
+    });
         } else if (this.value === 'premium') {
             customSelection.style.display = 'none';
             includeFeatures.checked = true;

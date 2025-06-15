@@ -7,6 +7,8 @@ from sqlalchemy import Numeric
 
 
 
+
+
 db = SQLAlchemy()
 
 def __str__(self):
@@ -296,6 +298,13 @@ class User(db.Model):
 
     def __str__(self):
         return self.name
+    
+    def can_access_company(self, company_id):
+        """Check if user can access a specific company"""
+        if self.is_super_admin:
+            return True
+        return self.company_id == company_id
+
 class TenderCategory(db.Model):
     __tablename__ = 'tender_categories'
     
@@ -886,3 +895,64 @@ class BillLineItem(db.Model):
 
 # Add this alias for backward compatibility
 Bill = MonthlyBill  # This allows existing code to use Bill instead of MonthlyBill
+
+class Document(db.Model):
+    __tablename__ = 'documents'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False)
+    file_size = db.Column(db.Integer, nullable=True)
+    file_type = db.Column(db.String(100), nullable=True)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships without backrefs to avoid conflicts
+    tender = db.relationship('Tender')
+    company = db.relationship('Company')
+    uploaded_by = db.relationship('User')
+    
+    def __repr__(self):
+        return f'<Document {self.original_filename}>'
+
+# Add this to your models.py or models file
+
+class CompanyDocument(db.Model):
+    __tablename__ = 'company_documents'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    document_name = db.Column(db.String(255), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    file_size = db.Column(db.Integer)
+    mime_type = db.Column(db.String(100))
+    document_category = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    company = db.relationship('Company', backref='documents')
+    uploader = db.relationship('User', backref='uploaded_company_docs')
+    
+    def __repr__(self):
+        return f'<CompanyDocument {self.document_name}>'
+    
+    @property
+    def file_size_human(self):
+        """Return human readable file size"""
+        if not self.file_size:
+            return "Unknown"
+        
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if self.file_size < 1024.0:
+                return f"{self.file_size:.1f} {unit}"
+            self.file_size /= 1024.0
+        return f"{self.file_size:.1f} TB"

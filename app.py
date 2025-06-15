@@ -1,71 +1,18 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
-from functools import wraps
-import os
-import pymysql
-import json
-from datetime import datetime
-from flask import jsonify, request
-from flask_login import current_user
-from markupsafe import Markup
-
-from services.billing_service import BillingService
-from decimal import Decimal
-import calendar
+from imports import *
 
 
-from sqlalchemy import func, and_, or_
-
-
-pymysql.install_as_MySQLdb()
-from datetime import datetime, timedelta
-from flask_migrate import Migrate
-from werkzeug.utils import secure_filename
-
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import tzlocal  # optional helper to get local timezone name, install with: pip install tzlocal
-from services.company_module_service import CompanyModuleService, require_company_module
-from services import CompanyService
-from permissions import ModulePermissions, require_module, require_company_admin
-
-
-
-# In app.py, instead of:
-from services import AuthService
-
-# Use:
-from services import AuthService  # This will import from your original services.py file
-from services.module_service import ModuleService
-# Import our modules
-from config import Config
-from models import *
-
-from services import (
-    AuthService, CompanyService, RoleService, TenantService,
-    TenderService, TenderCategoryService, TenderStatusService, 
-    DocumentTypeService, TenderDocumentService, CustomFieldService, TenderHistoryService
-)
-
-from services.role_service import RoleService
-from permissions import require_permission, require_role_level
-
-from dotenv import load_dotenv
-load_dotenv()
-print(f"Loaded environment variables from: {' .env.production' if 'PYTHONANYWHERE_DOMAIN' in os.environ else '.env'}")
-
-from flask import make_response, request
-from datetime import datetime
-import io
-import xlsxwriter
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.units import inch
-
-
-# Initialize Flask app
 app = Flask(__name__)
+
+app.config.from_object(Config)
+app.config['UPLOAD_FOLDER'] = 'uploads'  # Add this line here
+
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user for Flask-Login"""
+    return AuthService.get_user_by_id(user_id)
+
 
 @app.template_filter('tojsonfilter')
 def to_json_filter(obj):
@@ -3501,15 +3448,37 @@ def view_document(document_id):
 @login_required
 def download_document(document_id):
     """Download a document"""
-    document = Document.query.filter_by(
-        id=document_id, 
-        company_id=current_user.company_id
-    ).first_or_404()
-    
-    # For now, just redirect back with a message
-    # You'll need to implement actual file serving
-    flash(f'Download feature for "{document.title}" coming soon', 'info')
-    return redirect(url_for('documents'))
+    try:
+        # Use your session-based authentication instead of current_user
+        user = AuthService.get_user_by_id(session['user_id'])
+        
+        if not user:
+            flash('Please log in to download documents.', 'error')
+            return redirect(url_for('login'))
+        
+        # Get the document
+        document = TenderDocument.query.get_or_404(document_id)
+        
+        # Check access permissions
+        if not user.is_super_admin and document.tender.company_id != user.company_id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('tenders'))
+        
+        # Serve the file
+        try:
+            return send_file(
+                document.file_path,
+                as_attachment=True,
+                download_name=document.original_filename,
+                mimetype=document.mime_type
+            )
+        except FileNotFoundError:
+            flash('File not found on server.', 'error')
+            return redirect(request.referrer or url_for('tenders'))
+            
+    except Exception as e:
+        flash(f'Error downloading file: {str(e)}', 'error')
+        return redirect(request.referrer or url_for('tenders'))
 
 @app.route('/documents/<int:document_id>/delete', methods=['POST'])
 @login_required
@@ -3674,55 +3643,360 @@ def request_module():
     except Exception as e:
         return jsonify({'success': False, 'message': f'Error submitting request: {str(e)}'})
 
+   
+    
+    # ... rest of function
 @app.route('/my-company/profile')
 @login_required  
 def my_company_profile():
     """View current user's company profile"""
-    if not current_user.company_id:
-        flash('No company associated with your account', 'error')
-        return redirect(url_for('home'))
-    
-    company = Company.query.get_or_404(current_user.company_id)
-    
-    # Get company statistics
-    total_users = User.query.filter_by(company_id=company.id).count()
-    active_users = User.query.filter_by(company_id=company.id, is_active=True).count()
-    
-    # Get document count if Document model exists
+    print(f"Session contents: {dict(session)}")
+    print(f"User ID from session: {session.get('user_id')}")
     try:
-        total_documents = Document.query.filter_by(company_id=company.id).count()
-    except:
-        total_documents = 0
-    
-    # Get tender count if Tender model exists  
-    try:
-        total_tenders = Tender.query.filter_by(company_id=company.id).count()
-    except:
-        total_tenders = 0
-    
-    company_stats = type('CompanyStats', (), {
-        'total_users': total_users,
-        'active_users': active_users,
-        'total_documents': total_documents,
-        'total_tenders': total_tenders
-    })()
-    
-    return render_template('my_company_profile.html',
-                         company=company,
-                         company_stats=company_stats)
+        # Use your session-based authentication instead of current_user
+        user = AuthService.get_user_by_id(session['user_id'])
+        
+        if not user:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        
+        if not user.company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        # Get company documents grouped by category
+        documents = CompanyDocument.query.filter_by(company_id=user.company_id).order_by(
+            CompanyDocument.document_category, 
+            CompanyDocument.created_at.desc()
+        ).all()
+        
+        # Group documents by category
+        document_categories = {}
+        for doc in documents:
+            if doc.document_category not in document_categories:
+                document_categories[doc.document_category] = []
+            document_categories[doc.document_category].append(doc)
+        
+        # Define available document categories
+        available_categories = [
+            'Directors ID Documents',
+            'Share Certificates',
+            'Company Registration',
+            'Tax Certificates',
+            'Bank Statements',
+            'Financial Statements',
+            'BEE Certificates',
+            'Insurance Documents',
+            'Other Certificates',
+            'Other Documents'
+        ]
+        
+        return render_template('company/profile.html', 
+                             company=user.company,
+                             document_categories=document_categories,
+                             available_categories=available_categories,
+                             user=user)
+        
+    except Exception as e:
+        flash(f'Error loading company profile: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
  
-@app.route('/debug-routes')
-def debug_routes():
-    import urllib
-    output = []
-    for rule in app.url_map.iter_rules():
-        output.append(f"{rule.endpoint}: {rule}")
-    return '<br>'.join(output)
+@app.route('/upload_company_document', methods=['POST'])
+@login_required
+def upload_company_document():
+    """Upload a company document"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company:
+            flash('Company information not found.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Get form data
+        document_name = request.form.get('document_name', '').strip()
+        document_category = request.form.get('document_category', '').strip()
+        description = request.form.get('description', '').strip()
+        
+        if not document_name or not document_category:
+            flash('Document name and category are required.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Handle file upload
+        if 'document_file' not in request.files:
+            flash('No file selected.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        file = request.files['document_file']
+        if file.filename == '':
+            flash('No file selected.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        if file:
+            # Secure the filename
+            original_filename = secure_filename(file.filename)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{user.company_id}_{timestamp}_{original_filename}"
+            
+            # Create company documents folder
+            company_docs_folder = os.path.join(
+                app.config.get('UPLOAD_FOLDER', 'uploads'), 
+                'company_docs',
+                str(user.company_id)
+            )
+            os.makedirs(company_docs_folder, exist_ok=True)
+            
+            # Save file
+            file_path = os.path.join(company_docs_folder, filename)
+            file.save(file_path)
+            
+            # Get file info
+            file_size = os.path.getsize(file_path)
+            mime_type = file.content_type or 'application/octet-stream'
+            
+            # Save to database
+            company_doc = CompanyDocument(
+                company_id=user.company_id,
+                document_name=document_name,
+                original_filename=original_filename,
+                filename=filename,
+                file_path=file_path,
+                file_size=file_size,
+                mime_type=mime_type,
+                document_category=document_category,
+                description=description,
+                uploaded_by=user.id
+            )
+            
+            db.session.add(company_doc)
+            db.session.commit()
+            
+            flash(f'Document "{document_name}" uploaded successfully.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error uploading document: {str(e)}', 'error')
+    
+    return redirect(url_for('my_company_profile'))
 
+@app.route('/upload_company_logo', methods=['POST'])
+@login_required
+def upload_company_logo():
+    """Upload company logo"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company:
+            flash('Company information not found.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Handle file upload
+        if 'logo_file' not in request.files:
+            flash('No logo file selected.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        file = request.files['logo_file']
+        if file.filename == '':
+            flash('No logo file selected.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Validate file type
+        allowed_types = {'image/jpeg', 'image/jpg', 'image/png', 'image/gif'}
+        if file.content_type not in allowed_types:
+            flash('Invalid file type. Please upload JPG, PNG, or GIF images only.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Validate file size (2MB max)
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+        
+        if file_size > 2 * 1024 * 1024:  # 2MB
+            flash('Logo file too large. Maximum size is 2MB.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        if file:
+            # Delete existing logo if exists
+            if user.company.has_logo:
+                user.company.delete_logo()
+            
+            # Secure the filename
+            filename = secure_filename(file.filename)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            logo_filename = f"logo_{user.company_id}_{timestamp}_{filename}"
+            
+            # Create company logos folder
+            logos_folder = os.path.join(
+                app.config.get('UPLOAD_FOLDER', 'uploads'), 
+                'company_logos'
+            )
+            os.makedirs(logos_folder, exist_ok=True)
+            
+            # Save file
+            logo_path = os.path.join(logos_folder, logo_filename)
+            file.save(logo_path)
+            
+            # Update company record
+            user.company.logo_filename = logo_filename
+            user.company.logo_file_path = logo_path
+            user.company.logo_mime_type = file.content_type
+            user.company.logo_file_size = file_size
+            user.company.logo_uploaded_at = datetime.now()
+            
+            db.session.commit()
+            
+            flash('Company logo uploaded successfully!', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error uploading logo: {str(e)}', 'error')
+    
+    return redirect(url_for('my_company_profile'))
 
+@app.route('/download_company_document/<int:document_id>')
+@login_required
+def download_company_document(document_id):
+    """Download a company document"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user:
+            flash('Please log in to download documents.', 'error')
+            return redirect(url_for('login'))
+        
+        # Get the document
+        document = CompanyDocument.query.get_or_404(document_id)
+        
+        # Check access permissions
+        if not user.is_super_admin and document.company_id != user.company_id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Check if file exists
+        if not os.path.exists(document.file_path):
+            flash('File not found on server.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Serve the file
+        return send_file(
+            document.file_path,
+            as_attachment=True,
+            download_name=document.original_filename,
+            mimetype=document.mime_type
+        )
+        
+    except Exception as e:
+        flash(f'Error downloading file: {str(e)}', 'error')
+        return redirect(url_for('my_company_profile'))
 
+@app.route('/view_company_document/<int:document_id>')
+@login_required
+def view_company_document(document_id):
+    """View a company document inline (for PDFs and images)"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user:
+            flash('Please log in to view documents.', 'error')
+            return redirect(url_for('login'))
+        
+        # Get the document
+        document = CompanyDocument.query.get_or_404(document_id)
+        
+        # Check access permissions
+        if not user.is_super_admin and document.company_id != user.company_id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Check if file exists
+        if not os.path.exists(document.file_path):
+            flash('File not found on server.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Serve the file for inline viewing
+        return send_file(
+            document.file_path,
+            as_attachment=False,
+            mimetype=document.mime_type
+        )
+        
+    except Exception as e:
+        flash(f'Error viewing file: {str(e)}', 'error')
+        return redirect(url_for('my_company_profile'))
 
+@app.route('/delete_company_document/<int:document_id>', methods=['POST'])
+@login_required
+def delete_company_document(document_id):
+    """Delete a company document"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user:
+            flash('Access denied.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Get the document
+        document = CompanyDocument.query.get_or_404(document_id)
+        
+        # Check access permissions
+        if not user.is_super_admin and document.company_id != user.company_id:
+            flash('Access denied.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        # Delete file from disk
+        try:
+            if os.path.exists(document.file_path):
+                os.remove(document.file_path)
+        except Exception as e:
+            print(f"Error deleting file from disk: {str(e)}")
+        
+        # Delete from database
+        db.session.delete(document)
+        db.session.commit()
+        
+        flash(f'Document "{document.document_name}" deleted successfully.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting document: {str(e)}', 'error')
+    
+    return redirect(url_for('my_company_profile'))
 
+@app.route('/delete_company_logo', methods=['POST'])
+@login_required
+def delete_company_logo():
+    """Delete company logo"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company:
+            flash('Company information not found.', 'error')
+            return redirect(url_for('my_company_profile'))
+        
+        if user.company.has_logo:
+            user.company.delete_logo()
+            db.session.commit()
+            flash('Company logo deleted successfully.', 'success')
+        else:
+            flash('No logo to delete.', 'info')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting logo: {str(e)}', 'error')
+    
+    return redirect(url_for('my_company_profile'))
+
+@app.route('/company_logo/<int:company_id>')
+def company_logo(company_id):
+    """Serve company logo"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        
+        if not company.has_logo or not os.path.exists(company.logo_file_path):
+            # Return default logo
+            return send_from_directory('static/images', 'default-company-logo.png')
+        
+        return send_file(
+            company.logo_file_path,
+            mimetype=company.logo_mime_type
+        )
+        
+    except Exception as e:
+        # Return default logo on error
+        return send_from_directory('static/images', 'default-company-logo.png')
 
 @app.route('/admin/billing/bills/export')
 @super_admin_required
@@ -5732,7 +6006,800 @@ def init_sample_billing_data():
         db.session.rollback()
         flash(f'Error initializing sample data: {str(e)}', 'error')
         return redirect(url_for('billing_dashboard'))
+
+# Add this to your app.py file
+
+from flask import request, flash, redirect, url_for, render_template
+from werkzeug.utils import secure_filename
+import os
+from datetime import datetime, timedelta
+import json
+
+# Replace the quote route with this version that works with your permission system
+
+@app.route('/tenders/<int:tender_id>/create-quote', methods=['GET', 'POST'])
+@login_required
+@require_module('tender_management')
+def create_quote(tender_id):
+    """Create a quote for a tender using Jinja templating"""
+    tender = Tender.query.get_or_404(tender_id)
+    current_user = AuthService.get_user_by_id(session['user_id'])
     
+    if not current_user:
+        flash('User session invalid. Please log in again.', 'error')
+        return redirect(url_for('login'))
+    
+    # Check access permissions
+    if not current_user.is_super_admin and current_user.company_id != tender.company_id:
+        flash('Access denied.', 'error')
+        return redirect(url_for('tenders'))
+    
+    if request.method == 'POST':
+        try:
+            # Import here to avoid circular import
+            from models import TenderDocument, DocumentType
+            
+            # Get form data
+            quote_ref = request.form.get('quote_ref')
+            quote_date = datetime.strptime(request.form.get('quote_date'), '%Y-%m-%d').date()
+            valid_until = datetime.strptime(request.form.get('valid_until'), '%Y-%m-%d').date()
+            client_name = request.form.get('client_name')
+            client_contact = request.form.get('client_contact', '')
+            notes = request.form.get('notes', '')
+            export_format = request.form.get('export_format', 'pdf')  # Get format choice
+            
+            # Get totals
+            subtotal = float(request.form.get('subtotal', 0))
+            vat_amount = float(request.form.get('vat_amount', 0))
+            total_amount = float(request.form.get('total_amount', 0))
+            
+            # Process quote items
+            items = []
+            item_index = 0
+            while f'items[{item_index}][description]' in request.form:
+                description = request.form.get(f'items[{item_index}][description]')
+                qty = float(request.form.get(f'items[{item_index}][qty]', 0))
+                unit_price = float(request.form.get(f'items[{item_index}][unit_price]', 0))
+                item_total = float(request.form.get(f'items[{item_index}][total]', 0))
+                
+                if description and qty > 0 and unit_price > 0:
+                    items.append({
+                        'description': description,
+                        'qty': qty,
+                        'unit_price': unit_price,
+                        'total': item_total
+                    })
+                item_index += 1
+            
+            if not items:
+                flash('Please add at least one item to the quote.', 'error')
+                return render_template('tenders/create_quote.html', 
+                                     tender=tender, 
+                                     quote_counter=get_next_quote_counter())
+            
+            # Generate quote content based on format
+            quote_data = {
+                'tender': tender,
+                'quote_ref': quote_ref,
+                'quote_date': quote_date,
+                'valid_until': valid_until,
+                'client_name': client_name,
+                'client_contact': client_contact,
+                'notes': notes,
+                'items': items,
+                'subtotal': subtotal,
+                'vat_amount': vat_amount,
+                'total_amount': total_amount,
+                'current_user': current_user
+            }
+            
+            if export_format == 'excel':
+                file_content, filename, content_type = generate_quote_excel(quote_data)
+            else:  # Default to PDF
+                file_content, filename, content_type = generate_quote_pdf(quote_data)
+            
+            # Save file to disk
+            upload_folder = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), str(tender.company_id))
+            os.makedirs(upload_folder, exist_ok=True)
+            file_path = os.path.join(upload_folder, filename)
+            
+            with open(file_path, 'wb') as f:
+                f.write(file_content)
+            
+            # Get or create Quote document type
+            quote_doc_type = DocumentType.query.filter_by(name='Quote').first()
+            if not quote_doc_type:
+                quote_doc_type = DocumentType(
+                    name='Quote', 
+                    description='System generated quotes'
+                )
+                db.session.add(quote_doc_type)
+                db.session.flush()
+            
+            # Create TenderDocument record
+            tender_document = TenderDocument(
+            tender_id=tender.id,
+            filename=filename,  # This is the stored filename
+            original_filename=filename,  # This is the original filename
+            file_path=file_path,  # Full path to the file
+            file_size=len(file_content),
+            mime_type=content_type,  # The content type (application/pdf, etc.)
+            document_type_id=quote_doc_type.id,  # Note: it's document_type_id, not doc_type_id
+            uploaded_by=current_user.id  # Note: it's uploaded_by, not uploaded_by_id
+        )
+            # Add to session and commit        
+            db.session.add(tender_document)
+            db.session.commit()
+            
+            flash(f'Quote {quote_ref} created successfully as {export_format.upper()} and saved to documents.', 'success')
+            return redirect(url_for('view_tender', tender_id=tender.id))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error creating quote: {str(e)}', 'error')
+            import traceback
+            print(f"Quote creation error: {traceback.format_exc()}")
+            return render_template('tenders/create_quote.html', 
+                                 tender=tender, 
+                                 quote_counter=get_next_quote_counter())
+    
+    # GET request - show the form
+    return render_template('tenders/create_quote.html', 
+                         tender=tender, 
+                         quote_counter=get_next_quote_counter())
+
+
+def generate_quote_pdf(quote_data):
+    """Generate PDF quote"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.units import inch
+        import io
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*inch)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            textColor=colors.darkblue,
+            spaceAfter=30,
+            alignment=1
+        )
+        story.append(Paragraph(f"QUOTATION - {quote_data['quote_ref']}", title_style))
+        
+        # Company info
+        if quote_data['current_user'].company:
+            company = quote_data['current_user'].company
+            company_info = f"<b>{company.name}</b><br/>"
+            if company.address:
+                company_info += f"{company.address}<br/>"
+            if company.phone:
+                company_info += f"Phone: {company.phone}<br/>"
+            if company.email:
+                company_info += f"Email: {company.email}"
+        else:
+            company_info = "<b>Your Company Name</b><br/>Your Address<br/>Phone: +27 XXX XXX XXXX<br/>Email: info@company.com"
+        
+        story.append(Paragraph(company_info, styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Quote details
+        quote_info = [
+            ['Quote Date:', quote_data['quote_date'].strftime('%d %B %Y')],
+            ['Valid Until:', quote_data['valid_until'].strftime('%d %B %Y')],
+            ['Client:', quote_data['client_name']],
+            ['Contact:', quote_data['client_contact'] or 'N/A'],
+            ['Tender:', quote_data['tender'].title],
+        ]
+        
+        quote_table = Table(quote_info, colWidths=[2*inch, 4*inch])
+        quote_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        
+        story.append(quote_table)
+        story.append(Spacer(1, 30))
+        
+        # Items table
+        story.append(Paragraph("Quote Items", styles['Heading3']))
+        
+        table_data = [['Description', 'Qty', 'Unit Price', 'Total']]
+        
+        for item in quote_data['items']:
+            table_data.append([
+                item['description'],
+                f"{item['qty']:.0f}" if item['qty'] == int(item['qty']) else f"{item['qty']:.2f}",
+                f"R {item['unit_price']:,.2f}",
+                f"R {item['total']:,.2f}"
+            ])
+        
+        # Add totals
+        table_data.append(['', '', 'Subtotal:', f"R {quote_data['subtotal']:,.2f}"])
+        table_data.append(['', '', 'VAT (15%):', f"R {quote_data['vat_amount']:,.2f}"])
+        table_data.append(['', '', 'TOTAL:', f"R {quote_data['total_amount']:,.2f}"])
+        
+        items_table = Table(table_data, colWidths=[3.5*inch, 0.8*inch, 1.2*inch, 1.2*inch])
+        items_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('FONTNAME', (0, 1), (-1, -4), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -4), 9),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -3), (-1, -1), 10),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -4), 1, colors.black),
+            ('LINEBELOW', (0, -3), (-1, -1), 1, colors.black),
+        ]))
+        
+        story.append(items_table)
+        story.append(Spacer(1, 30))
+        
+        # Notes
+        if quote_data['notes']:
+            story.append(Paragraph("Notes:", styles['Heading4']))
+            story.append(Paragraph(quote_data['notes'], styles['Normal']))
+            story.append(Spacer(1, 20))
+        
+        # Terms
+        terms = """
+        <b>Terms and Conditions:</b><br/>
+        • This quotation is valid until the date specified above<br/>
+        • Payment terms: 30 days from invoice date<br/>
+        • Prices include VAT where applicable<br/>
+        • Delivery timeframes to be confirmed upon order<br/>
+        """
+        story.append(Paragraph(terms, styles['Normal']))
+        
+        doc.build(story)
+        pdf_content = buffer.getvalue()
+        buffer.close()
+        
+        filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.pdf"
+        return pdf_content, filename, 'application/pdf'
+        
+    except ImportError:
+        # Fallback if reportlab not installed
+        return generate_quote_html_fallback(quote_data)
+    except Exception as e:
+        print(f"Error generating PDF: {str(e)}")
+        return generate_quote_html_fallback(quote_data)
+
+
+def generate_quote_excel(quote_data):
+    """Generate Excel quote"""
+    try:
+        import xlsxwriter
+        import io
+        
+        output = io.BytesIO()
+        workbook = xlsxwriter.Workbook(output)
+        worksheet = workbook.add_worksheet('Quote')
+        
+        # Formats
+        title_format = workbook.add_format({
+            'bold': True,
+            'font_size': 16,
+            'align': 'center',
+            'bg_color': '#366092',
+            'font_color': 'white'
+        })
+        
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#D7E4BD',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'border': 1
+        })
+        
+        money_format = workbook.add_format({
+            'num_format': 'R #,##0.00',
+            'border': 1
+        })
+        
+        # Title
+        worksheet.merge_range('A1:E1', f"QUOTATION - {quote_data['quote_ref']}", title_format)
+        
+        # Company info
+        row = 3
+        if quote_data['current_user'].company:
+            company = quote_data['current_user'].company
+            worksheet.write(row, 0, company.name, header_format)
+            row += 1
+            if company.address:
+                worksheet.write(row, 0, company.address)
+                row += 1
+            if company.phone:
+                worksheet.write(row, 0, f"Phone: {company.phone}")
+                row += 1
+            if company.email:
+                worksheet.write(row, 0, f"Email: {company.email}")
+                row += 1
+        
+        row += 2
+        
+        # Quote details
+        worksheet.write(row, 0, 'Quote Date:', header_format)
+        worksheet.write(row, 1, quote_data['quote_date'].strftime('%d %B %Y'))
+        row += 1
+        worksheet.write(row, 0, 'Valid Until:', header_format)
+        worksheet.write(row, 1, quote_data['valid_until'].strftime('%d %B %Y'))
+        row += 1
+        worksheet.write(row, 0, 'Client:', header_format)
+        worksheet.write(row, 1, quote_data['client_name'])
+        row += 1
+        worksheet.write(row, 0, 'Contact:', header_format)
+        worksheet.write(row, 1, quote_data['client_contact'] or 'N/A')
+        row += 1
+        worksheet.write(row, 0, 'Tender:', header_format)
+        worksheet.write(row, 1, quote_data['tender'].title)
+        
+        row += 3
+        
+        # Items table
+        worksheet.write(row, 0, 'Description', header_format)
+        worksheet.write(row, 1, 'Quantity', header_format)
+        worksheet.write(row, 2, 'Unit Price', header_format)
+        worksheet.write(row, 3, 'Total', header_format)
+        row += 1
+        
+        for item in quote_data['items']:
+            worksheet.write(row, 0, item['description'], cell_format)
+            worksheet.write(row, 1, item['qty'], cell_format)
+            worksheet.write(row, 2, item['unit_price'], money_format)
+            worksheet.write(row, 3, item['total'], money_format)
+            row += 1
+        
+        row += 1
+        
+        # Totals
+        worksheet.write(row, 2, 'Subtotal:', header_format)
+        worksheet.write(row, 3, quote_data['subtotal'], money_format)
+        row += 1
+        worksheet.write(row, 2, 'VAT (15%):', header_format)
+        worksheet.write(row, 3, quote_data['vat_amount'], money_format)
+        row += 1
+        worksheet.write(row, 2, 'TOTAL:', header_format)
+        worksheet.write(row, 3, quote_data['total_amount'], money_format)
+        
+        # Notes
+        if quote_data['notes']:
+            row += 3
+            worksheet.write(row, 0, 'Notes:', header_format)
+            row += 1
+            worksheet.write(row, 0, quote_data['notes'])
+        
+        # Set column widths
+        worksheet.set_column('A:A', 30)
+        worksheet.set_column('B:B', 12)
+        worksheet.set_column('C:C', 15)
+        worksheet.set_column('D:D', 15)
+        
+        workbook.close()
+        excel_content = output.getvalue()
+        output.close()
+        
+        filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.xlsx"
+        return excel_content, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        
+    except ImportError:
+        # Fallback if xlsxwriter not installed
+        return generate_quote_html_fallback(quote_data)
+    except Exception as e:
+        print(f"Error generating Excel: {str(e)}")
+        return generate_quote_html_fallback(quote_data)
+
+
+def generate_quote_html_fallback(quote_data):
+    """Fallback HTML generation if PDF/Excel libraries not available"""
+    quote_html = render_quote_template(quote_data)
+    filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.html"
+    return quote_html.encode('utf-8'), filename, 'text/html'
+
+# do not delete 
+# Add these functions to your app.py file (after imports, before routes)
+
+def get_next_quote_counter():
+    """Generate the next quote counter/reference number"""
+    try:
+        # Simple approach: use current timestamp for uniqueness
+        return f"QUO{datetime.now().strftime('%y%m%d%H%M')}"
+    except Exception as e:
+        return f"QUO{datetime.now().strftime('%y%m%d')}"
+
+def render_quote_template(quote_data):
+    """Render the quote using simple Jinja templating"""
+    try:
+        # Simple HTML template
+        template = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quote {{ quote_ref }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+        .company-info { background: #f9f9f9; padding: 20px; margin: 20px 0; }
+        .details { margin: 20px 0; }
+        .details div { margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .text-right { text-align: right; }
+        .totals { background: #f9f9f9; padding: 20px; margin: 20px 0; }
+        .total-line { margin: 5px 0; }
+        .total-final { font-weight: bold; font-size: 1.2em; border-top: 2px solid #333; padding-top: 10px; }
+        .notes { background: #fff3cd; padding: 15px; margin: 20px 0; border-left: 4px solid #ffc107; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>QUOTATION</h1>
+        <h2>{{ quote_ref }}</h2>
+    </div>
+    
+    <div class="company-info">
+        <h3>{{ current_user.company.name if current_user.company else 'Your Company' }}</h3>
+        {% if current_user.company %}
+            {% if current_user.company.address %}<div>{{ current_user.company.address }}</div>{% endif %}
+            {% if current_user.company.phone %}<div>Phone: {{ current_user.company.phone }}</div>{% endif %}
+            {% if current_user.company.email %}<div>Email: {{ current_user.company.email }}</div>{% endif %}
+        {% endif %}
+    </div>
+    
+    <div class="details">
+        <div><strong>Quote Date:</strong> {{ quote_date.strftime('%d %B %Y') }}</div>
+        <div><strong>Valid Until:</strong> {{ valid_until.strftime('%d %B %Y') }}</div>
+        <div><strong>Client:</strong> {{ client_name }}</div>
+        {% if client_contact %}<div><strong>Contact:</strong> {{ client_contact }}</div>{% endif %}
+        <div><strong>Tender:</strong> {{ tender.title }}</div>
+        {% if tender.reference_number %}<div><strong>Tender Ref:</strong> {{ tender.reference_number }}</div>{% endif %}
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th style="width: 100px;">Quantity</th>
+                <th style="width: 120px;">Unit Price</th>
+                <th style="width: 120px;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.description }}</td>
+                <td class="text-right">{{ "%.0f"|format(item.qty) if item.qty == item.qty|int else "%.2f"|format(item.qty) }}</td>
+                <td class="text-right">R {{ "{:,.2f}".format(item.unit_price) }}</td>
+                <td class="text-right">R {{ "{:,.2f}".format(item.total) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="totals">
+        <div class="total-line"><strong>Subtotal:</strong> <span style="float: right;">R {{ "{:,.2f}".format(subtotal) }}</span></div>
+        <div class="total-line"><strong>VAT (15%):</strong> <span style="float: right;">R {{ "{:,.2f}".format(vat_amount) }}</span></div>
+        <div class="total-final"><strong>TOTAL:</strong> <span style="float: right;">R {{ "{:,.2f}".format(total_amount) }}</span></div>
+    </div>
+    
+    {% if notes %}
+    <div class="notes">
+        <strong>Notes:</strong><br>
+        {{ notes|replace('\\n', '<br>')|safe }}
+    </div>
+    {% endif %}
+    
+    <div style="margin: 30px 0;">
+        <h4>Terms & Conditions:</h4>
+        <ul>
+            <li>This quotation is valid until {{ valid_until.strftime('%d %B %Y') }}</li>
+            <li>Payment terms: 30 days from invoice date</li>
+            <li>Prices include VAT where applicable</li>
+            <li>Delivery timeframes to be confirmed upon order</li>
+        </ul>
+    </div>
+    
+    <div class="footer">
+        <p>Thank you for considering our quotation!</p>
+        <p><small>Generated on {{ datetime.now().strftime('%d %B %Y at %H:%M') }}</small></p>
+    </div>
+</body>
+</html>
+        """
+        
+        # Add datetime to the template data
+        quote_data['datetime'] = datetime
+        
+        return render_template_string(template, **quote_data)
+        
+    except Exception as e:
+        print(f"Error rendering quote template: {str(e)}")
+        return f"<html><body><h1>Quote {quote_data.get('quote_ref', 'ERROR')}</h1><p>Error generating quote.</p></body></html>"
+
+def generate_quote_pdf(quote_data):
+    """Generate PDF quote"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.units import inch
+        import io
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*inch)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            textColor=colors.darkblue,
+            spaceAfter=30,
+            alignment=1
+        )
+        story.append(Paragraph(f"QUOTATION - {quote_data['quote_ref']}", title_style))
+        
+        # Company info
+        if quote_data['current_user'].company:
+            company = quote_data['current_user'].company
+            company_info = f"<b>{company.name}</b><br/>"
+            if company.address:
+                company_info += f"{company.address}<br/>"
+            if company.phone:
+                company_info += f"Phone: {company.phone}<br/>"
+            if company.email:
+                company_info += f"Email: {company.email}"
+        else:
+            company_info = "<b>Your Company Name</b><br/>Your Address<br/>Phone: +27 XXX XXX XXXX<br/>Email: info@company.com"
+        
+        story.append(Paragraph(company_info, styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Quote details
+        quote_info = [
+            ['Quote Date:', quote_data['quote_date'].strftime('%d %B %Y')],
+            ['Valid Until:', quote_data['valid_until'].strftime('%d %B %Y')],
+            ['Client:', quote_data['client_name']],
+            ['Contact:', quote_data['client_contact'] or 'N/A'],
+            ['Tender:', quote_data['tender'].title],
+        ]
+        
+        quote_table = Table(quote_info, colWidths=[2*inch, 4*inch])
+        quote_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        
+        story.append(quote_table)
+        story.append(Spacer(1, 30))
+        
+        # Items table
+        story.append(Paragraph("Quote Items", styles['Heading3']))
+        
+        table_data = [['Description', 'Qty', 'Unit Price', 'Total']]
+        
+        for item in quote_data['items']:
+            table_data.append([
+                item['description'],
+                f"{item['qty']:.0f}" if item['qty'] == int(item['qty']) else f"{item['qty']:.2f}",
+                f"R {item['unit_price']:,.2f}",
+                f"R {item['total']:,.2f}"
+            ])
+        
+        # Add totals
+        table_data.append(['', '', 'Subtotal:', f"R {quote_data['subtotal']:,.2f}"])
+        table_data.append(['', '', 'VAT (15%):', f"R {quote_data['vat_amount']:,.2f}"])
+        table_data.append(['', '', 'TOTAL:', f"R {quote_data['total_amount']:,.2f}"])
+        
+        items_table = Table(table_data, colWidths=[3.5*inch, 0.8*inch, 1.2*inch, 1.2*inch])
+        items_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('FONTNAME', (0, 1), (-1, -4), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -4), 9),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -3), (-1, -1), 10),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -4), 1, colors.black),
+            ('LINEBELOW', (0, -3), (-1, -1), 1, colors.black),
+        ]))
+        
+        story.append(items_table)
+        story.append(Spacer(1, 30))
+        
+        # Notes
+        if quote_data['notes']:
+            story.append(Paragraph("Notes:", styles['Heading4']))
+            story.append(Paragraph(quote_data['notes'], styles['Normal']))
+            story.append(Spacer(1, 20))
+        
+        # Terms
+        terms = """
+        <b>Terms and Conditions:</b><br/>
+        • This quotation is valid until the date specified above<br/>
+        • Payment terms: 30 days from invoice date<br/>
+        • Prices include VAT where applicable<br/>
+        • Delivery timeframes to be confirmed upon order<br/>
+        """
+        story.append(Paragraph(terms, styles['Normal']))
+        
+        doc.build(story)
+        pdf_content = buffer.getvalue()
+        buffer.close()
+        
+        filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.pdf"
+        return pdf_content, filename, 'application/pdf'
+        
+    except ImportError:
+        # Fallback if reportlab not installed
+        return generate_quote_html_fallback(quote_data)
+    except Exception as e:
+        print(f"Error generating PDF: {str(e)}")
+        return generate_quote_html_fallback(quote_data)
+
+def generate_quote_excel(quote_data):
+    """Generate Excel quote"""
+    try:
+        import xlsxwriter
+        import io
+        
+        output = io.BytesIO()
+        workbook = xlsxwriter.Workbook(output)
+        worksheet = workbook.add_worksheet('Quote')
+        
+        # Formats
+        title_format = workbook.add_format({
+            'bold': True,
+            'font_size': 16,
+            'align': 'center',
+            'bg_color': '#366092',
+            'font_color': 'white'
+        })
+        
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#D7E4BD',
+            'border': 1
+        })
+        
+        cell_format = workbook.add_format({
+            'border': 1
+        })
+        
+        money_format = workbook.add_format({
+            'num_format': 'R #,##0.00',
+            'border': 1
+        })
+        
+        # Title
+        worksheet.merge_range('A1:E1', f"QUOTATION - {quote_data['quote_ref']}", title_format)
+        
+        # Company info
+        row = 3
+        if quote_data['current_user'].company:
+            company = quote_data['current_user'].company
+            worksheet.write(row, 0, company.name, header_format)
+            row += 1
+            if company.address:
+                worksheet.write(row, 0, company.address)
+                row += 1
+            if company.phone:
+                worksheet.write(row, 0, f"Phone: {company.phone}")
+                row += 1
+            if company.email:
+                worksheet.write(row, 0, f"Email: {company.email}")
+                row += 1
+        
+        row += 2
+        
+        # Quote details
+        worksheet.write(row, 0, 'Quote Date:', header_format)
+        worksheet.write(row, 1, quote_data['quote_date'].strftime('%d %B %Y'))
+        row += 1
+        worksheet.write(row, 0, 'Valid Until:', header_format)
+        worksheet.write(row, 1, quote_data['valid_until'].strftime('%d %B %Y'))
+        row += 1
+        worksheet.write(row, 0, 'Client:', header_format)
+        worksheet.write(row, 1, quote_data['client_name'])
+        row += 1
+        worksheet.write(row, 0, 'Contact:', header_format)
+        worksheet.write(row, 1, quote_data['client_contact'] or 'N/A')
+        row += 1
+        worksheet.write(row, 0, 'Tender:', header_format)
+        worksheet.write(row, 1, quote_data['tender'].title)
+        
+        row += 3
+        
+        # Items table
+        worksheet.write(row, 0, 'Description', header_format)
+        worksheet.write(row, 1, 'Quantity', header_format)
+        worksheet.write(row, 2, 'Unit Price', header_format)
+        worksheet.write(row, 3, 'Total', header_format)
+        row += 1
+        
+        for item in quote_data['items']:
+            worksheet.write(row, 0, item['description'], cell_format)
+            worksheet.write(row, 1, item['qty'], cell_format)
+            worksheet.write(row, 2, item['unit_price'], money_format)
+            worksheet.write(row, 3, item['total'], money_format)
+            row += 1
+        
+        row += 1
+        
+        # Totals
+        worksheet.write(row, 2, 'Subtotal:', header_format)
+        worksheet.write(row, 3, quote_data['subtotal'], money_format)
+        row += 1
+        worksheet.write(row, 2, 'VAT (15%):', header_format)
+        worksheet.write(row, 3, quote_data['vat_amount'], money_format)
+        row += 1
+        worksheet.write(row, 2, 'TOTAL:', header_format)
+        worksheet.write(row, 3, quote_data['total_amount'], money_format)
+        
+        # Notes
+        if quote_data['notes']:
+            row += 3
+            worksheet.write(row, 0, 'Notes:', header_format)
+            row += 1
+            worksheet.write(row, 0, quote_data['notes'])
+        
+        # Set column widths
+        worksheet.set_column('A:A', 30)
+        worksheet.set_column('B:B', 12)
+        worksheet.set_column('C:C', 15)
+        worksheet.set_column('D:D', 15)
+        
+        workbook.close()
+        excel_content = output.getvalue()
+        output.close()
+        
+        filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.xlsx"
+        return excel_content, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        
+    except ImportError:
+        # Fallback if xlsxwriter not installed
+        return generate_quote_html_fallback(quote_data)
+    except Exception as e:
+        print(f"Error generating Excel: {str(e)}")
+        return generate_quote_html_fallback(quote_data)
+
+def generate_quote_html_fallback(quote_data):
+    """Fallback HTML generation if PDF/Excel libraries not available"""
+    quote_html = render_quote_template(quote_data)
+    filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.html"
+    return quote_html.encode('utf-8'), filename, 'text/html'  
+
+  
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

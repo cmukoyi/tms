@@ -1,0 +1,452 @@
+{% extends "base.html" %} {% block title %}Create Quote - {{ tender.title }}{%
+endblock %} {% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h1 class="h3 mb-0">Create Quote</h1>
+          <p class="text-muted">For Tender: {{ tender.title }}</p>
+        </div>
+        <div>
+          <a
+            href="{{ url_for('view_tender', tender_id=tender.id) }}"
+            class="btn btn-secondary"
+          >
+            <i class="fas fa-arrow-left"></i> Back to Tender
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quote Form -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Quote Details</h5>
+        </div>
+        <div class="card-body">
+          <form method="POST" id="quoteForm">
+            <!-- Quote Header Information -->
+            <div class="row mb-4">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="quote_ref" class="form-label"
+                    >Quote Reference <span class="text-danger">*</span></label
+                  >
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="quote_ref"
+                    name="quote_ref"
+                    value="{{ quote_counter }}"
+                    required
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label for="quote_date" class="form-label"
+                    >Quote Date <span class="text-danger">*</span></label
+                  >
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="quote_date"
+                    name="quote_date"
+                    required
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label for="valid_until" class="form-label"
+                    >Valid Until <span class="text-danger">*</span></label
+                  >
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="valid_until"
+                    name="valid_until"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="client_name" class="form-label"
+                    >Client Name <span class="text-danger">*</span></label
+                  >
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="client_name"
+                    name="client_name"
+                    value="{{ tender.company.name if tender.company else '' }}"
+                    required
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label for="client_contact" class="form-label"
+                    >Client Contact</label
+                  >
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="client_contact"
+                    name="client_contact"
+                    value="{{ tender.company.email if tender.company else '' }}"
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label for="notes" class="form-label">Notes</label>
+                  <textarea
+                    class="form-control"
+                    id="notes"
+                    name="notes"
+                    rows="3"
+                    placeholder="Additional notes or terms..."
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quote Items Section -->
+            <div class="mb-4">
+              <div
+                class="d-flex justify-content-between align-items-center mb-3"
+              >
+                <h5 class="mb-0">Quote Items</h5>
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  onclick="addQuoteItem()"
+                >
+                  <i class="fas fa-plus"></i> Add Item
+                </button>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-bordered" id="quoteItemsTable">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width: 40%">Description</th>
+                      <th style="width: 15%">Quantity</th>
+                      <th style="width: 20%">Unit Price (R)</th>
+                      <th style="width: 20%">Total (R)</th>
+                      <th style="width: 5%">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="quoteItemsBody">
+                    <!-- Initial row -->
+                    <tr class="quote-item-row">
+                      <td>
+                        <input
+                          type="text"
+                          class="form-control"
+                          name="items[0][description]"
+                          placeholder="Item description..."
+                          required
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          class="form-control qty-input"
+                          name="items[0][qty]"
+                          step="0.01"
+                          min="0"
+                          value="1"
+                          required
+                          onchange="calculateRowTotal(this)"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          class="form-control price-input"
+                          name="items[0][unit_price]"
+                          step="0.01"
+                          min="0"
+                          required
+                          onchange="calculateRowTotal(this)"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          class="form-control total-input"
+                          name="items[0][total]"
+                          step="0.01"
+                          readonly
+                        />
+                      </td>
+                      <td class="text-center">
+                        <button
+                          type="button"
+                          class="btn btn-danger btn-sm"
+                          onclick="removeQuoteItem(this)"
+                        >
+                          <i class="fas fa-times"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Quote Totals -->
+            <div class="row">
+              <div class="col-md-8"></div>
+              <div class="col-md-4">
+                <div class="card">
+                  <div class="card-body">
+                    <div class="row mb-2">
+                      <div class="col-6"><strong>Subtotal:</strong></div>
+                      <div class="col-6 text-end">
+                        <span id="subtotalDisplay">R 0.00</span>
+                        <input
+                          type="hidden"
+                          name="subtotal"
+                          id="subtotalInput"
+                          value="0"
+                        />
+                      </div>
+                    </div>
+                    <div class="row mb-2">
+                      <div class="col-6"><strong>VAT (15%):</strong></div>
+                      <div class="col-6 text-end">
+                        <span id="vatDisplay">R 0.00</span>
+                        <input
+                          type="hidden"
+                          name="vat_amount"
+                          id="vatInput"
+                          value="0"
+                        />
+                      </div>
+                    </div>
+                    <hr />
+                    <div class="row">
+                      <div class="col-6"><strong>Total:</strong></div>
+                      <div class="col-6 text-end">
+                        <strong><span id="totalDisplay">R 0.00</span></strong>
+                        <input
+                          type="hidden"
+                          name="total_amount"
+                          id="totalInput"
+                          value="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="row mt-4">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="export_format" class="form-label"
+                    >Export Format</label
+                  >
+                  <select
+                    class="form-select"
+                    id="export_format"
+                    name="export_format"
+                  >
+                    <option value="pdf" selected>PDF Document</option>
+                    <option value="excel">Excel Spreadsheet</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div
+                  class="d-flex justify-content-end gap-2 align-items-end h-100"
+                >
+                  <a
+                    href="{{ url_for('view_tender', tender_id=tender.id) }}"
+                    class="btn btn-secondary"
+                  >
+                    <i class="fas fa-times"></i> Cancel
+                  </a>
+                  <button type="submit" class="btn btn-success">
+                    <i class="fas fa-file-alt"></i> Create Quote
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let itemCounter = 1;
+
+  // Set default dates on page load
+  document.addEventListener("DOMContentLoaded", function () {
+    // Set quote date to today
+    const today = new Date().toISOString().split("T")[0];
+    document.getElementById("quote_date").value = today;
+
+    // Set valid until to 30 days from today
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + 30);
+    document.getElementById("valid_until").value = validUntil
+      .toISOString()
+      .split("T")[0];
+  });
+
+  function addQuoteItem() {
+    const tbody = document.getElementById("quoteItemsBody");
+    const newRow = document.createElement("tr");
+    newRow.className = "quote-item-row";
+    newRow.innerHTML = `
+        <td>
+            <input type="text" class="form-control" name="items[${itemCounter}][description]" 
+                   placeholder="Item description..." required>
+        </td>
+        <td>
+            <input type="number" class="form-control qty-input" name="items[${itemCounter}][qty]" 
+                   step="0.01" min="0" value="1" required onchange="calculateRowTotal(this)">
+        </td>
+        <td>
+            <input type="number" class="form-control price-input" name="items[${itemCounter}][unit_price]" 
+                   step="0.01" min="0" required onchange="calculateRowTotal(this)">
+        </td>
+        <td>
+            <input type="number" class="form-control total-input" name="items[${itemCounter}][total]" 
+                   step="0.01" readonly>
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeQuoteItem(this)">
+                <i class="fas fa-times"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(newRow);
+    itemCounter++;
+  }
+
+  function removeQuoteItem(button) {
+    const row = button.closest("tr");
+    const tbody = document.getElementById("quoteItemsBody");
+
+    // Don't remove if it's the last row
+    if (tbody.children.length > 1) {
+      row.remove();
+      calculateGrandTotal();
+    } else {
+      alert("At least one item is required");
+    }
+  }
+
+  function calculateRowTotal(input) {
+    const row = input.closest("tr");
+    const qty = parseFloat(row.querySelector(".qty-input").value) || 0;
+    const price = parseFloat(row.querySelector(".price-input").value) || 0;
+    const total = qty * price;
+
+    row.querySelector(".total-input").value = total.toFixed(2);
+    calculateGrandTotal();
+  }
+
+  function calculateGrandTotal() {
+    const totalInputs = document.querySelectorAll(".total-input");
+    let subtotal = 0;
+
+    totalInputs.forEach((input) => {
+      subtotal += parseFloat(input.value) || 0;
+    });
+
+    const vatAmount = subtotal * 0.15;
+    const grandTotal = subtotal + vatAmount;
+
+    // Update display
+    document.getElementById(
+      "subtotalDisplay"
+    ).textContent = `R ${subtotal.toFixed(2)}`;
+    document.getElementById("vatDisplay").textContent = `R ${vatAmount.toFixed(
+      2
+    )}`;
+    document.getElementById(
+      "totalDisplay"
+    ).textContent = `R ${grandTotal.toFixed(2)}`;
+
+    // Update hidden inputs
+    document.getElementById("subtotalInput").value = subtotal.toFixed(2);
+    document.getElementById("vatInput").value = vatAmount.toFixed(2);
+    document.getElementById("totalInput").value = grandTotal.toFixed(2);
+  }
+
+  // Form validation
+  document.getElementById("quoteForm").addEventListener("submit", function (e) {
+    const items = document.querySelectorAll(".quote-item-row");
+    let hasValidItems = false;
+
+    items.forEach((item) => {
+      const description = item
+        .querySelector('input[name*="[description]"]')
+        .value.trim();
+      const qty =
+        parseFloat(item.querySelector('input[name*="[qty]"]').value) || 0;
+      const price =
+        parseFloat(item.querySelector('input[name*="[unit_price]"]').value) ||
+        0;
+
+      if (description && qty > 0 && price > 0) {
+        hasValidItems = true;
+      }
+    });
+
+    if (!hasValidItems) {
+      e.preventDefault();
+      alert(
+        "Please add at least one valid item with description, quantity, and unit price."
+      );
+      return false;
+    }
+  });
+</script>
+
+<style>
+  .quote-item-row input {
+    border: 1px solid #dee2e6;
+  }
+
+  .quote-item-row input:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  }
+
+  .table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+  }
+
+  .card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  }
+
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  #quoteItemsTable {
+    min-width: 700px;
+  }
+
+  .text-danger {
+    color: #dc3545 !important;
+  }
+</style>
+{% endblock %}
