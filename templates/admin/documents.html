@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header Section -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-file-alt me-2"></i>Documents</h2>
+                    <p class="text-muted mb-0">Manage your company documents</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('upload_document') }}" class="btn btn-success">
+                        <i class="fas fa-cloud-upload-alt me-1"></i>Upload Document
+                    </a>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-primary">{{ doc_stats.total_documents }}</h3>
+                            <p class="text-muted mb-0">Total Documents</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-success">{{ doc_stats.recent_documents }}</h3>
+                            <p class="text-muted mb-0">Recent (7 days)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-info">{{ doc_stats.document_types|length }}</h3>
+                            <p class="text-muted mb-0">Document Types</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-warning">{{ "%.1f"|format(doc_stats.total_size / 1024 / 1024) }} MB</h3>
+                            <p class="text-muted mb-0">Total Size</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Document Types Distribution -->
+            {% if doc_stats.document_types %}
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Documents by Type</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for doc_type, count in doc_stats.document_types.items() %}
+                                <div class="col-md-4 mb-2">
+                                    <div class="d-flex justify-content-between align-items-center p-2 border rounded">
+                                        <span class="fw-medium">{{ doc_type }}</span>
+                                        <span class="badge bg-secondary">{{ count }}</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Documents Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>All Documents</h5>
+                    <div class="d-flex align-items-center">
+                        <input type="text" class="form-control form-control-sm me-2" id="searchDocuments" 
+                               placeholder="Search documents..." style="width: 200px;">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                    data-bs-toggle="dropdown">
+                                Filter by Type
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="filterDocuments('all')">All Types</a></li>
+                                {% for doc_type in doc_stats.document_types.keys() %}
+                                <li><a class="dropdown-item" href="#" onclick="filterDocuments('{{ doc_type }}')">{{ doc_type }}</a></li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if documents %}
+                    <div class="table-responsive">
+                        {% include 'components/documents_table_1.html' %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Documents Found</h5>
+                        <p class="text-muted mb-3">Your company doesn't have any documents yet.</p>
+                        <a href="{{ url_for('upload_document') }}" class="btn btn-primary">
+                            <i class="fas fa-cloud-upload-alt me-1"></i>Upload First Document
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>Delete Document
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="deleteDocumentName"></strong>?</p>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> This action cannot be undone. The document will be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" id="deleteForm" class="d-inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete Document
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.file-icon {
+    font-size: 24px;
+    width: 30px;
+    text-align: center;
+}
+
+.document-row {
+    transition: all 0.2s ease;
+}
+
+.document-row:hover {
+    background-color: rgba(0,123,255,0.05);
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #495057;
+}
+
+.btn-group-sm .btn {
+    margin-right: 2px;
+}
+
+.btn-group-sm .btn:last-child {
+    margin-right: 0;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0,0,0,.125);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0,0,0,.125);
+}
+</style>
+
+<script>
+// Search functionality
+document.getElementById('searchDocuments').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.document-row');
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+
+// Filter functionality
+function filterDocuments(type) {
+    const rows = document.querySelectorAll('.document-row');
+    
+    rows.forEach(row => {
+        if (type === 'all') {
+            row.style.display = '';
+        } else {
+            const rowType = row.dataset.type;
+            if (rowType === type) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        }
+    });
+}
+
+// Delete document functionality
+function deleteDocument(documentId, documentName) {
+    document.getElementById('deleteDocumentName').textContent = documentName;
+    document.getElementById('deleteForm').action = `/documents/${documentId}/delete`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+
+// Focus search input on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('searchDocuments').focus();
+});
+</script>
+{% endblock %}

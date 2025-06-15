@@ -1,55 +1,125 @@
 {% extends "base.html" %}
+
 {% block title %}Create Company - Admin{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h4><i class="fas fa-building"></i> Create New Company</h4>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-plus-circle me-2"></i>Create New Company</h2>
+                <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Companies
+                </a>
             </div>
-            <div class="card-body">
-                <form method="POST">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="name" class="form-label">Company Name *</label>
-                                <input type="text" class="form-control" id="name" name="name" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Company Email *</label>
-                                <input type="email" class="form-control" id="email" name="email" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="phone" class="form-label">Phone Number</label>
-                                <input type="tel" class="form-control" id="phone" name="phone">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="address" class="form-label">Address</label>
-                        <textarea class="form-control" id="address" name="address" rows="3"></textarea>
-                    </div>
-                    
-                    <div class="d-flex justify-content-between">
-                        <a href="{{ url_for('admin_companies') }}" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Back to Companies
-                        </a>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Create Company
-                        </button>
-                    </div>
-                </form>
-            </div>
+
+            {% include 'components/create_company_form_1.html' %}
         </div>
     </div>
 </div>
-{% endblock %}
 
+<script>
+// Module pricing data from server
+const modulePricing = {
+    {% for module in available_modules %}
+    '{{ module.module_name }}': {{ module.monthly_price }},
+    {% endfor %}
+};
+
+function updateEstimatedCost() {
+    let total = 0;
+    
+    // Get checked modules
+    const checkedModules = document.querySelectorAll('.module-checkbox:checked');
+    checkedModules.forEach(checkbox => {
+        const moduleName = checkbox.value;
+        const price = modulePricing[moduleName] || 0;
+        total += price;
+    });
+    
+    // Update display
+    document.getElementById('estimated_cost').textContent = '$' + total.toFixed(2);
+}
+
+// Setup option handlers
+document.querySelectorAll('input[name="setup_option"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const customSelection = document.getElementById('custom_selection');
+        const includeFeatures = document.getElementById('include_all_features');
+        const includePremium = document.getElementById('include_premium');
+        
+        // Reset checkboxes
+        includeFeatures.checked = false;
+        includePremium.checked = false;
+        
+        if (this.value === 'core_only') {
+            customSelection.style.display = 'none';
+            // Uncheck all non-core modules
+            document.querySelectorAll('.module-checkbox:not(:disabled)').forEach(cb => {
+                cb.checked = false;
+            });
+       } else if (this.value === 'standard') {
+    customSelection.style.display = 'none';
+    includeFeatures.checked = true;
+    // Check feature modules, uncheck premium
+    document.querySelectorAll('.module-checkbox').forEach(cb => {
+        const moduleName = cb.value;
+        const module = {{ available_modules | tojson }}.find(m => m.module_name === moduleName);
+        if (module) {
+            cb.checked = module.is_core || module.category === 'feature';
+        }
+    });
+        } else if (this.value === 'premium') {
+            customSelection.style.display = 'none';
+            includeFeatures.checked = true;
+            includePremium.checked = true;
+            // Check all modules
+            document.querySelectorAll('.module-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+        } else if (this.value === 'custom') {
+            customSelection.style.display = 'block';
+        }
+        
+        updateEstimatedCost();
+    });
+});
+
+// Add custom option radio button
+const setupOptions = document.querySelector('input[name="setup_option"][value="premium"]').closest('.col-md-4');
+const customOption = setupOptions.parentNode.insertCell ? setupOptions.parentNode : setupOptions.parentNode;
+const customDiv = document.createElement('div');
+customDiv.className = 'col-md-12 mt-3';
+customDiv.innerHTML = `
+    <div class="form-check">
+        <input class="form-check-input" type="radio" name="setup_option" id="custom" value="custom">
+        <label class="form-check-label" for="custom">
+            <strong>Custom Selection</strong><br>
+            <small class="text-muted">Choose specific modules manually</small>
+        </label>
+    </div>
+`;
+setupOptions.parentNode.appendChild(customDiv);
+
+// Module checkbox handlers
+document.querySelectorAll('.module-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', updateEstimatedCost);
+});
+
+// Initialize cost calculation
+updateEstimatedCost();
+
+// Auto-fill admin email based on company email
+document.getElementById('email').addEventListener('blur', function() {
+    const adminEmail = document.getElementById('admin_email');
+    if (!adminEmail.value && this.value) {
+        adminEmail.value = 'admin@' + this.value.split('@')[1];
+    }
+});
+
+// Auto-focus first field
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('name').focus();
+});
+</script>
+{% endblock %}

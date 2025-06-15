@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}Billing Management Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+.stat-card {
+    transition: transform 0.2s;
+}
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+.revenue-chart {
+    height: 300px;
+}
+.billing-action-card {
+    border-left: 4px solid #007bff;
+}
+.billing-action-card:hover {
+    background-color: #f8f9fa;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-dollar-sign text-success"></i> Billing Management
+                    </h1>
+                    <p class="text-muted">Comprehensive billing and revenue management</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="window.location.href='{{ url_for('generate_bill') }}'">
+                        <i class="fas fa-plus"></i> Generate Bill
+                    </button>
+                    <button class="btn btn-outline-success" onclick="exportBillingReport()">
+                        <i class="fas fa-download"></i> Export Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Statistics -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Total Monthly Revenue</h6>
+                            <h3 class="text-success mb-0">R {{ "%.2f"|format(billing_stats.total_monthly_revenue if billing_stats else 0) }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-chart-line fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Active Companies</h6>
+                            <h3 class="text-primary mb-0">{{ billing_stats.active_companies if billing_stats else 0 }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-building fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Pending Bills</h6>
+                            <h3 class="text-warning mb-0">{{ billing_stats.pending_bills if billing_stats else 0 }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-clock fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Custom Pricing</h6>
+                            <h3 class="text-info mb-0">{{ billing_stats.custom_pricing_count if billing_stats else 0 }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-tags fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-bolt"></i> Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-lg-4 col-md-6 mb-3">
+                            <div class="card billing-action-card h-100">
+                                <div class="card-body">
+                                    <h6><i class="fas fa-puzzle-piece text-primary"></i> Manage Modules</h6>
+                                    <p class="text-muted small">Add, edit, or configure system modules</p>
+                                    <a href="{{ url_for('manage_modules') }}" class="btn btn-sm btn-outline-primary">Manage</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4 col-md-6 mb-3">
+                            <div class="card billing-action-card h-100">
+                                <div class="card-body">
+                                    <h6><i class="fas fa-tags text-warning"></i> Set Custom Pricing</h6>
+                                    <p class="text-muted small">Configure special pricing for companies</p>
+                                    <a href="{{ url_for('billing_pricing') }}" class="btn btn-sm btn-outline-warning">Set Pricing</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4 col-md-6 mb-3">
+                            <div class="card billing-action-card h-100">
+                                <div class="card-body">
+                                    <h6><i class="fas fa-file-invoice text-success"></i> Generate Bills</h6>
+                                    <p class="text-muted small">Create monthly bills for companies</p>
+                                    <a href="{{ url_for('generate_bill') }}" class="btn btn-sm btn-outline-success">Generate</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity and Charts -->
+    <div class="row">
+        <!-- Recent Bills -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-file-invoice"></i> Recent Bills</h5>
+                    <a href="#" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if recent_bills %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Company</th>
+                                    <th>Period</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for bill in recent_bills[:5] %}
+                                <tr>
+                                    <td>{{ bill.company.name if bill.company else 'N/A' }}</td>
+                                    <td>{{ bill.bill_year }}-{{ "%02d"|format(bill.bill_month) }}</td>
+                                    <td>R {{ "%.2f"|format(bill.total_amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 
+                                            'success' if bill.status == 'paid' else
+                                            'warning' if bill.status == 'sent' else
+                                            'danger' if bill.status == 'overdue' else
+                                            'secondary' }}">
+                                            {{ bill.status|title }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-file-invoice fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No recent bills found</p>
+                        <a href="{{ url_for('generate_bill') }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Generate First Bill
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue by Module -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Revenue by Module</h5>
+                </div>
+                <div class="card-body">
+                    {% if module_revenue and module_revenue.data and module_revenue.data != [0] %}
+                    <canvas id="moduleRevenueChart"></canvas>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No revenue data available</p>
+                        <small class="text-muted">Revenue data will appear when companies start using paid modules</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Companies with Custom Pricing -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-star"></i> Companies with Custom Pricing</h5>
+                    <span class="badge bg-info">{{ custom_pricing_companies|length if custom_pricing_companies else 0 }} companies</span>
+                </div>
+                <div class="card-body">
+                    {% if custom_pricing_companies %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Company</th>
+                                    <th>Default Cost</th>
+                                    <th>Custom Cost</th>
+                                    <th>Difference</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for company_data in custom_pricing_companies %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ company_data.company.name }}</strong><br>
+                                        <small class="text-muted">{{ company_data.company.email }}</small>
+                                    </td>
+                                    <td>R {{ "%.2f"|format(company_data.default_cost) }}</td>
+                                    <td>R {{ "%.2f"|format(company_data.custom_cost) }}</td>
+                                    <td>
+                                        {% set diff = company_data.custom_cost - company_data.default_cost %}
+                                        {% if diff > 0 %}
+                                        <span class="text-danger">+R {{ "%.2f"|format(diff) }}</span>
+                                        {% elif diff < 0 %}
+                                        <span class="text-success">-R {{ "%.2f"|format(-diff) }}</span>
+                                        {% else %}
+                                        <span class="text-muted">No change</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('edit_company_pricing', company_id=company_data.company.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-star fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No companies with custom pricing</p>
+                        <a href="{{ url_for('billing_pricing') }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-tags"></i> Set Custom Pricing
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    {% if module_revenue and module_revenue.data and module_revenue.data != [0] %}
+    initializeModuleRevenueChart();
+    {% endif %}
+});
+
+function initializeModuleRevenueChart() {
+    const ctx = document.getElementById('moduleRevenueChart').getContext('2d');
+    
+    const data = {
+        labels: {{ module_revenue.labels|tojsonfilter|safe if module_revenue else '[]'|safe }},
+        datasets: [{
+            data: {{ module_revenue.data|tojsonfilter|safe if module_revenue else '[]'|safe }},
+            backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+                '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+            ]
+        }]
+    };
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: data,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                }
+            }
+        }
+    });
+}
+
+function exportBillingReport() {
+    // Implement export functionality
+    alert('Export functionality will be implemented');
+}
+</script>
+{% endblock %}

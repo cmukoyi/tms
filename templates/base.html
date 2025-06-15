@@ -12,655 +12,11 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       rel="stylesheet"
     />
-    <style>
-      /* CSS Variables for Theme Colors */
-      :root {
-        --bg-color: #ffffff;
-        --text-color: #212529;
-        --navbar-bg: #0d6efd;
-        --navbar-text: #ffffff;
-        --card-bg: #ffffff;
-        --card-border: #dee2e6;
-        --footer-bg: #0d6efd;
-        --footer-text: #ffffff;
-        --alert-bg: #f8f9fa;
-        --table-bg: #ffffff;
-        --table-border: #dee2e6;
-        --form-bg: #ffffff;
-        --form-border: #ced4da;
-        --shadow: rgba(0, 0, 0, 0.125);
-      }
-
-      /* Dark Mode Variables */
-      [data-theme="dark"] {
-        --bg-color: #121212;
-        --text-color: #e0e0e0;
-        --navbar-bg: #1a1a1a;
-        --navbar-text: #e0e0e0;
-        --card-bg: #1e1e1e;
-        --card-border: #333333;
-        --footer-bg: #1a1a1a;
-        --footer-text: #e0e0e0;
-        --alert-bg: #2d2d2d;
-        --table-bg: #1e1e1e;
-        --table-border: #333333;
-        --form-bg: #2d2d2d;
-        --form-border: #555555;
-        --shadow: rgba(255, 255, 255, 0.1);
-      }
-
-      /* Apply theme variables */
-      body {
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-        font-size: 16px;
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        transition: background-color 0.3s ease, color 0.3s ease;
-      }
-
-      main.container {
-        flex: 1;
-        padding: 1rem;
-      }
-
-      /* Dark mode navbar */
-      .navbar-dark {
-        background-color: var(--navbar-bg) !important;
-      }
-
-      .navbar-dark .navbar-brand,
-      .navbar-dark .nav-link {
-        color: var(--navbar-text) !important;
-      }
-
-      .navbar-dark .nav-link:hover {
-        color: rgba(255, 255, 255, 0.8) !important;
-      }
-
-      /* Company Admin Menu Styling */
-      .navbar-nav .dropdown-menu {
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        min-width: 220px;
-      }
-
-      .dropdown-item {
-        padding: 8px 16px;
-        transition: all 0.2s ease;
-      }
-
-      .dropdown-item:hover {
-        background-color: #f8f9fa;
-        transform: translateX(2px);
-      }
-
-      .dropdown-item i {
-        width: 20px;
-        text-align: center;
-      }
-
-      .dropdown-header {
-        font-weight: 600;
-        color: #495057;
-        font-size: 0.875rem;
-      }
-
-      .dropdown-divider {
-        margin: 4px 0;
-      }
-
-      /* Status icons color coding */
-      .text-success {
-        color: #28a745 !important;
-      }
-      .text-danger {
-        color: #dc3545 !important;
-      }
-      .text-warning {
-        color: #ffc107 !important;
-      }
-      .text-info {
-        color: #17a2b8 !important;
-      }
-      .text-secondary {
-        color: #6c757d !important;
-      }
-
-      /* Active menu item highlighting */
-      .navbar-nav .nav-item.active .nav-link {
-        background-color: rgba(255, 255, 255, 0.1);
-        border-radius: 4px;
-      }
-
-      /* Notification badge */
-      .notification-badge {
-        animation: pulse 2s infinite;
-      }
-
-      @keyframes pulse {
-        0% {
-          transform: translate(-50%, -50%) scale(1);
-        }
-        50% {
-          transform: translate(-50%, -50%) scale(1.1);
-        }
-        100% {
-          transform: translate(-50%, -50%) scale(1);
-        }
-      }
-
-      /* Dark mode cards */
-      .card {
-        background-color: var(--card-bg);
-        border-color: var(--card-border);
-        margin-bottom: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 0.125rem 0.25rem var(--shadow);
-        transition: background-color 0.3s ease, border-color 0.3s ease;
-      }
-
-      /* Dark mode tables */
-      .table {
-        background-color: var(--table-bg);
-        color: var(--text-color);
-      }
-
-      .table th,
-      .table td {
-        border-color: var(--table-border);
-      }
-
-      /* Dark mode forms */
-      .form-control,
-      .form-select {
-        background-color: var(--form-bg);
-        border-color: var(--form-border);
-        color: var(--text-color);
-      }
-
-      .form-control:focus,
-      .form-select:focus {
-        background-color: var(--form-bg);
-        color: var(--text-color);
-        border-color: #86b7fe;
-        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-      }
-
-      /* Dark mode alerts */
-      [data-theme="dark"] .alert {
-        background-color: var(--alert-bg);
-        border-color: var(--card-border);
-        color: var(--text-color);
-      }
-
-      /* Dark Mode Toggle Button */
-      .theme-toggle {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        background: none;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 50px;
-        padding: 0.25rem 0.75rem;
-        color: var(--navbar-text);
-        font-size: 0.9rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-left: 0.5rem;
-      }
-
-      .theme-toggle:hover {
-        border-color: rgba(255, 255, 255, 0.6);
-        background-color: rgba(255, 255, 255, 0.1);
-      }
-
-      .theme-toggle i {
-        margin-right: 0.5rem;
-        transition: transform 0.3s ease;
-      }
-
-      .theme-toggle.rotating i {
-        transform: rotate(360deg);
-      }
-
-      /* Mobile-optimized navigation */
-      .navbar-brand {
-        font-size: 1.1rem;
-      }
-
-      .navbar-brand i {
-        margin-right: 0.5rem;
-      }
-
-      /* Responsive navigation adjustments */
-      @media (max-width: 768px) {
-        .navbar-brand {
-          font-size: 1rem;
-        }
-
-        .navbar-nav {
-          margin-top: 0.5rem;
-        }
-
-        .nav-link {
-          padding: 0.5rem 0;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .dropdown-menu {
-          position: static !important;
-          float: none;
-          width: 100%;
-          margin-top: 0;
-          background-color: var(--card-bg);
-          border: 1px solid var(--card-border);
-        }
-
-        .dropdown-item {
-          color: var(--text-color);
-          padding: 0.5rem 1rem;
-        }
-
-        .dropdown-item:hover {
-          background-color: rgba(13, 110, 253, 0.1);
-          color: var(--text-color);
-        }
-
-        .theme-toggle {
-          margin: 0.5rem 0;
-          width: 100%;
-          justify-content: center;
-        }
-      }
-
-      /* Mobile-friendly alerts */
-      .alert {
-        margin-bottom: 1rem;
-        border-radius: 0.5rem;
-      }
-
-      .alert .btn-close {
-        padding: 0.75rem;
-      }
-
-      /* Footer styling */
-      footer.footer-banner {
-        background-color: var(--footer-bg);
-        color: var(--footer-text);
-        padding: 1.5rem 0;
-        text-align: center;
-        margin-top: auto;
-        transition: background-color 0.3s ease;
-      }
-
-      /* Mobile footer adjustments */
-      @media (max-width: 576px) {
-        footer.footer-banner {
-          padding: 1rem 0;
-          font-size: 0.9rem;
-        }
-      }
-
-      /* Touch-friendly button sizing */
-      .btn {
-        min-height: 44px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.3s ease;
-      }
-
-      /* Mobile table improvements */
-      @media (max-width: 768px) {
-        .table-responsive {
-          border: none;
-        }
-
-        .table {
-          font-size: 0.9rem;
-        }
-
-        .table th,
-        .table td {
-          padding: 0.5rem 0.25rem;
-          vertical-align: middle;
-        }
-      }
-
-      /* Form improvements for mobile */
-      @media (max-width: 576px) {
-        .form-control,
-        .form-select {
-          font-size: 16px;
-          min-height: 44px;
-        }
-
-        .input-group-text {
-          min-height: 44px;
-          display: flex;
-          align-items: center;
-          background-color: var(--form-bg);
-          border-color: var(--form-border);
-          color: var(--text-color);
-        }
-      }
-
-      /* Card improvements for mobile */
-      @media (max-width: 576px) {
-        .card-body {
-          padding: 1rem;
-        }
-
-        .card-title {
-          font-size: 1.1rem;
-        }
-      }
-
-      /* Pagination mobile-friendly */
-      @media (max-width: 576px) {
-        .pagination {
-          justify-content: center;
-        }
-
-        .page-link {
-          padding: 0.5rem 0.75rem;
-          min-width: 44px;
-          min-height: 44px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: var(--card-bg);
-          border-color: var(--card-border);
-          color: var(--text-color);
-        }
-
-        .page-link:hover {
-          background-color: var(--alert-bg);
-          color: var(--text-color);
-        }
-      }
-
-      /* Modal improvements for mobile */
-      @media (max-width: 576px) {
-        .modal-dialog {
-          margin: 0.5rem;
-          max-width: calc(100% - 1rem);
-        }
-
-        .modal-header,
-        .modal-body,
-        .modal-footer {
-          padding: 1rem;
-        }
-      }
-
-      .modal-content {
-        background-color: var(--card-bg);
-        color: var(--text-color);
-      }
-
-      .modal-header {
-        border-bottom-color: var(--card-border);
-      }
-
-      .modal-footer {
-        border-top-color: var(--card-border);
-      }
-
-      /* Utility classes for mobile spacing */
-      @media (max-width: 576px) {
-        .mobile-text-center {
-          text-align: center !important;
-        }
-
-        .mobile-mb-3 {
-          margin-bottom: 1rem !important;
-        }
-
-        .mobile-mt-3 {
-          margin-top: 1rem !important;
-        }
-      }
-
-      /* Improved readability */
-      @media (max-width: 576px) {
-        h1 {
-          font-size: 1.5rem;
-        }
-        h2 {
-          font-size: 1.25rem;
-        }
-        h3 {
-          font-size: 1.1rem;
-        }
-        h4 {
-          font-size: 1rem;
-        }
-        h5 {
-          font-size: 0.9rem;
-        }
-        h6 {
-          font-size: 0.8rem;
-        }
-      }
-
-      /* Status badges mobile-friendly */
-      .badge {
-        font-size: 0.8rem;
-        padding: 0.35em 0.65em;
-      }
-
-      /* Loading states */
-      .btn.loading {
-        position: relative;
-        pointer-events: none;
-      }
-
-      .btn.loading::after {
-        content: "";
-        position: absolute;
-        width: 16px;
-        height: 16px;
-        margin: auto;
-        border: 2px solid transparent;
-        border-top-color: currentColor;
-        border-radius: 50%;
-        animation: button-loading-spinner 1s ease infinite;
-      }
-
-      @keyframes button-loading-spinner {
-        from {
-          transform: rotate(0turn);
-        }
-        to {
-          transform: rotate(1turn);
-        }
-      }
-
-      /* Theme transition animations */
-      * {
-        transition: background-color 0.3s ease, color 0.3s ease,
-          border-color 0.3s ease;
-      }
-
-      /* Dark mode improvements for bootstrap components */
-      [data-theme="dark"] .btn-primary {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
-      }
-
-      [data-theme="dark"] .btn-outline-primary {
-        color: #0d6efd;
-        border-color: #0d6efd;
-      }
-
-      [data-theme="dark"] .btn-outline-primary:hover {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
-      }
-
-      /* Custom scrollbar for dark mode */
-      [data-theme="dark"] ::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      [data-theme="dark"] ::-webkit-scrollbar-track {
-        background: var(--card-bg);
-      }
-
-      [data-theme="dark"] ::-webkit-scrollbar-thumb {
-        background: #555;
-        border-radius: 4px;
-      }
-
-      [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
-        background: #777;
-      }
-
-      /* Enhanced Admin Table Dark Mode Fixes */
-      [data-theme="dark"] .table {
-        background-color: var(--table-bg);
-        color: var(--text-color) !important;
-      }
-
-      [data-theme="dark"] .table th {
-        background-color: #2d2d2d;
-        color: #ffffff !important;
-        border-color: var(--table-border);
-        font-weight: 600;
-      }
-
-      [data-theme="dark"] .table td {
-        background-color: var(--table-bg);
-        color: #e0e0e0 !important;
-        border-color: var(--table-border);
-      }
-
-      [data-theme="dark"] .table tbody tr {
-        background-color: var(--table-bg);
-      }
-
-      [data-theme="dark"] .table tbody tr:hover {
-        background-color: #2a2a2a !important;
-        color: #ffffff !important;
-      }
-
-      [data-theme="dark"] .table tbody tr:hover td {
-        color: #ffffff !important;
-      }
-
-      /* Fix for striped tables */
-      [data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > td {
-        background-color: #252525;
-        color: #e0e0e0 !important;
-      }
-
-      [data-theme="dark"] .table-striped > tbody > tr:nth-of-type(even) > td {
-        background-color: var(--table-bg);
-        color: #e0e0e0 !important;
-      }
-
-      /* Badge fixes for dark mode */
-      [data-theme="dark"] .badge {
-        color: #ffffff !important;
-      }
-
-      [data-theme="dark"] .badge.bg-primary {
-        background-color: #0d6efd !important;
-        color: #ffffff !important;
-      }
-
-      [data-theme="dark"] .badge.bg-success {
-        background-color: #198754 !important;
-        color: #ffffff !important;
-      }
-
-      [data-theme="dark"] .badge.bg-warning {
-        background-color: #ffc107 !important;
-        color: #000000 !important;
-      }
-
-      [data-theme="dark"] .badge.bg-danger {
-        background-color: #dc3545 !important;
-        color: #ffffff !important;
-      }
-
-      /* Button fixes in tables */
-      [data-theme="dark"] .table .btn {
-        color: #ffffff !important;
-      }
-
-      [data-theme="dark"] .table .btn-outline-primary {
-        color: #0d6efd !important;
-        border-color: #0d6efd !important;
-      }
-
-      [data-theme="dark"] .table .btn-outline-primary:hover {
-        background-color: #0d6efd !important;
-        color: #ffffff !important;
-      }
-
-      [data-theme="dark"] .table .btn-outline-danger {
-        color: #dc3545 !important;
-        border-color: #dc3545 !important;
-      }
-
-      [data-theme="dark"] .table .btn-outline-danger:hover {
-        background-color: #dc3545 !important;
-        color: #ffffff !important;
-      }
-
-      /* Link fixes in tables */
-      [data-theme="dark"] .table a {
-        color: #79c0ff !important;
-      }
-
-      [data-theme="dark"] .table a:hover {
-        color: #a5d6ff !important;
-      }
-
-      /* Text muted fixes */
-      [data-theme="dark"] .table .text-muted {
-        color: #9ca3af !important;
-      }
-
-      /* Status indicators */
-      [data-theme="dark"] .status-active {
-        color: #10b981 !important;
-      }
-
-      [data-theme="dark"] .status-inactive {
-        color: #ef4444 !important;
-      }
-
-      [data-theme="dark"] .status-pending {
-        color: #f59e0b !important;
-      }
-
-      /* Close button fix */
-      [data-theme="dark"] .btn-close {
-        filter: invert(1) grayscale(100%) brightness(200%);
-      }
-
-      /* Dropdown menu fixes in admin area */
-      [data-theme="dark"] .dropdown-menu {
-        background-color: var(--card-bg);
-        border: 1px solid var(--card-border);
-      }
-
-      [data-theme="dark"] .dropdown-item {
-        color: var(--text-color) !important;
-      }
-
-      [data-theme="dark"] .dropdown-item:hover,
-      [data-theme="dark"] .dropdown-item:focus {
-        background-color: #2a2a2a;
-        color: #ffffff !important;
-      }
-    </style>
+    <link
+      href="{{ url_for('static', filename='css/style.css') }}"
+      rel="stylesheet"
+    />
+    {% block extra_css %}{% endblock %}
   </head>
   <body>
     <!-- Navigation -->
@@ -718,6 +74,23 @@
                     <i class="fas fa-list me-2"></i> List Tenders
                   </a>
                 </li>
+                {% if can_access_module('document_management') %}
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a class="dropdown-item" href="{{ url_for('documents') }}">
+                    <i class="fas fa-file-alt me-2"></i> Documents
+                  </a>
+                </li>
+                {% endif %} {% if can_access_module('custom_fields') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('admin_custom_fields') }}"
+                  >
+                    <i class="fas fa-cogs me-2"></i> Custom Fields
+                  </a>
+                </li>
+                {% endif %}
               </ul>
             </div>
 
@@ -744,8 +117,8 @@
                     class="dropdown-item"
                     href="{{ url_for('active_tenders_report') }}"
                   >
-                    <i class="fas fa-play-circle me-2 text-success"></i> List
-                    Active Tenders
+                    <i class="fas fa-play-circle me-2 text-success"></i> Active
+                    Tenders
                   </a>
                 </li>
                 <li>
@@ -753,7 +126,7 @@
                     class="dropdown-item"
                     href="{{ url_for('closed_tenders_report') }}"
                   >
-                    <i class="fas fa-check-circle me-2 text-secondary"></i> List
+                    <i class="fas fa-check-circle me-2 text-secondary"></i>
                     Closed Tenders
                   </a>
                 </li>
@@ -763,21 +136,244 @@
                     href="{{ url_for('overdue_tenders_report') }}"
                   >
                     <i class="fas fa-exclamation-triangle me-2 text-danger"></i>
-                    List Tenders Past Due Date
+                    Overdue Tenders
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('tenders_by_category_report') }}"
+                  >
+                    <i class="fas fa-tags me-2 text-info"></i> Tenders by
+                    Category
+                  </a>
+                </li>
+
+                {% if can_access_module('reporting') %}
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('tender_reports') }}"
+                  >
+                    <i class="fas fa-chart-line me-2 text-primary"></i> Advanced
+                    Analytics
+                  </a>
+                </li>
+                {% endif %}
+              </ul>
+            </div>
+
+            <!-- Company Features Menu -->
+            <!-- Company Features Menu -->
+            {% if can_access_module('company_management') or
+            can_access_module('notes_comments') %}
+            <style>
+              .dropdown-submenu {
+                position: relative;
+              }
+
+              .dropdown-submenu .dropdown-menu {
+                top: 0;
+                left: 100%;
+                margin-top: -1px;
+                border-radius: 0 6px 6px 6px;
+              }
+
+              .dropdown-submenu:hover .dropdown-menu {
+                display: block;
+              }
+            </style>
+
+            <div class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                id="companyDropdown"
+                role="button"
+                data-bs-toggle="dropdown"
+              >
+                <i class="fas fa-external-link-alt me-2"></i> External Links
+              </a>
+
+              <ul class="dropdown-menu" aria-labelledby="companyDropdown">
+                {% if can_access_module('company_management') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('my_company_modules') }}"
+                  >
+                    <i class="fas fa-puzzle-piece me-2"></i> CIPC
+                  </a>
+                </li>
+
+                {% endif %} {% if can_access_module('notes_comments') %}
+                <li class="dropdown-submenu">
+                  <a
+                    class="dropdown-item dropdown-toggle"
+                    href="#"
+                    id="sarsDropdown"
+                  >
+                    <i class="fas fa-calculator me-2"></i> SARS
+                  </a>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://secure.sarsefiling.co.za/vatvendorsearch.aspx"
+                        target="_blank"
+                      >
+                        <i class="fas fa-search me-2"></i> VAT Vendor Search
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://tools.sars.gov.za/sarsonlinequery/tcr01/tcr_verify"
+                        target="_blank"
+                      >
+                        <i class="fas fa-file-invoice me-2"></i> Tax Compliance
+                        System
+                      </a>
+                    </li>
+                  </ul>
+                </li>
+                <li class="dropdown-submenu">
+                  <a
+                    class="dropdown-item dropdown-toggle"
+                    href="#"
+                    id="sarsDropdown"
+                  >
+                    <i class="fas fa-external-link-alt me-2"></i> CIBD
+                  </a>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://www.cidb.org.za/cidb-tenders/current-tenders/"
+                        target="_blank"
+                      >
+                        <i class="fas fa-search me-2"></i> Tender Search
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://eroc.cidb.org.za/sign-in"
+                        target="_blank"
+                      >
+                        <i class="fas fa-file-invoice me-2"></i> Register/Login
+                      </a>
+                    </li>
+                  </ul>
+                </li>
+                {% endif %}
+              </ul>
+            </div>
+            {% endif %}
+
+            <!-- Admin Menu -->
+            {% if session.is_super_admin %}
+            <div class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                <i class="fas fa-cog me-1"></i>Admin
+              </a>
+              <ul class="dropdown-menu">
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('admin_companies') }}"
+                  >
+                    <i class="fas fa-building me-2"></i>Companies
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="{{ url_for('admin_users') }}">
+                    <i class="fas fa-users me-2"></i>Users
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="{{ url_for('admin_roles') }}">
+                    <i class="fas fa-user-tag me-2"></i>Roles
+                  </a>
+                </li>
+              </ul>
+            </div>
+            {% endif %}
+
+            <!-- Billing Menu (Super Admin Only) -->
+            {% if session.is_super_admin %}
+            <div class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                id="billingDropdown"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                <i class="fas fa-coins me-1"></i> Billing
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="billingDropdown">
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_dashboard') }}"
+                  >
+                    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_bills') }}"
+                  >
+                    <i class="fas fa-file-invoice me-2"></i> Monthly Bills
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_pricing') }}"
+                  >
+                    <i class="fas fa-tags me-2"></i> Company Pricing
                   </a>
                 </li>
                 <li><hr class="dropdown-divider" /></li>
                 <li>
                   <a
                     class="dropdown-item"
-                    href="{{ url_for('tenders_by_category_report') }}"
+                    href="{{ url_for('manage_modules') }}"
                   >
-                    <i class="fas fa-tags me-2 text-info"></i> List Tenders by
-                    Category
+                    <i class="fas fa-puzzle-piece me-2"></i> Manage Modules
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('generate_bill') }}"
+                  >
+                    <i class="fas fa-plus me-2"></i> Generate Bill
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_reports') }}"
+                  >
+                    <i class="fas fa-chart-line me-2"></i> Reports
                   </a>
                 </li>
               </ul>
             </div>
+            {% endif %}
 
             <!-- Account Menu -->
             {% if session.is_super_admin %}
@@ -809,40 +405,6 @@
                     href="{{ url_for('admin_companies') }}"
                   >
                     <i class="fas fa-building me-2"></i> Company Settings
-                  </a>
-                </li>
-              </ul>
-            </div>
-            {% endif %}
-
-            {% if session.is_super_admin %}
-            <div class="nav-item dropdown">
-              <a
-                class="nav-link dropdown-toggle"
-                href="#"
-                role="button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-              >
-                <i class="fas fa-cog me-1"></i>Admin
-              </a>
-              <ul class="dropdown-menu">
-                <li>
-                  <a
-                    class="dropdown-item"
-                    href="{{ url_for('admin_companies') }}"
-                  >
-                    <i class="fas fa-building me-2"></i>Companies
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{{ url_for('admin_users') }}">
-                    <i class="fas fa-users me-2"></i>Users
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{{ url_for('admin_roles') }}">
-                    <i class="fas fa-user-tag me-2"></i>Roles
                   </a>
                 </li>
               </ul>
@@ -908,6 +470,11 @@
                     <i class="fas fa-user me-2"></i> My Profile
                   </a>
                 </li>
+                 <li>
+                  <a class="dropdown-item" href="{{ url_for('my_company_profile') }}">
+                    <i class="fas fa-user me-2"></i> Company Profile
+                  </a>
+                </li>
                 {% if session.is_super_admin %}
                 <li>
                   <a class="dropdown-item" href="{{ url_for('admin_users') }}">
@@ -968,9 +535,8 @@
     <main class="container-fluid">
       <div class="row">
         <div class="col-12">
-          {% with messages = get_flashed_messages(with_categories=true) %} 
-          {% if messages %} 
-          {% for category, message in messages %}
+          {% with messages = get_flashed_messages(with_categories=true) %} {% if
+          messages %} {% for category, message in messages %}
           <div
             class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show"
             role="alert"
@@ -986,11 +552,8 @@
               aria-label="Close"
             ></button>
           </div>
-          {% endfor %} 
-          {% endif %} 
-          {% endwith %} 
-          
-          {% block content %}{% endblock %}
+          {% endfor %} {% endif %} {% endwith %} {% block content %}{% endblock
+          %}
         </div>
       </div>
     </main>
@@ -1187,6 +750,5 @@
     </script>
 
     {% block extra_js %}{% endblock %}
-    
   </body>
 </html>

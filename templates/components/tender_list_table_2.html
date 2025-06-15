@@ -1,0 +1,89 @@
+
+
+{% block content %}
+<table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Reference</th>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        {% if is_super_admin %}
+                        <th>Company</th>
+                        {% endif %}
+                        <th>Created Date</th>
+                        <th>Deadline</th>
+                        {% if show_overdue_info %}
+                        <th>Days Overdue</th>
+                        {% endif %}
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tender in tenders %}
+                    <tr {% if show_overdue_info and tender.submission_deadline and tender.submission_deadline < current_date %}class="table-danger"{% endif %}>
+                        <td>
+                            <code>{{ tender.reference_number }}</code>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('view_tender', tender_id=tender.id) }}" class="text-decoration-none">
+                                {{ tender.title }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">
+                                {{ tender.category.name if tender.category else 'Uncategorized' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge" style="background-color: {{ tender.status.color }}; color: white;">
+                                {{ tender.status.name }}
+                            </span>
+                        </td>
+                        {% if is_super_admin %}
+                        <td>
+                            <small>{{ tender.company.name if tender.company else 'N/A' }}</small>
+                        </td>
+                        {% endif %}
+                        <td>
+                            {{ tender.created_at.strftime('%Y-%m-%d') if tender.created_at else 'N/A' }}
+                        </td>
+                        <td>
+                            {% if tender.submission_deadline %}
+                                {{ tender.submission_deadline.strftime('%Y-%m-%d') }}
+                                {% if tender.submission_deadline < current_date %}
+                                <br><small class="text-danger">
+                                    <i class="fas fa-exclamation-triangle"></i> Overdue
+                                </small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">No deadline</span>
+                            {% endif %}
+                        </td>
+                        {% if show_overdue_info %}
+                        <td>
+                            {% if tender.submission_deadline and tender.submission_deadline < current_date %}
+                                {% set days_overdue = (current_date - tender.submission_deadline).days %}
+                                <span class="badge bg-danger">{{ days_overdue }} days</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('view_tender', tender_id=tender.id) }}" 
+                                   class="btn btn-outline-primary" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('edit_tender', tender_id=tender.id) }}" 
+                                   class="btn btn-outline-warning" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+{% endblock %}

@@ -1,146 +1,328 @@
 {% extends "base.html" %}
+
 {% block title %}Edit Company - Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+.module-card {
+    transition: all 0.3s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.form-check-input:checked {
+    background-color: #198754;
+    border-color: #198754;
+}
+
+.form-check-input:disabled {
+    opacity: 0.5;
+}
+
+.module-toggle {
+    transform: scale(1.2);
+}
+
+/* New pricing styles */
+.pricing-badge {
+    font-size: 0.875rem;
+}
+
+.custom-pricing {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+    color: white;
+}
+
+.default-pricing {
+    background-color: #6c757d;
+    color: white;
+}
+
+.savings-badge {
+    background-color: #28a745;
+    color: white;
+}
+
+.markup-badge {
+    background-color: #dc3545;
+    color: white;
+}
+
+.pricing-actions {
+    margin-top: 8px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4><i class="fas fa-edit"></i> Edit Company</h4>
-                <div class="d-flex align-items-center">
-                    {% if company.is_active %}
-                        <span class="badge bg-success me-2">Active</span>
-                    {% else %}
-                        <span class="badge bg-danger me-2">Inactive</span>
-                    {% endif %}
-                    <small class="text-muted">ID: {{ company.id }}</small>
+<div class="container-fluid" data-company-id="{{ company.id }}">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-building me-2"></i>Edit Company: {{ company.name }}</h2>
+                <div>
+                    <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Companies
+                    </a>
+                    <a href="{{ url_for('edit_company_pricing', company_id=company.id) }}" class="btn btn-outline-warning">
+                        <i class="fas fa-dollar-sign me-1"></i>Custom Pricing
+                    </a>
+                    <button type="button" class="btn btn-success" onclick="saveAllChanges()">
+                        <i class="fas fa-save me-1"></i>Save All Changes
+                    </button>
                 </div>
             </div>
-            <div class="card-body">
-                <form method="POST">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="name" class="form-label">Company Name *</label>
-                                <input type="text" class="form-control" id="name" name="name" 
-                                       value="{{ company.name }}" required>
+
+            <!-- Company Basic Information -->
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Company Information</h5>
+                            <div class="d-flex align-items-center">
+                                {% if company.is_active %}
+                                    <span class="badge bg-success me-2">Active</span>
+                                {% else %}
+                                    <span class="badge bg-danger me-2">Inactive</span>
+                                {% endif %}
+                                <small class="text-muted">ID: {{ company.id }}</small>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Company Email *</label>
-                                <input type="email" class="form-control" id="email" name="email" 
-                                       value="{{ company.email }}" required>
-                            </div>
+                        <div class="card-body">
+                            {% include 'components/edit_company_form_1.html' %}
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="phone" class="form-label">Phone Number</label>
-                                <input type="tel" class="form-control" id="phone" name="phone" 
-                                       value="{{ company.phone or '' }}">
-                            </div>
+                </div>
+
+                <!-- Company Statistics -->
+                <div class="col-lg-4">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Company Statistics</h5>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Status</label>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="is_active" 
-                                           name="is_active" {% if company.is_active %}checked{% endif %}>
-                                    <label class="form-check-label" for="is_active">
-                                        Company is Active
-                                    </label>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6 mb-3">
+                                    <div class="border rounded p-2">
+                                        <h4 class="text-primary mb-1">{{ company_stats.user_count if company_stats else 0 }}</h4>
+                                        <small class="text-muted">Users</small>
+                                    </div>
                                 </div>
-                                <small class="form-text text-muted">
-                                    Inactive companies cannot access the system
-                                </small>
+                                <div class="col-6 mb-3">
+                                    <div class="border rounded p-2">
+                                        <h4 class="text-success mb-1">{{ company_stats.tender_count if company_stats else 0 }}</h4>
+                                        <small class="text-muted">Tenders</small>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="border rounded p-2">
+                                        <h4 class="text-info mb-1" id="monthly-cost">R{{ "%.2f"|format(monthly_cost if monthly_cost else 0) }}</h4>
+                                        <small class="text-muted">Monthly Cost</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="address" class="form-label">Address</label>
-                        <textarea class="form-control" id="address" name="address" rows="3">{{ company.address or '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- Module Management Section -->
+            {% if modules_data %}
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Feature Modules</h5>
+                    <div>
+                        <span class="badge bg-primary">{{ enabled_count if enabled_count else 0 }} of {{ total_modules if total_modules else 0 }} enabled</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="toggleAllModules(true)">
+                            <i class="fas fa-check-all me-1"></i>Enable All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="toggleAllModules(false)">
+                            <i class="fas fa-times me-1"></i>Disable All Optional
+                        </button>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Created</label>
-                                <p class="form-control-plaintext">
-                                    <i class="fas fa-calendar-alt text-muted me-1"></i>
-                                    {{ company.created_at.strftime('%B %d, %Y at %I:%M %p') }}
-                                </p>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Last Updated</label>
-                                <p class="form-control-plaintext">
-                                    <i class="fas fa-clock text-muted me-1"></i>
-                                        {% if company.updated_at %}
-                                          {{ company.updated_at.strftime('%B %d, %Y at %I:%M %p') }}
-                                     {% else %}
-                                        <em class="text-muted">Not yet updated</em>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="modulesContainer">
+                        {% for module_data in modules_data %}
+                        <div class="col-lg-6 col-xl-4 mb-3">
+                            <div class="card h-100 module-card 
+                                        {% if module_data.is_enabled %}border-success{% else %}border-secondary{% endif %}
+                                        {% if module_data.definition.is_core %}border-primary{% endif %}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h6 class="card-title mb-0">
+                                            {{ module_data.definition.display_name }}
+                                            {% if module_data.definition.is_core %}
+                                            <span class="badge bg-primary ms-1" title="Core module - cannot be disabled">CORE</span>
+                                            {% endif %}
+                                        </h6>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input module-toggle" type="checkbox" 
+                                                   id="module_{{ module_data.definition.module_name }}"
+                                                   data-module="{{ module_data.definition.module_name }}"
+                                                   {% if module_data.is_enabled %}checked{% endif %}
+                                                   {% if module_data.definition.is_core %}disabled{% endif %}
+                                                   onchange="toggleModule('{{ module_data.definition.module_name }}', this.checked)">
+                                        </div>
+                                    </div>
+                                    
+                                    <p class="card-text text-muted small mb-2">
+                                        {{ module_data.definition.description }}
+                                    </p>
+                                    
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="badge 
+                                              {% if module_data.definition.category == 'core' %}bg-primary
+                                              {% elif module_data.definition.category == 'feature' %}bg-info
+                                              {% elif module_data.definition.category == 'premium' %}bg-warning text-dark
+                                              {% endif %}">
+                                            {{ module_data.definition.category|title }}
+                                        </span>
+                                    </div>
+                                    
+                                    <!-- Enhanced Pricing Display -->
+                                    <div class="mb-2">
+                                        {% if module_data.company_module and module_data.company_module.has_custom_pricing() %}
+                                            <!-- Custom Pricing -->
+                                            <span class="badge custom-pricing pricing-badge d-block mb-1">
+                                                <i class="fas fa-star"></i> Custom: R {{ "%.2f"|format(module_data.company_module.get_effective_price()) }}/mo
+                                            </span>
+                                            <small class="text-muted d-block">
+                                                Default: R {{ "%.2f"|format(module_data.definition.monthly_price or 0) }}/mo
+                                            </small>
+                                            {% set price_diff = module_data.company_module.get_effective_price() - (module_data.definition.monthly_price or 0) %}
+                                            {% if price_diff < 0 %}
+                                                <span class="badge savings-badge">
+                                                    <i class="fas fa-arrow-down"></i> Saves R {{ "%.2f"|format(-price_diff) }}
+                                                </span>
+                                            {% elif price_diff > 0 %}
+                                                <span class="badge markup-badge">
+                                                    <i class="fas fa-arrow-up"></i> +R {{ "%.2f"|format(price_diff) }}
+                                                </span>
+                                            {% endif %}
+                                        {% else %}
+                                            <!-- Default Pricing -->
+                                            {% if module_data.definition.monthly_price > 0 %}
+                                            <span class="badge default-pricing pricing-badge">
+                                                R {{ "%.2f"|format(module_data.definition.monthly_price) }}/mo
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-success pricing-badge">Free</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Pricing Actions (only for enabled modules) -->
+                                    {% if module_data.is_enabled %}
+                                    <div class="pricing-actions">
+                                        <button type="button" 
+                                                class="btn btn-outline-warning btn-sm" 
+                                                onclick="showPricingModal('{{ module_data.definition.id }}', '{{ module_data.definition.display_name }}', '{{ module_data.definition.monthly_price or 0 }}', '{{ module_data.company_module.get_effective_price() if module_data.company_module else module_data.definition.monthly_price or 0 }}')">
+                                            <i class="fas fa-dollar-sign"></i> Set Price
+                                        </button>
+                                        {% if module_data.company_module and module_data.company_module.has_custom_pricing() %}
+                                        <button type="button" 
+                                                class="btn btn-outline-danger btn-sm ms-1" 
+                                                onclick="removeModuleCustomPricing('{{ module_data.definition.id }}', '{{ module_data.definition.display_name }}')">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
                                     {% endif %}
-                                </p>
+                                    
+                                    {% if module_data.is_enabled and module_data.company_module %}
+                                    <div class="mt-2">
+                                        <small class="text-success">
+                                            <i class="fas fa-check-circle me-1"></i>
+                                            Active since {{ module_data.company_module.enabled_at.strftime('%Y-%m-%d') if module_data.company_module.enabled_at else 'N/A' }}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
+                        {% endfor %}
                     </div>
                     
-                    <hr>
-                    
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <a href="{{ url_for('admin_companies') }}" class="btn btn-secondary">
-                                <i class="fas fa-arrow-left"></i> Back to Companies
-                            </a>
-                            <a href="{{ url_for('view_company', company_id=company.id) }}" class="btn btn-info">
-                                <i class="fas fa-eye"></i> View Details
-                            </a>
+                    <!-- Module Notes Section -->
+                    <div class="mt-4">
+                        <label for="moduleNotes" class="form-label">Internal Notes</label>
+                        <textarea class="form-control" id="moduleNotes" rows="3" 
+                                  placeholder="Add internal notes about module assignments for this company..."></textarea>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <!-- Module Management Not Available -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Feature Modules</h5>
+                </div>
+                <div class="card-body text-center py-4">
+                    <i class="fas fa-cog fa-3x text-muted mb-3"></i>
+                    <h6 class="text-muted">Module Management</h6>
+                    <p class="text-muted mb-3">Module system is not yet initialized</p>
+                    <a href="{{ url_for('initialize_company_modules') }}" class="btn btn-primary">
+                        <i class="fas fa-play-circle me-1"></i>Initialize Modules
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Custom Pricing Modal -->
+<div class="modal fade" id="pricingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-dollar-sign"></i> Set Custom Pricing
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="pricingForm">
+                    <input type="hidden" id="pricing_module_id" name="module_id">
+                    <div class="mb-3">
+                        <label class="form-label">Module</label>
+                        <input type="text" class="form-control" id="pricing_module_name" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Default Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R</span>
+                            <input type="text" class="form-control" id="pricing_default_price" readonly>
+                            <span class="input-group-text">/month</span>
                         </div>
-                        <div>
-                            {% if company.is_active %}
-                                <button type="button" class="btn btn-warning me-2" data-bs-toggle="modal" data-bs-target="#deactivateModal">
-                                    <i class="fas fa-ban"></i> Deactivate
-                                </button>
-                            {% endif %}
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save"></i> Update Company
-                            </button>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Custom Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R</span>
+                            <input type="number" class="form-control" id="pricing_custom_price" name="custom_price" step="0.01" min="0" required>
+                            <span class="input-group-text">/month</span>
                         </div>
+                        <div class="form-text">
+                            <span id="price_difference"></span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reason/Notes</label>
+                        <textarea class="form-control" id="pricing_notes" name="notes" rows="3" placeholder="Reason for custom pricing (e.g., contract negotiation, volume discount, etc.)"></textarea>
                     </div>
                 </form>
             </div>
-        </div>
-        
-        <!-- Company Statistics Card -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <h5><i class="fas fa-chart-bar"></i> Company Statistics</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h3 class="text-primary">{{ company.stats.total_users if company.stats else 0 }}</h3>
-                            <p class="text-muted mb-0">Total Users</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h3 class="text-success">{{ company.stats.active_users if company.stats else 0 }}</h3>
-                            <p class="text-muted mb-0">Active Users</p>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center">
-                            <h3 class="text-info">{{ company.stats.admins if company.stats else 0 }}</h3>
-                            <p class="text-muted mb-0">Administrators</p>
-                        </div>
-                    </div>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="setCustomPricing()">
+                    <i class="fas fa-save"></i> Set Custom Price
+                </button>
             </div>
         </div>
     </div>
@@ -172,41 +354,151 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form method="POST" action="{{ url_for('deactivate_company', company_id=company.id) }}" class="d-inline">
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-ban"></i> Deactivate Company
-                    </button>
-                </form>
+                {% include 'components/edit_company_form_2.html' %}
             </div>
         </div>
     </div>
 </div>
 {% endif %}
 
+<!-- Loading Modal -->
+{% if modules_data %}
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary me-2" role="status"></div>
+                <span>Updating...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="notificationToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i id="toastIcon" class="fas fa-check-circle text-success me-2"></i>
+            <strong class="me-auto" id="toastTitle">Success</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage">
+            Changes saved successfully!
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/edit_company.js') }}"></script>
 <script>
-// Auto-focus on the first input field
+// Pricing modal functions
+let pricingModal;
+
 document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('name').focus();
+    pricingModal = new bootstrap.Modal(document.getElementById('pricingModal'));
+    
+    // Price difference calculator
+    document.getElementById('pricing_custom_price').addEventListener('input', calculatePriceDifference);
 });
 
-// Form validation
-document.querySelector('form').addEventListener('submit', function(e) {
-    const name = document.getElementById('name').value.trim();
-    const email = document.getElementById('email').value.trim();
+function showPricingModal(moduleId, moduleName, defaultPrice, currentPrice) {
+    document.getElementById('pricing_module_id').value = moduleId;
+    document.getElementById('pricing_module_name').value = moduleName;
+    document.getElementById('pricing_default_price').value = parseFloat(defaultPrice).toFixed(2);
+    document.getElementById('pricing_custom_price').value = parseFloat(currentPrice).toFixed(2);
+    document.getElementById('pricing_notes').value = '';
     
-    if (!name || !email) {
-        e.preventDefault();
-        alert('Company name and email are required.');
-        return false;
+    calculatePriceDifference();
+    pricingModal.show();
+}
+
+function calculatePriceDifference() {
+    const defaultPrice = parseFloat(document.getElementById('pricing_default_price').value) || 0;
+    const customPrice = parseFloat(document.getElementById('pricing_custom_price').value) || 0;
+    const difference = customPrice - defaultPrice;
+    const diffElement = document.getElementById('price_difference');
+    
+    if (difference > 0) {
+        diffElement.innerHTML = `<span class="text-danger"><i class="fas fa-arrow-up"></i> R${difference.toFixed(2)} more than default</span>`;
+    } else if (difference < 0) {
+        diffElement.innerHTML = `<span class="text-success"><i class="fas fa-arrow-down"></i> R${Math.abs(difference).toFixed(2)} less than default</span>`;
+    } else {
+        diffElement.innerHTML = `<span class="text-muted">Same as default price</span>`;
+    }
+}
+
+function setCustomPricing() {
+    const moduleId = document.getElementById('pricing_module_id').value;
+    const customPrice = document.getElementById('pricing_custom_price').value;
+    const notes = document.getElementById('pricing_notes').value;
+    
+    if (!customPrice || customPrice < 0) {
+        alert('Please enter a valid custom price');
+        return;
     }
     
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        e.preventDefault();
-        alert('Please enter a valid email address.');
-        return false;
+    fetch(`/admin/billing/pricing/{{ company.id }}/set`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            module_id: moduleId,
+            custom_price: parseFloat(customPrice),
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Success', 'Custom pricing set successfully!', 'success');
+            pricingModal.hide();
+            // Update monthly cost display
+            if (data.new_total !== undefined) {
+                document.getElementById('monthly-cost').textContent = `R${data.new_total.toFixed(2)}`;
+            }
+            // Refresh the page to show updated pricing
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error', data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Error', 'Error setting custom pricing: ' + error.message, 'error');
+    });
+}
+
+function removeModuleCustomPricing(moduleId, moduleName) {
+    if (confirm(`Are you sure you want to remove custom pricing for "${moduleName}"?`)) {
+        fetch(`/admin/billing/pricing/{{ company.id }}/remove`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                module_id: moduleId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Success', 'Custom pricing removed successfully!', 'success');
+                // Update monthly cost display
+                if (data.new_total !== undefined) {
+                    document.getElementById('monthly-cost').textContent = `R${data.new_total.toFixed(2)}`;
+                }
+                // Refresh the page to show updated pricing
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error', data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showToast('Error', 'Error removing custom pricing: ' + error.message, 'error');
+        });
     }
-});
+}
 </script>
 {% endblock %}

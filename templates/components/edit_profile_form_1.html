@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit_Profile_Form_1{% endblock %}
+
+{% block content %}
+<form method="POST" enctype="multipart/form-data" id="profileForm">
+    <div class="row">
+        <div class="col-lg-4">
+            <!-- Profile Picture -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-camera"></i> Profile Picture
+                    </h6>
+                </div>
+                <div class="card-body text-center">
+                    <div class="profile-image-container mb-3">
+                        {% if user.profile_image %}
+                        <img src="{{ url_for('static', filename='uploads/profiles/' + user.profile_image) }}" 
+                             alt="Profile Picture" class="profile-image" id="profileImagePreview">
+                        {% else %}
+                        <div class="profile-image-placeholder" id="profileImagePreview">
+                            <i class="fas fa-user fa-4x text-muted"></i>
+                        </div>
+                        {% endif %}
+                        <div class="profile-image-overlay">
+                            <label for="profile_image" class="btn btn-primary btn-sm">
+                                <i class="fas fa-camera"></i> Change Photo
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <input type="file" class="form-control d-none" id="profile_image" name="profile_image" 
+                           accept="image/*" onchange="previewImage(this)">
+                    
+                    <div class="form-text">
+                        Supported formats: JPG, PNG, GIF<br>
+                        Maximum file size: 5MB
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Account Info -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Account Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">User ID:</small><br>
+                        <code>{{ user.id }}</code>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Member Since:</small><br>
+                        {{ user.created_at.strftime('%B %d, %Y') if user.created_at else 'Unknown' }}
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Role:</small><br>
+                        {% if user.is_super_admin %}
+                        <span class="badge bg-danger">Super Administrator</span>
+                        {% elif user.is_admin %}
+                        <span class="badge bg-warning">Administrator</span>
+                        {% else %}
+                        <span class="badge bg-primary">User</span>
+                        {% endif %}
+                    </div>
+                    {% if user.company %}
+                    <div class="mb-0">
+                        <small class="text-muted">Company:</small><br>
+                        {{ user.company.name }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-8">
+            <!-- Personal Information -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user"></i> Personal Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="first_name" class="form-label">First Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" 
+                                   value="{{ user.first_name }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="last_name" class="form-label">Last Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" 
+                                   value="{{ user.last_name }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   value="{{ user.email }}" required>
+                            <div class="form-text">
+                                This will be your login username
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="phone" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" 
+                                   value="{{ user.phone if user.phone else '' }}" 
+                                   placeholder="+1 (555) 123-4567">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Change Password -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-lock"></i> Change Password
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Leave password fields empty to keep your current password
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="current_password" class="form-label">Current Password</label>
+                        <input type="password" class="form-control" id="current_password" name="current_password">
+                        <div class="form-text">
+                            Required only if you want to change your password
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="new_password" class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="new_password" name="new_password" 
+                                   minlength="8">
+                            <div class="form-text">
+                                Minimum 8 characters
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="confirm_password" class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password">
+                            <div class="invalid-feedback" id="passwordMismatch">
+                                Passwords do not match
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Password Strength Indicator -->
+                    <div class="mt-3">
+                        <div class="password-strength-container" style="display: none;">
+                            <small class="text-muted">Password Strength:</small>
+                            <div class="password-strength-bar mt-1">
+                                <div class="password-strength-fill" id="passwordStrengthFill"></div>
+                            </div>
+                            <small class="password-strength-text" id="passwordStrengthText"></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Additional Settings -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cog"></i> Preferences
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="email_notifications" 
+                               name="email_notifications" {{ 'checked' if user.email_notifications else '' }}>
+                        <label class="form-check-label" for="email_notifications">
+                            <strong>Email Notifications</strong><br>
+                            <small class="text-muted">Receive email notifications for tender updates and deadlines</small>
+                        </label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="sms_notifications" 
+                               name="sms_notifications" {{ 'checked' if user.sms_notifications else '' }}>
+                        <label class="form-check-label" for="sms_notifications">
+                            <strong>SMS Notifications</strong><br>
+                            <small class="text-muted">Receive SMS alerts for urgent tender deadlines</small>
+                        </label>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="timezone" class="form-label">Timezone</label>
+                        <select class="form-select" id="timezone" name="timezone">
+                            <option value="UTC" {{ 'selected' if user.timezone == 'UTC' else '' }}>UTC (Coordinated Universal Time)</option>
+                            <option value="America/New_York" {{ 'selected' if user.timezone == 'America/New_York' else '' }}>Eastern Time (ET)</option>
+                            <option value="America/Chicago" {{ 'selected' if user.timezone == 'America/Chicago' else '' }}>Central Time (CT)</option>
+                            <option value="America/Denver" {{ 'selected' if user.timezone == 'America/Denver' else '' }}>Mountain Time (MT)</option>
+                            <option value="America/Los_Angeles" {{ 'selected' if user.timezone == 'America/Los_Angeles' else '' }}>Pacific Time (PT)</option>
+                            <option value="Europe/London" {{ 'selected' if user.timezone == 'Europe/London' else '' }}>London (GMT)</option>
+                            <option value="Europe/Paris" {{ 'selected' if user.timezone == 'Europe/Paris' else '' }}>Paris (CET)</option>
+                            <option value="Asia/Tokyo" {{ 'selected' if user.timezone == 'Asia/Tokyo' else '' }}>Tokyo (JST)</option>
+                            <option value="Africa/Johannesburg" {{ 'selected' if user.timezone == 'Africa/Johannesburg' else '' }}>Johannesburg (SAST)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-save"></i> Save Changes
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="resetForm()">
+                                <i class="fas fa-undo"></i> Reset
+                            </button>
+                        </div>
+                        <div>
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                Last updated: {{ user.updated_at.strftime('%B %d, %Y at %I:%M %p') if user.updated_at else 'Never' }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}

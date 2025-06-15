@@ -1,0 +1,631 @@
+{% extends "base.html" %}
+
+{% block title %}Tender Analytics Dashboard{% endblock %}
+
+{% block content %}
+<style>
+.chart-container {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-bottom: 20px;
+    transition: transform 0.3s ease;
+    height: 280px; /* Fixed height instead of min-height */
+}
+
+.chart-container:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 15px;
+    position: relative;
+    overflow: hidden;
+    height: 120px; /* Reduced height */
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+    transform: rotate(45deg);
+    transition: all 0.6s;
+}
+
+.metric-card:hover::before {
+    animation: shine 0.6s ease-in-out;
+}
+
+@keyframes shine {
+    0% { transform: translateX(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) rotate(45deg); }
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.chart-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #2c3e50;
+    text-align: center;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 5px;
+}
+
+.filter-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.trend-up { color: #27ae60; }
+.trend-down { color: #e74c3c; }
+.trend-stable { color: #f39c12; }
+
+/* Fixed chart canvas heights */
+#tenderStatusChart, #monthlyTrendsChart, #departmentChart, 
+#valueDistributionChart, #categorySuccessChart, #timelineChart {
+    width: 100% !important;
+    height: 200px !important;
+    max-height: 200px !important;
+}
+
+.data-table {
+    font-size: 0.85rem;
+}
+
+.progress-thin {
+    height: 6px;
+}
+
+/* Compact table container */
+.table-container {
+    height: 280px;
+    overflow-y: auto;
+}
+
+/* Performance indicators compact */
+.kpi-container {
+    height: 120px;
+    padding: 10px;
+}
+</style>
+
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="fas fa-chart-line text-primary me-2"></i>
+                        Tender Analytics Dashboard
+                    </h1>
+                    <p class="text-muted small">Comprehensive insights into tender performance and trends</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary btn-sm me-2" onclick="exportReport()">
+                        <i class="fas fa-download me-1"></i> Export
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="refreshData()">
+                        <i class="fas fa-sync-alt me-1"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <div class="row">
+            <div class="col-md-3">
+                <label class="form-label small">Date Range</label>
+                <select class="form-select form-select-sm" id="dateRange" onchange="updateCharts()">
+                    <option value="30">Last 30 Days</option>
+                    <option value="90" selected>Last 3 Months</option>
+                    <option value="180">Last 6 Months</option>
+                    <option value="365">Last Year</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Department</label>
+                <select class="form-select form-select-sm" id="departmentFilter" onchange="updateCharts()">
+                    <option value="all">All Departments</option>
+                    <option value="it">IT & Technology</option>
+                    <option value="construction">Construction</option>
+                    <option value="services">Professional Services</option>
+                    <option value="supplies">Office Supplies</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Tender Status</label>
+                <select class="form-select form-select-sm" id="statusFilter" onchange="updateCharts()">
+                    <option value="all">All Statuses</option>
+                    <option value="open">Open</option>
+                    <option value="closed">Closed</option>
+                    <option value="awarded">Awarded</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Value Range</label>
+                <select class="form-select form-select-sm" id="valueFilter" onchange="updateCharts()">
+                    <option value="all">All Values</option>
+                    <option value="small">Under R100K</option>
+                    <option value="medium">R100K - R1M</option>
+                    <option value="large">Over R1M</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics Row -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="metric-card">
+                <div class="metric-value" id="totalTenders">0</div>
+                <div class="metric-label">Total Tenders</div>
+                <div class="mt-1">
+                    <small class="trend-up">
+                        <i class="fas fa-arrow-up"></i> 12%
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="metric-value" id="totalValue">R0</div>
+                <div class="metric-label">Total Value</div>
+                <div class="mt-1">
+                    <small class="trend-up">
+                        <i class="fas fa-arrow-up"></i> 8%
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="metric-value" id="avgValue">R0</div>
+                <div class="metric-label">Average Value</div>
+                <div class="mt-1">
+                    <small class="trend-down">
+                        <i class="fas fa-arrow-down"></i> 3%
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                <div class="metric-value" id="successRate">0%</div>
+                <div class="metric-label">Success Rate</div>
+                <div class="mt-1">
+                    <small class="trend-up">
+                        <i class="fas fa-arrow-up"></i> 5%
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h3 class="chart-title">Status Distribution</h3>
+                <canvas id="tenderStatusChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h3 class="chart-title">Monthly Trends</h3>
+                <canvas id="monthlyTrendsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2 -->
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <div class="chart-container">
+                <h3 class="chart-title">Department Performance</h3>
+                <canvas id="departmentChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="chart-container">
+                <h3 class="chart-title">Value Distribution</h3>
+                <canvas id="valueDistributionChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 3 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h3 class="chart-title">Success Rate by Category</h3>
+                <canvas id="categorySuccessChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h3 class="chart-title">Timeline Analysis</h3>
+                <canvas id="timelineChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compact Tables and KPIs -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="chart-container table-container">
+                <h3 class="chart-title">Top Performing Tenders</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped data-table">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>No.</th>
+                                <th>Description</th>
+                                <th>Value</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topTendersTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container kpi-container">
+                <h3 class="chart-title">Key Performance Indicators</h3>
+                <div class="row">
+                    <div class="col-6">
+                        <div class="text-center mb-2">
+                            <small><strong>Response Time</strong></small>
+                            <div class="progress progress-thin mb-1">
+                                <div class="progress-bar bg-success" style="width: 85%"></div>
+                            </div>
+                            <small class="text-muted">85%</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center mb-2">
+                            <small><strong>Completion</strong></small>
+                            <div class="progress progress-thin mb-1">
+                                <div class="progress-bar bg-primary" style="width: 78%"></div>
+                            </div>
+                            <small class="text-muted">78%</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center mb-2">
+                            <small><strong>Budget</strong></small>
+                            <div class="progress progress-thin mb-1">
+                                <div class="progress-bar bg-warning" style="width: 92%"></div>
+                            </div>
+                            <small class="text-muted">92%</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center mb-2">
+                            <small><strong>Quality</strong></small>
+                            <div class="progress progress-thin mb-1">
+                                <div class="progress-bar bg-info" style="width: 88%"></div>
+                            </div>
+                            <small class="text-muted">88%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+// Sample data
+const sampleData = {
+    totalTenders: 247,
+    totalValue: 15750000,
+    avgValue: 63765,
+    successRate: 82,
+    statusData: {
+        labels: ['Open', 'In Progress', 'Awarded', 'Closed', 'Cancelled'],
+        data: [45, 78, 89, 25, 10],
+        colors: ['#3498db', '#f39c12', '#27ae60', '#95a5a6', '#e74c3c']
+    },
+    monthlyData: {
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+        tenders: [35, 42, 38, 45, 52, 48],
+        values: [2200000, 2800000, 2400000, 3100000, 3600000, 3200000]
+    },
+    departmentData: {
+        labels: ['IT & Tech', 'Construction', 'Services', 'Supplies', 'Maintenance'],
+        data: [65, 89, 45, 32, 28],
+        colors: ['#3498db', '#e74c3c', '#f39c12', '#27ae60', '#9b59b6']
+    }
+};
+
+let statusChart, trendsChart, departmentChart, valueChart, categoryChart, timelineChart;
+
+function initializeCharts() {
+    // Tender Status Chart (Doughnut)
+    const statusCtx = document.getElementById('tenderStatusChart').getContext('2d');
+    statusChart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: sampleData.statusData.labels,
+            datasets: [{
+                data: sampleData.statusData.data,
+                backgroundColor: sampleData.statusData.colors,
+                borderWidth: 0,
+                hoverOffset: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { 
+                        padding: 10,
+                        font: { size: 11 }
+                    }
+                }
+            }
+        }
+    });
+
+    // Monthly Trends Chart (Line)
+    const trendsCtx = document.getElementById('monthlyTrendsChart').getContext('2d');
+    trendsChart = new Chart(trendsCtx, {
+        type: 'line',
+        data: {
+            labels: sampleData.monthlyData.labels,
+            datasets: [{
+                label: 'Tenders',
+                data: sampleData.monthlyData.tenders,
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { font: { size: 10 } }
+                },
+                x: {
+                    ticks: { font: { size: 10 } }
+                }
+            }
+        }
+    });
+
+    // Department Chart (Bar)
+    const deptCtx = document.getElementById('departmentChart').getContext('2d');
+    departmentChart = new Chart(deptCtx, {
+        type: 'bar',
+        data: {
+            labels: sampleData.departmentData.labels,
+            datasets: [{
+                data: sampleData.departmentData.data,
+                backgroundColor: sampleData.departmentData.colors,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { font: { size: 10 } }
+                },
+                x: {
+                    ticks: { 
+                        font: { size: 9 },
+                        maxRotation: 45
+                    }
+                }
+            }
+        }
+    });
+
+    // Value Distribution Chart (Polar Area)
+    const valueCtx = document.getElementById('valueDistributionChart').getContext('2d');
+    valueChart = new Chart(valueCtx, {
+        type: 'polarArea',
+        data: {
+            labels: ['<R100K', 'R100K-R500K', 'R500K-R1M', '>R1M'],
+            datasets: [{
+                data: [120, 85, 30, 12],
+                backgroundColor: [
+                    'rgba(52, 152, 219, 0.8)',
+                    'rgba(46, 204, 113, 0.8)',
+                    'rgba(241, 196, 15, 0.8)',
+                    'rgba(231, 76, 60, 0.8)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { size: 10 } }
+                }
+            }
+        }
+    });
+
+    // Category Success Chart (Horizontal Bar)
+    const categoryCtx = document.getElementById('categorySuccessChart').getContext('2d');
+    categoryChart = new Chart(categoryCtx, {
+        type: 'bar',
+        data: {
+            labels: ['IT Services', 'Construction', 'Consulting', 'Supplies', 'Maintenance'],
+            datasets: [{
+                data: [85, 78, 92, 67, 73],
+                backgroundColor: 'rgba(46, 204, 113, 0.8)',
+                borderColor: '#27ae60',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { font: { size: 10 } }
+                },
+                y: {
+                    ticks: { font: { size: 9 } }
+                }
+            }
+        }
+    });
+
+    // Timeline Chart (Line)
+    const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+    timelineChart = new Chart(timelineCtx, {
+        type: 'line',
+        data: {
+            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6'],
+            datasets: [{
+                label: 'New',
+                data: [12, 15, 8, 18, 22, 14],
+                borderColor: '#3498db',
+                tension: 0.4
+            }, {
+                label: 'Completed',
+                data: [8, 12, 15, 10, 16, 18],
+                borderColor: '#27ae60',
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { font: { size: 10 } }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { font: { size: 10 } }
+                },
+                x: {
+                    ticks: { font: { size: 9 } }
+                }
+            }
+        }
+    });
+
+    updateMetrics();
+    populateTables();
+}
+
+function updateMetrics() {
+    document.getElementById('totalTenders').textContent = sampleData.totalTenders.toLocaleString();
+    document.getElementById('totalValue').textContent = 'R' + (sampleData.totalValue / 1000000).toFixed(1) + 'M';
+    document.getElementById('avgValue').textContent = 'R' + (sampleData.avgValue / 1000).toFixed(0) + 'K';
+    document.getElementById('successRate').textContent = sampleData.successRate + '%';
+}
+
+function populateTables() {
+    const topTenders = [
+        { no: 'TND-001', desc: 'IT Infrastructure', value: 'R2.5M', status: 'Progress' },
+        { no: 'TND-002', desc: 'Building Renovation', value: 'R1.8M', status: 'Awarded' },
+        { no: 'TND-003', desc: 'Software License', value: 'R950K', status: 'Open' },
+        { no: 'TND-004', desc: 'Security Services', value: 'R750K', status: 'Progress' },
+        { no: 'TND-005', desc: 'Catering', value: 'R450K', status: 'Closed' }
+    ];
+
+    const topTendersHTML = topTenders.map(tender => `
+        <tr>
+            <td><small><strong>${tender.no}</strong></small></td>
+            <td><small>${tender.desc}</small></td>
+            <td><small>${tender.value}</small></td>
+            <td><span class="status-badge bg-primary text-white">${tender.status}</span></td>
+        </tr>
+    `).join('');
+    document.getElementById('topTendersTable').innerHTML = topTendersHTML;
+}
+
+function updateCharts() {
+    if (statusChart) statusChart.update();
+    if (trendsChart) trendsChart.update();
+    if (departmentChart) departmentChart.update();
+    if (valueChart) valueChart.update();
+    if (categoryChart) categoryChart.update();
+    if (timelineChart) timelineChart.update();
+}
+
+function refreshData() {
+    updateCharts();
+}
+
+function exportReport() {
+    alert('Export functionality would be implemented here');
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCharts();
+});
+</script>
+
+{% endblock %}

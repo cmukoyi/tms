@@ -102,37 +102,7 @@
             <div class="card-body">
                 {% if tender_stats.status_breakdown %}
                 <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Status</th>
-                                <th>Count</th>
-                                <th>Percentage</th>
-                                <th>Visual</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for status in tender_stats.status_breakdown %}
-                            {% set percent = (status.count / tender_stats.total_tenders * 100) %}
-                            <tr>
-                                <td>
-                                    <span class="badge" style="background-color: {{ status.color }}; color: white;">
-                                        {{ status.name }}
-                                    </span>
-                                </td>
-                                <td><strong>{{ status.count }}</strong></td>
-                                <td>{{ "%.1f"|format(percent) }}%</td>
-                                <td>
-                                    <div class="progress" style="height: 8px;">
-                                        <div class="progress-bar" 
-                                             style="width: {{ percent }}%; background-color: {{ status.color }};">
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                    {% include 'components/dashboard_table_1.html' %}
                 </div>
                 {% else %}
                 <div class="text-center py-4">

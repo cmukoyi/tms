@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}Billing Reports{% endblock %}
+
+{% block extra_css %}
+<style>
+.chart-container {
+    height: 400px;
+    margin-bottom: 2rem;
+}
+.stat-card {
+    transition: transform 0.2s;
+}
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+.report-section {
+    margin-bottom: 2rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-chart-bar text-info"></i> Billing Reports
+                    </h1>
+                    <p class="text-muted">Comprehensive billing analytics and insights</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('billing_dashboard') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                    <button class="btn btn-success" onclick="exportReport()">
+                        <i class="fas fa-download"></i> Export Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Total Monthly Revenue</h6>
+                            <h3 class="text-success mb-0">R {{ "%.2f"|format(total_revenue or 0) }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-dollar-sign fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Active Companies</h6>
+                            <h3 class="text-primary mb-0">{{ total_companies or 0 }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-building fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Average Per Company</h6>
+                            <h3 class="text-info mb-0">
+                                R {{ "%.2f"|format((total_revenue / total_companies) if total_companies > 0 else 0) }}
+                            </h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-calculator fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stat-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-subtitle mb-2 text-muted">Active Modules</h6>
+                            <h3 class="text-warning mb-0">{{ module_stats|length or 0 }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-puzzle-piece fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Monthly Revenue Trend -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-line-chart"></i> Monthly Revenue Trend</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module Revenue Breakdown -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-pie-chart"></i> Module Revenue</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        {% if module_stats %}
+                        <canvas id="moduleChart"></canvas>
+                        {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No module data available</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Tables -->
+    <div class="row">
+        <!-- Module Statistics -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-table"></i> Module Performance</h5>
+                </div>
+                <div class="card-body">
+                    {% if module_stats %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Module</th>
+                                    <th>Usage</th>
+                                    <th>Revenue</th>
+                                    <th>Category</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for module in module_stats %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ module.name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ module.usage_count }} companies</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-success">R {{ "%.2f"|format(module.revenue) }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 
+                                            'primary' if module.category == 'core' else
+                                            'info' if module.category == 'feature' else
+                                            'warning' if module.category == 'premium' else
+                                            'secondary' }}">
+                                            {{ module.category|title }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No module statistics available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Companies -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-crown"></i> Top Companies by Revenue</h5>
+                </div>
+                <div class="card-body">
+                    {% if company_breakdown %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Company</th>
+                                    <th>Modules</th>
+                                    <th>Monthly Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for company in company_breakdown[:10] %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ company.name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ company.module_count }} modules</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-success fw-bold">R {{ "%.2f"|format(company.monthly_cost) }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No company data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize charts
+    initializeRevenueChart();
+    {% if module_stats %}
+    initializeModuleChart();
+    {% endif %}
+});
+
+function initializeRevenueChart() {
+    const ctx = document.getElementById('revenueChart').getContext('2d');
+    
+    const revenueData = {
+        labels: {{ monthly_revenue|map(attribute='month')|list|tojsonfilter|safe if monthly_revenue else '[]'|safe }},
+        datasets: [{
+            label: 'Monthly Revenue (R)',
+            data: {{ monthly_revenue|map(attribute='revenue')|list|tojsonfilter|safe if monthly_revenue else '[]'|safe }},
+            borderColor: '#28a745',
+            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+            tension: 0.4,
+            fill: true
+        }]
+    };
+
+    new Chart(ctx, {
+        type: 'line',
+        data: revenueData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'R ' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+{% if module_stats %}
+function initializeModuleChart() {
+    const ctx = document.getElementById('moduleChart').getContext('2d');
+    
+    const moduleData = {
+        labels: {{ module_stats|map(attribute='name')|list|tojsonfilter|safe }},
+        datasets: [{
+            data: {{ module_stats|map(attribute='revenue')|list|tojsonfilter|safe }},
+            backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', 
+                '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+            ]
+        }]
+    };
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: moduleData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12
+                    }
+                }
+            }
+        }
+    });
+}
+{% endif %}
+
+function exportReport() {
+    // Implement export functionality
+    window.open('/admin/billing/export-report', '_blank');
+}
+</script>
+{% endblock %}

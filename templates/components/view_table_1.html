@@ -1,0 +1,46 @@
+
+
+{% block content %}
+<table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Document Name</th>
+                                <th>Type</th>
+                                <th>Size</th>
+                                <th>Uploaded</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for document in documents %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-file-pdf text-danger me-2"></i>
+                                    {{ document.original_filename }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ document.doc_type.name }}</span>
+                                </td>
+                                <td>{{ document.get_file_size_mb() }} MB</td>
+                                <td>
+                                    <small>{{ document.created_at.strftime('%Y-%m-%d') }}</small><br>
+                                    <small class="text-muted">by {{ document.uploaded_by_user.full_name }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('download_document', document_id=document.id) }}" 
+                                           class="btn btn-outline-primary" title="Download">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" 
+                                                title="Delete" data-bs-toggle="modal" 
+                                                data-bs-target="#deleteDocModal{{ document.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+{% endblock %}

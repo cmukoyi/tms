@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Billing Pricing{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-header d-print-none">
+                <div class="container-xl">
+                    <div class="row g-2 align-items-center">
+                        <div class="col">
+                            <h2 class="page-title">
+                                <i class="fas fa-tags me-2"></i>Company Pricing Overview
+                            </h2>
+                        </div>
+                        <div class="col-auto ms-auto d-print-none">
+                            <div class="btn-list">
+                                <a href="{{ url_for('billing_dashboard') }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                                </a>
+                                <a href="{{ url_for('manage_modules') }}" class="btn btn-primary">
+                                    <i class="fas fa-cogs me-1"></i>Manage Modules
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-xl">
+        <div class="row row-deck row-cards">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Company Pricing Details</h3>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if pricing_data %}
+                        <div class="table-responsive">
+                            <table class="table table-vcenter card-table">
+                                <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        <th>Default Cost</th>
+                                        <th>Actual Cost</th>
+                                        <th>Difference</th>
+                                        <th>Custom Modules</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in pricing_data %}
+                                    <tr>
+                                        <td>
+                                            <div>
+                                                <strong>{{ item.company.name }}</strong>
+                                                <div class="text-muted">{{ item.company.email }}</div>
+                                            </div>
+                                        </td>
+                                        <td>R {{ "{:,.2f}".format(item.default_cost) }}</td>
+                                        <td>R {{ "{:,.2f}".format(item.custom_cost) }}</td>
+                                        <td>
+                                            {% set difference = item.custom_cost - item.default_cost %}
+                                            <span class="text-{% if difference < 0 %}success{% elif difference > 0 %}danger{% else %}muted{% endif %}">
+                                                {% if difference > 0 %}+{% endif %}R {{ "{:,.2f}".format(difference) }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if item.has_custom_pricing %}
+                                                <span class="badge bg-warning">{{ item.custom_modules_count }} custom</span>
+                                            {% else %}
+                                                <span class="text-muted">Standard pricing</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.company.is_active %}
+                                                <span class="badge bg-success">Active</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Inactive</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-list">
+                                                <a href="{{ url_for('edit_company_pricing', company_id=item.company.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </a>
+                                                <a href="{{ url_for('company_billing_details', company_id=item.company.id) }}" 
+                                                   class="btn btn-sm btn-outline-info">
+                                                    <i class="fas fa-eye"></i> View
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="empty">
+                            <div class="empty-icon">
+                                <i class="fas fa-building fa-3x"></i>
+                            </div>
+                            <p class="empty-title">No companies found</p>
+                            <p class="empty-subtitle text-muted">Add companies to see their pricing information</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,204 @@
+[2025-06-13 22:59:47] INFO: === STEP 1: Analyzing Current Database State ===
+[2025-06-13 22:59:47] INFO: Found 12 features in legacy system
+[2025-06-13 22:59:47] INFO: Found 14 total company-feature relationships
+[2025-06-13 22:59:47] INFO: Found 12 enabled company-feature relationships
+[2025-06-13 22:59:47] INFO: Found 12 modules in new system
+[2025-06-13 22:59:47] INFO: Found 32 total company-module relationships
+[2025-06-13 22:59:47] INFO: Found 26 enabled company-module relationships
+[2025-06-13 22:59:47] INFO: Overlapping codes/names: {'user_management', 'custom_fields', 'api_access'}
+[2025-06-13 22:59:47] INFO: Feature codes not in modules: {'bulk_operations', 'files', 'reports', 'analytics', 'email_notifications', 'dashboard', 'tender_history', 'export_data', 'tenders'}
+[2025-06-13 22:59:47] INFO: Module names not in features: {'notifications', 'reporting', 'advanced_search', 'white_labeling', 'audit_tracking', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:11] INFO: === STARTING FULL MIGRATION (DRY RUN) ===
+[2025-06-13 23:00:11] INFO: === STEP 1: Analyzing Current Database State ===
+[2025-06-13 23:00:11] INFO: Found 12 features in legacy system
+[2025-06-13 23:00:11] INFO: Found 14 total company-feature relationships
+[2025-06-13 23:00:11] INFO: Found 12 enabled company-feature relationships
+[2025-06-13 23:00:11] INFO: Found 12 modules in new system
+[2025-06-13 23:00:11] INFO: Found 32 total company-module relationships
+[2025-06-13 23:00:11] INFO: Found 26 enabled company-module relationships
+[2025-06-13 23:00:11] INFO: Overlapping codes/names: {'user_management', 'custom_fields', 'api_access'}
+[2025-06-13 23:00:11] INFO: Feature codes not in modules: {'bulk_operations', 'files', 'reports', 'analytics', 'email_notifications', 'dashboard', 'tender_history', 'export_data', 'tenders'}
+[2025-06-13 23:00:11] INFO: Module names not in features: {'notifications', 'reporting', 'advanced_search', 'white_labeling', 'audit_tracking', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:11] INFO: === STEP 2: Creating Missing Module Definitions ===
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: dashboard -> Dashboard ($0.0/month)
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: tenders -> Tender Management ($0.0/month)
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: files -> File Management ($15.0/month)
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: reports -> Reports & Analytics ($25.0/month)
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: analytics -> Advanced Analytics ($35.0/month)
+[2025-06-13 23:00:11] INFO: Module already exists for feature: user_management
+[2025-06-13 23:00:11] INFO: Module already exists for feature: api_access
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: email_notifications -> Email Notifications ($10.0/month)
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: tender_history -> Tender History & Audit ($15.0/month)
+[2025-06-13 23:00:11] INFO: Module already exists for feature: custom_fields
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: bulk_operations -> Bulk Operations ($0.0/month)
+[2025-06-13 23:00:11] INFO: [DRY RUN] Created module: export_data -> Export Data ($0.0/month)
+[2025-06-13 23:00:11] INFO: Created 9 new module definitions
+[2025-06-13 23:00:11] INFO: === STEP 3: Migrating Company-Feature Relationships ===
+[2025-06-13 23:00:11] WARNING: No module found for feature: dashboard
+[2025-06-13 23:00:11] WARNING: No module found for feature: tenders
+[2025-06-13 23:00:11] WARNING: No module found for feature: dashboard
+[2025-06-13 23:00:11] WARNING: No module found for feature: tenders
+[2025-06-13 23:00:11] WARNING: No module found for feature: files
+[2025-06-13 23:00:11] WARNING: No module found for feature: reports
+[2025-06-13 23:00:11] WARNING: No module found for feature: analytics
+[2025-06-13 23:00:11] INFO: Company module already exists: Company 1 -> user_management
+[2025-06-13 23:00:11] WARNING: No module found for feature: files
+[2025-06-13 23:00:11] WARNING: No module found for feature: analytics
+[2025-06-13 23:00:11] INFO: Company module already exists: Company 2 -> user_management
+[2025-06-13 23:00:11] WARNING: No module found for feature: reports
+[2025-06-13 23:00:11] INFO: Migrated 0 relationships, skipped 12
+[2025-06-13 23:00:11] INFO: === STEP 4: Verifying Migration Results ===
+[2025-06-13 23:00:11] INFO: ❌ MISMATCH Company 1 (ViSight Solutions): Legacy=6, New=8
+[2025-06-13 23:00:11] WARNING:   Missing in new system: {'files', 'reports', 'analytics', 'dashboard', 'tenders'}
+[2025-06-13 23:00:11] INFO:   Extra in new system: {'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:11] INFO: ❌ MISMATCH Company 2 (Expedited Industrial Mining Services): Legacy=6, New=8
+[2025-06-13 23:00:11] WARNING:   Missing in new system: {'files', 'reports', 'analytics', 'dashboard', 'tenders'}
+[2025-06-13 23:00:11] INFO:   Extra in new system: {'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:11] INFO: ❌ MISMATCH Company 3 (ViTracker): Legacy=0, New=8
+[2025-06-13 23:00:11] INFO:   Extra in new system: {'user_management', 'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:11] INFO: ❌ MISMATCH Company 4 (Q Employ Benefits): Legacy=0, New=2
+[2025-06-13 23:00:11] INFO:   Extra in new system: {'user_management', 'tender_management'}
+[2025-06-13 23:00:11] INFO: Migration verification complete:
+[2025-06-13 23:00:11] INFO:   Companies processed: 4
+[2025-06-13 23:00:11] INFO:   Perfect matches: 0
+[2025-06-13 23:00:11] INFO:   Success rate: 0.0%
+[2025-06-13 23:00:11] INFO: === MIGRATION COMPLETE (DRY RUN) ===
+[2025-06-13 23:00:11] INFO: Created modules: 9
+[2025-06-13 23:00:11] INFO: Migrated relationships: 0
+[2025-06-13 23:00:11] INFO: Skipped relationships: 12
+[2025-06-13 23:00:31] INFO: === STARTING FULL MIGRATION (DRY RUN) ===
+[2025-06-13 23:00:31] INFO: === STEP 1: Analyzing Current Database State ===
+[2025-06-13 23:00:31] INFO: Found 12 features in legacy system
+[2025-06-13 23:00:31] INFO: Found 14 total company-feature relationships
+[2025-06-13 23:00:31] INFO: Found 12 enabled company-feature relationships
+[2025-06-13 23:00:31] INFO: Found 12 modules in new system
+[2025-06-13 23:00:31] INFO: Found 32 total company-module relationships
+[2025-06-13 23:00:31] INFO: Found 26 enabled company-module relationships
+[2025-06-13 23:00:31] INFO: Overlapping codes/names: {'user_management', 'custom_fields', 'api_access'}
+[2025-06-13 23:00:31] INFO: Feature codes not in modules: {'bulk_operations', 'files', 'reports', 'analytics', 'email_notifications', 'dashboard', 'tender_history', 'export_data', 'tenders'}
+[2025-06-13 23:00:31] INFO: Module names not in features: {'notifications', 'reporting', 'advanced_search', 'white_labeling', 'audit_tracking', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:31] INFO: === STEP 2: Creating Missing Module Definitions ===
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: dashboard -> Dashboard ($0.0/month)
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: tenders -> Tender Management ($0.0/month)
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: files -> File Management ($15.0/month)
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: reports -> Reports & Analytics ($25.0/month)
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: analytics -> Advanced Analytics ($35.0/month)
+[2025-06-13 23:00:31] INFO: Module already exists for feature: user_management
+[2025-06-13 23:00:31] INFO: Module already exists for feature: api_access
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: email_notifications -> Email Notifications ($10.0/month)
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: tender_history -> Tender History & Audit ($15.0/month)
+[2025-06-13 23:00:31] INFO: Module already exists for feature: custom_fields
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: bulk_operations -> Bulk Operations ($0.0/month)
+[2025-06-13 23:00:31] INFO: [DRY RUN] Created module: export_data -> Export Data ($0.0/month)
+[2025-06-13 23:00:31] INFO: Created 9 new module definitions
+[2025-06-13 23:00:31] INFO: === STEP 3: Migrating Company-Feature Relationships ===
+[2025-06-13 23:00:31] WARNING: No module found for feature: dashboard
+[2025-06-13 23:00:31] WARNING: No module found for feature: tenders
+[2025-06-13 23:00:31] WARNING: No module found for feature: dashboard
+[2025-06-13 23:00:31] WARNING: No module found for feature: tenders
+[2025-06-13 23:00:31] WARNING: No module found for feature: files
+[2025-06-13 23:00:31] WARNING: No module found for feature: reports
+[2025-06-13 23:00:31] WARNING: No module found for feature: analytics
+[2025-06-13 23:00:31] INFO: Company module already exists: Company 1 -> user_management
+[2025-06-13 23:00:31] WARNING: No module found for feature: files
+[2025-06-13 23:00:31] WARNING: No module found for feature: analytics
+[2025-06-13 23:00:31] INFO: Company module already exists: Company 2 -> user_management
+[2025-06-13 23:00:31] WARNING: No module found for feature: reports
+[2025-06-13 23:00:31] INFO: Migrated 0 relationships, skipped 12
+[2025-06-13 23:00:31] INFO: === STEP 4: Verifying Migration Results ===
+[2025-06-13 23:00:31] INFO: ❌ MISMATCH Company 1 (ViSight Solutions): Legacy=6, New=8
+[2025-06-13 23:00:31] WARNING:   Missing in new system: {'files', 'reports', 'analytics', 'dashboard', 'tenders'}
+[2025-06-13 23:00:31] INFO:   Extra in new system: {'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:31] INFO: ❌ MISMATCH Company 2 (Expedited Industrial Mining Services): Legacy=6, New=8
+[2025-06-13 23:00:31] WARNING:   Missing in new system: {'files', 'reports', 'analytics', 'dashboard', 'tenders'}
+[2025-06-13 23:00:31] INFO:   Extra in new system: {'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:31] INFO: ❌ MISMATCH Company 3 (ViTracker): Legacy=0, New=8
+[2025-06-13 23:00:31] INFO:   Extra in new system: {'user_management', 'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:00:31] INFO: ❌ MISMATCH Company 4 (Q Employ Benefits): Legacy=0, New=2
+[2025-06-13 23:00:31] INFO:   Extra in new system: {'user_management', 'tender_management'}
+[2025-06-13 23:00:31] INFO: Migration verification complete:
+[2025-06-13 23:00:31] INFO:   Companies processed: 4
+[2025-06-13 23:00:31] INFO:   Perfect matches: 0
+[2025-06-13 23:00:31] INFO:   Success rate: 0.0%
+[2025-06-13 23:00:31] INFO: === MIGRATION COMPLETE (DRY RUN) ===
+[2025-06-13 23:00:31] INFO: Created modules: 9
+[2025-06-13 23:00:31] INFO: Migrated relationships: 0
+[2025-06-13 23:00:31] INFO: Skipped relationships: 12
+[2025-06-13 23:01:14] INFO: === STARTING FULL MIGRATION (LIVE MODE) ===
+[2025-06-13 23:01:14] INFO: === STEP 1: Analyzing Current Database State ===
+[2025-06-13 23:01:14] INFO: Found 12 features in legacy system
+[2025-06-13 23:01:14] INFO: Found 14 total company-feature relationships
+[2025-06-13 23:01:14] INFO: Found 12 enabled company-feature relationships
+[2025-06-13 23:01:14] INFO: Found 12 modules in new system
+[2025-06-13 23:01:14] INFO: Found 32 total company-module relationships
+[2025-06-13 23:01:14] INFO: Found 26 enabled company-module relationships
+[2025-06-13 23:01:14] INFO: Overlapping codes/names: {'user_management', 'custom_fields', 'api_access'}
+[2025-06-13 23:01:14] INFO: Feature codes not in modules: {'bulk_operations', 'files', 'reports', 'analytics', 'email_notifications', 'dashboard', 'tender_history', 'export_data', 'tenders'}
+[2025-06-13 23:01:14] INFO: Module names not in features: {'notifications', 'reporting', 'advanced_search', 'white_labeling', 'audit_tracking', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:14] INFO: === STEP 2: Creating Missing Module Definitions ===
+[2025-06-13 23:01:14] INFO: Created module: dashboard -> Dashboard ($0.0/month)
+[2025-06-13 23:01:14] INFO: Created module: tenders -> Tender Management ($0.0/month)
+[2025-06-13 23:01:14] INFO: Created module: files -> File Management ($15.0/month)
+[2025-06-13 23:01:14] INFO: Created module: reports -> Reports & Analytics ($25.0/month)
+[2025-06-13 23:01:14] INFO: Created module: analytics -> Advanced Analytics ($35.0/month)
+[2025-06-13 23:01:14] INFO: Module already exists for feature: user_management
+[2025-06-13 23:01:14] INFO: Module already exists for feature: api_access
+[2025-06-13 23:01:14] INFO: Created module: email_notifications -> Email Notifications ($10.0/month)
+[2025-06-13 23:01:14] INFO: Created module: tender_history -> Tender History & Audit ($15.0/month)
+[2025-06-13 23:01:14] INFO: Module already exists for feature: custom_fields
+[2025-06-13 23:01:14] INFO: Created module: bulk_operations -> Bulk Operations ($0.0/month)
+[2025-06-13 23:01:14] INFO: Created module: export_data -> Export Data ($0.0/month)
+[2025-06-13 23:01:14] INFO: Created 9 new module definitions
+[2025-06-13 23:01:14] INFO: === STEP 3: Migrating Company-Feature Relationships ===
+[2025-06-13 23:01:14] INFO: Migrated: Company 1 -> dashboard
+[2025-06-13 23:01:14] INFO: Migrated: Company 1 -> tenders
+[2025-06-13 23:01:14] INFO: Migrated: Company 2 -> dashboard
+[2025-06-13 23:01:14] INFO: Migrated: Company 2 -> tenders
+[2025-06-13 23:01:14] INFO: Migrated: Company 1 -> files
+[2025-06-13 23:01:14] INFO: Migrated: Company 1 -> reports
+[2025-06-13 23:01:14] INFO: Migrated: Company 1 -> analytics
+[2025-06-13 23:01:14] INFO: Company module already exists: Company 1 -> user_management
+[2025-06-13 23:01:14] INFO: Migrated: Company 2 -> files
+[2025-06-13 23:01:14] INFO: Migrated: Company 2 -> analytics
+[2025-06-13 23:01:14] INFO: Company module already exists: Company 2 -> user_management
+[2025-06-13 23:01:14] INFO: Migrated: Company 2 -> reports
+[2025-06-13 23:01:14] INFO: Migrated 10 relationships, skipped 2
+[2025-06-13 23:01:14] INFO: === STEP 4: Verifying Migration Results ===
+[2025-06-13 23:01:14] INFO: ❌ MISMATCH Company 1 (ViSight Solutions): Legacy=6, New=13
+[2025-06-13 23:01:14] INFO:   Extra in new system: {'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:14] INFO: ❌ MISMATCH Company 2 (Expedited Industrial Mining Services): Legacy=6, New=13
+[2025-06-13 23:01:14] INFO:   Extra in new system: {'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:14] INFO: ❌ MISMATCH Company 3 (ViTracker): Legacy=0, New=8
+[2025-06-13 23:01:14] INFO:   Extra in new system: {'user_management', 'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:14] INFO: ❌ MISMATCH Company 4 (Q Employ Benefits): Legacy=0, New=2
+[2025-06-13 23:01:14] INFO:   Extra in new system: {'user_management', 'tender_management'}
+[2025-06-13 23:01:14] INFO: Migration verification complete:
+[2025-06-13 23:01:14] INFO:   Companies processed: 4
+[2025-06-13 23:01:14] INFO:   Perfect matches: 0
+[2025-06-13 23:01:14] INFO:   Success rate: 0.0%
+[2025-06-13 23:01:14] INFO: === STEP 5: Legacy Data Cleanup (OPTIONAL) ===
+[2025-06-13 23:01:14] INFO: About to delete 14 company_feature records and 12 feature records
+[2025-06-13 23:01:14] INFO: Deleted legacy data
+[2025-06-13 23:01:14] INFO: === MIGRATION COMPLETE (LIVE MODE) ===
+[2025-06-13 23:01:14] INFO: Created modules: 9
+[2025-06-13 23:01:14] INFO: Migrated relationships: 10
+[2025-06-13 23:01:14] INFO: Skipped relationships: 2
+[2025-06-13 23:01:25] INFO: === STEP 2: Creating Missing Module Definitions ===
+[2025-06-13 23:01:25] INFO: Created 0 new module definitions
+[2025-06-13 23:01:33] INFO: === STEP 2: Creating Missing Module Definitions ===
+[2025-06-13 23:01:33] INFO: Created 0 new module definitions
+[2025-06-13 23:01:39] INFO: === STEP 3: Migrating Company-Feature Relationships ===
+[2025-06-13 23:01:39] INFO: Migrated 0 relationships, skipped 0
+[2025-06-13 23:01:43] INFO: === STEP 4: Verifying Migration Results ===
+[2025-06-13 23:01:43] INFO: ❌ MISMATCH Company 1 (ViSight Solutions): Legacy=0, New=13
+[2025-06-13 23:01:43] INFO:   Extra in new system: {'user_management', 'notifications', 'files', 'reports', 'custom_fields', 'advanced_search', 'analytics', 'document_management', 'dashboard', 'company_management', 'tenders', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:43] INFO: ❌ MISMATCH Company 2 (Expedited Industrial Mining Services): Legacy=0, New=13
+[2025-06-13 23:01:43] INFO:   Extra in new system: {'user_management', 'notifications', 'files', 'reports', 'custom_fields', 'advanced_search', 'analytics', 'document_management', 'dashboard', 'company_management', 'tenders', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:43] INFO: ❌ MISMATCH Company 3 (ViTracker): Legacy=0, New=8
+[2025-06-13 23:01:43] INFO:   Extra in new system: {'user_management', 'notifications', 'custom_fields', 'advanced_search', 'document_management', 'company_management', 'notes_comments', 'tender_management'}
+[2025-06-13 23:01:43] INFO: ❌ MISMATCH Company 4 (Q Employ Benefits): Legacy=0, New=2
+[2025-06-13 23:01:43] INFO:   Extra in new system: {'user_management', 'tender_management'}
+[2025-06-13 23:01:43] INFO: Migration verification complete:
+[2025-06-13 23:01:43] INFO:   Companies processed: 4
+[2025-06-13 23:01:43] INFO:   Perfect matches: 0
+[2025-06-13 23:01:43] INFO:   Success rate: 0.0%

@@ -1,0 +1,291 @@
+<!-- Create this file: templates/company/profile.html -->
+
+{% extends "base.html" %}
+
+
+{% block title %}Company Profile{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0 text-gray-800">
+                    <i class="fas fa-building"></i> Company Profile
+                </h1>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadDocumentModal">
+                    <i class="fas fa-upload"></i> Upload Document
+                </button>
+            </div>
+
+            <!-- Company Information Card -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle"></i> Company Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Company Name:</strong></td>
+                                    <td>{{ company.name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Registration Number:</strong></td>
+                                    <td>{{ company.registration_number or 'Not specified' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>VAT Number:</strong></td>
+                                    <td>{{ company.vat_number or 'Not specified' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Address:</strong></td>
+                                    <td>{{ company.address or 'Not specified' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Phone:</strong></td>
+                                    <td>{{ company.phone or 'Not specified' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>{{ company.email or 'Not specified' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Website:</strong></td>
+                                    <td>{{ company.website or 'Not specified' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>{{ company.created_at.strftime('%d %B %Y') if company.created_at else 'Unknown' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Company Documents -->
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-folder-open"></i> Company Documents
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if document_categories %}
+                        <!-- Document Categories Accordion -->
+                        <div class="accordion" id="documentsAccordion">
+                            {% for category, documents in document_categories.items() %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading{{ loop.index }}">
+                                    <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" 
+                                            type="button" 
+                                            data-bs-toggle="collapse" 
+                                            data-bs-target="#collapse{{ loop.index }}" 
+                                            aria-expanded="{% if loop.first %}true{% else %}false{% endif %}" 
+                                            aria-controls="collapse{{ loop.index }}">
+                                        <i class="fas fa-folder me-2"></i>
+                                        {{ category }} 
+                                        <span class="badge bg-primary ms-2">{{ documents|length }}</span>
+                                    </button>
+                                </h2>
+                                <div id="collapse{{ loop.index }}" 
+                                     class="accordion-collapse collapse {% if loop.first %}show{% endif %}" 
+                                     aria-labelledby="heading{{ loop.index }}" 
+                                     data-bs-parent="#documentsAccordion">
+                                    <div class="accordion-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Document Name</th>
+                                                        <th>Description</th>
+                                                        <th>File Size</th>
+                                                        <th>Uploaded</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for doc in documents %}
+                                                    <tr>
+                                                        <td>
+                                                            <i class="fas fa-file-alt text-primary me-2"></i>
+                                                            {{ doc.document_name }}
+                                                            <br>
+                                                            <small class="text-muted">{{ doc.original_filename }}</small>
+                                                        </td>
+                                                        <td>{{ doc.description or 'No description' }}</td>
+                                                        <td>{{ doc.file_size_human }}</td>
+                                                        <td>
+                                                            {{ doc.created_at.strftime('%d %b %Y') }}
+                                                            <br>
+                                                            <small class="text-muted">by {{ doc.uploader.full_name if doc.uploader else 'Unknown' }}</small>
+                                                        </td>
+                                                        <td>
+                                                            <div class="btn-group" role="group">
+                                                                <!-- View button for PDFs and images -->
+                                                                {% if doc.mime_type.startswith('application/pdf') or doc.mime_type.startswith('image/') %}
+                                                                <a href="{{ url_for('view_company_document', document_id=doc.id) }}" 
+                                                                   class="btn btn-sm btn-outline-primary" 
+                                                                   target="_blank" 
+                                                                   title="View">
+                                                                    <i class="fas fa-eye"></i>
+                                                                </a>
+                                                                {% endif %}
+                                                                
+                                                                <!-- Download button -->
+                                                                <a href="{{ url_for('download_company_document', document_id=doc.id) }}" 
+                                                                   class="btn btn-sm btn-outline-success" 
+                                                                   title="Download">
+                                                                    <i class="fas fa-download"></i>
+                                                                </a>
+                                                                
+                                                                <!-- Delete button -->
+                                                                <button type="button" 
+                                                                        class="btn btn-sm btn-outline-danger" 
+                                                                        title="Delete"
+                                                                        onclick="confirmDeleteDocument({{ doc.id }}, '{{ doc.document_name }}')">
+                                                                    <i class="fas fa-trash"></i>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No documents uploaded yet</h5>
+                            <p class="text-muted">Upload your first company document to get started.</p>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadDocumentModal">
+                                <i class="fas fa-upload"></i> Upload First Document
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Document Modal -->
+<div class="modal fade" id="uploadDocumentModal" tabindex="-1" aria-labelledby="uploadDocumentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadDocumentModalLabel">
+                    <i class="fas fa-upload"></i> Upload Company Document
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('upload_company_document') }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="document_name" class="form-label">Document Name *</label>
+                                <input type="text" class="form-control" id="document_name" name="document_name" required>
+                                <div class="form-text">Give this document a descriptive name</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="document_category" class="form-label">Category *</label>
+                                <select class="form-select" id="document_category" name="document_category" required>
+                                    <option value="">Select category...</option>
+                                    {% for category in available_categories %}
+                                    <option value="{{ category }}">{{ category }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" 
+                                  placeholder="Optional description of the document"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="document_file" class="form-label">Select File *</label>
+                        <input type="file" class="form-control" id="document_file" name="document_file" required>
+                        <div class="form-text">
+                            Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF (Max: 10MB)
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i> Upload Document
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteDocumentModal" tabindex="-1" aria-labelledby="deleteDocumentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger" id="deleteDocumentModalLabel">
+                    <i class="fas fa-exclamation-triangle"></i> Delete Document
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the document "<strong id="deleteDocumentName"></strong>"?</p>
+                <p class="text-danger">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteDocumentForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDeleteDocument(documentId, documentName) {
+    document.getElementById('deleteDocumentName').textContent = documentName;
+    document.getElementById('deleteDocumentForm').action = '/delete_company_document/' + documentId;
+    
+    var deleteModal = new bootstrap.Modal(document.getElementById('deleteDocumentModal'));
+    deleteModal.show();
+}
+
+// Auto-fill document name based on file selection
+document.getElementById('document_file').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const documentNameField = document.getElementById('document_name');
+    
+    if (file && !documentNameField.value) {
+        // Remove file extension and clean up filename
+        const fileName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, ' ');
+        documentNameField.value = fileName;
+    }
+});
+</script>
+{% endblock %}

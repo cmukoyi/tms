@@ -56,7 +56,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between">
                         <div>
-                            <h5>Reports</h5>
+                            <h5>Analytics</h5>
                             <p>View analytics and reports</p>
                             {% if tender_stats %}
                             <small class="opacity-75">{{ tender_stats.status_breakdown|length }} status types</small>
@@ -72,7 +72,9 @@
     </div>
     
     <div class="col-md-3">
-        <a href="Settings.html" class="text-decoration-none">
+
+        
+        <a href="{{ url_for('admin_users') }}" class="text-decoration-none"></a>
             <div class="card bg-warning text-white dashboard-card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between">

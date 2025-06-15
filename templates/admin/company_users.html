@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}{{ company.name }} Users - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header Section -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-users me-2"></i>{{ company.name }} Users</h2>
+                    <p class="text-muted mb-0">Manage users for {{ company.name }}</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('admin_companies') }}" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Companies
+                    </a>
+                    <a href="{{ url_for('edit_company', company_id=company.id) }}" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-edit me-1"></i>Edit Company
+                    </a>
+                    <a href="{{ url_for('add_company_user', company_id=company.id) }}" class="btn btn-success">
+                        <i class="fas fa-user-plus me-1"></i>Add New User
+                    </a>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-primary">{{ user_stats.total_users }}</h3>
+                            <p class="text-muted mb-0">Total Users</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-success">{{ user_stats.active_users }}</h3>
+                            <p class="text-muted mb-0">Active Users</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-warning">{{ user_stats.inactive_users }}</h3>
+                            <p class="text-muted mb-0">Inactive Users</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h3 class="text-info">{{ user_stats.recent_users }}</h3>
+                            <p class="text-muted mb-0">Recent (30 days)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Role Distribution -->
+            {% if user_stats.role_counts %}
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-user-tag me-2"></i>Users by Role</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                {% for role_name, count in user_stats.role_counts.items() %}
+                                <div class="col-md-4 mb-2">
+                                    <div class="d-flex justify-content-between align-items-center p-2 border rounded">
+                                        <span class="fw-medium">{{ role_name }}</span>
+                                        <span class="badge bg-secondary">{{ count }}</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Users Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>All Users</h5>
+                    <div class="d-flex align-items-center">
+                        <input type="text" class="form-control form-control-sm me-2" id="searchUsers" 
+                               placeholder="Search users..." style="width: 200px;">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                    data-bs-toggle="dropdown">
+                                Filter by Status
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="filterUsers('all')">All Users</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="filterUsers('active')">Active Only</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="filterUsers('inactive')">Inactive Only</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if users %}
+                    <div class="table-responsive">
+                        {% include 'components/company_users_table_1.html' %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Users Found</h5>
+                        <p class="text-muted mb-3">{{ company.name }} doesn't have any users yet.</p>
+                        <a href="{{ url_for('add_company_user', company_id=company.id) }}" class="btn btn-primary">
+                            <i class="fas fa-user-plus me-1"></i>Add First User
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-key text-warning me-2"></i>Reset Password
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to reset the password for <strong id="resetUserName"></strong>?</p>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    A new secure password will be generated and displayed to you.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" id="resetPasswordForm" class="d-inline">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-key me-1"></i>Reset Password
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toggle Status Modal -->
+<div class="modal fade" id="toggleStatusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-slash text-warning me-2"></i>Change User Status
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to <strong id="toggleAction"></strong> <strong id="toggleUserName"></strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="toggleWarning"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" id="toggleStatusForm" class="d-inline">
+                    <button type="submit" class="btn" id="toggleStatusBtn">
+                        <i class="fas fa-check me-1"></i><span id="toggleBtnText">Confirm</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.avatar-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.user-row {
+    transition: all 0.2s ease;
+}
+
+.user-row:hover {
+    background-color: rgba(0,123,255,0.05);
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #495057;
+}
+
+.btn-group-sm .btn {
+    margin-right: 2px;
+}
+
+.btn-group-sm .btn:last-child {
+    margin-right: 0;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0,0,0,.125);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0,0,0,.125);
+}
+</style>
+
+<script>
+let companyId = {{ company.id }};
+
+// Search functionality
+document.getElementById('searchUsers').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.user-row');
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+
+// Filter functionality
+function filterUsers(status) {
+    const rows = document.querySelectorAll('.user-row');
+    
+    rows.forEach(row => {
+        if (status === 'all') {
+            row.style.display = '';
+        } else {
+            const rowStatus = row.dataset.status;
+            if (rowStatus === status) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        }
+    });
+}
+
+// Reset password functionality
+function resetPassword(userId, userName) {
+    document.getElementById('resetUserName').textContent = userName;
+    document.getElementById('resetPasswordForm').action = 
+        `/admin/companies/${companyId}/users/${userId}/reset-password`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+    modal.show();
+}
+
+// Toggle user status functionality
+function toggleUserStatus(userId, userName, isActive) {
+    const action = isActive ? 'deactivate' : 'activate';
+    const warning = isActive ? 
+        'This user will no longer be able to access the system.' :
+        'This user will regain access to the system.';
+    
+    document.getElementById('toggleUserName').textContent = userName;
+    document.getElementById('toggleAction').textContent = action;
+    document.getElementById('toggleWarning').textContent = warning;
+    document.getElementById('toggleBtnText').textContent = action.charAt(0).toUpperCase() + action.slice(1);
+    
+    const btn = document.getElementById('toggleStatusBtn');
+    btn.className = isActive ? 'btn btn-danger' : 'btn btn-success';
+    
+    document.getElementById('toggleStatusForm').action = 
+        `/admin/companies/${companyId}/users/${userId}/toggle-status`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('toggleStatusModal'));
+    modal.show();
+}
+
+// Show any flash messages on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Focus search input for quick searching
+    document.getElementById('searchUsers').focus();
+});
+</script>
+{% endblock %}

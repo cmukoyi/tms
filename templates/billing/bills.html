@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Billing - Bills{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-header d-print-none">
+                <div class="container-xl">
+                    <div class="row g-2 align-items-center">
+                        <div class="col">
+                            <h2 class="page-title">
+                                <i class="fas fa-file-invoice me-2"></i>Bills Management
+                            </h2>
+                        </div>
+                        <div class="col-auto ms-auto d-print-none">
+                            <div class="btn-list">
+                                <a href="{{ url_for('billing_dashboard') }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                                </a>
+                                <a href="{{ url_for('generate_bill') }}" class="btn btn-success">
+                                    <i class="fas fa-plus me-1"></i>Generate Bill
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-xl">
+        <!-- Filters -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <form method="GET" class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="all" {% if filters.status == 'all' %}selected{% endif %}>All Status</option>
+                                    <option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>Draft</option>
+                                    <option value="sent" {% if filters.status == 'sent' %}selected{% endif %}>Sent</option>
+                                    <option value="paid" {% if filters.status == 'paid' %}selected{% endif %}>Paid</option>
+                                    <option value="overdue" {% if filters.status == 'overdue' %}selected{% endif %}>Overdue</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Company</label>
+                                <select name="company" class="form-select">
+                                    <option value="all">All Companies</option>
+                                    {% if companies %}
+                                        {% for company in companies %}
+                                        <option value="{{ company.id }}" {% if filters.company == company.id|string %}selected{% endif %}>
+                                            {{ company.name }}
+                                        </option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Month</label>
+                                <select name="month" class="form-select">
+                                    <option value="all">All Months</option>
+                                    {% if month_options %}
+                                        {% for option in month_options %}
+                                        <option value="{{ option.value }}" {% if filters.month == option.value %}selected{% endif %}>
+                                            {{ option.label }}
+                                        </option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="btn-list">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-filter me-1"></i>Filter
+                                    </button>
+                                    <a href="{{ url_for('billing_bills') }}" class="btn btn-outline-secondary">
+                                        <i class="fas fa-times me-1"></i>Clear
+                                    </a>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bills Table -->
+        <div class="row row-deck row-cards">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Bills</h3>
+                        <div class="card-actions">
+                            {% if bills %}
+                            <a href="{{ url_for('export_bills') }}?format=excel" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-download me-1"></i>Export Excel
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if bills %}
+                        <div class="table-responsive">
+                            <table class="table table-vcenter card-table">
+                                <thead>
+                                    <tr>
+                                        <th>Bill #</th>
+                                        <th>Company</th>
+                                        <th>Period</th>
+                                        <th>Amount</th>
+                                        <th>Generated</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for bill in bills %}
+                                    <tr>
+                                        <td>
+                                            <strong>#{{ bill.id }}</strong>
+                                        </td>
+                                        <td>
+                                            <div>
+                                                <strong>{{ bill.company.name if bill.company else 'Unknown' }}</strong>
+                                                <div class="text-muted small">{{ bill.company.email if bill.company else '' }}</div>
+                                            </div>
+                                        </td>
+                                        <td>{{ bill.bill_period }}</td>
+                                        <td>{{ bill.formatted_amount }}</td>
+                                        <td>
+                                            <div>
+                                                {{ bill.generated_at.strftime('%Y-%m-%d') if bill.generated_at else 'N/A' }}
+                                                <div class="text-muted small">
+                                                    {{ bill.generated_by_user.full_name if bill.generated_by_user else 'System' }}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{% if bill.status == 'paid' %}success{% elif bill.status == 'sent' %}warning{% elif bill.status == 'overdue' %}danger{% else %}secondary{% endif %}">
+                                                {{ bill.status.title() }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="btn-list">
+                                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-eye"></i> View
+                                                </a>
+                                                {% if bill.status == 'draft' %}
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-outline-success"
+                                                        onclick="updateBillStatus({{ bill.id }}, 'sent')">
+                                                    <i class="fas fa-paper-plane"></i> Send
+                                                </button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="empty">
+                            <div class="empty-icon">
+                                <i class="fas fa-file-invoice fa-3x"></i>
+                            </div>
+                            <p class="empty-title">No bills found</p>
+                            <p class="empty-subtitle text-muted">
+                                {% if filters.status != 'all' or filters.company != 'all' or filters.month != 'all' %}
+                                    Try adjusting your filters or 
+                                {% endif %}
+                                <a href="{{ url_for('generate_bill') }}">generate your first bill</a>
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateBillStatus(billId, newStatus) {
+    if (confirm(`Are you sure you want to mark this bill as ${newStatus}?`)) {
+        fetch(`/admin/billing/bills/${billId}/status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `status=${newStatus}`
+        })
+        .then(response => {
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Error updating bill status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error updating bill status');
+        });
+    }
+}
+</script>
+{% endblock %}
