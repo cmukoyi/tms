@@ -12,7 +12,10 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       rel="stylesheet"
     />
-    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet" />
+    <link
+      href="{{ url_for('static', filename='css/style.css') }}"
+      rel="stylesheet"
+    />
     {% block extra_css %}{% endblock %}
   </head>
   <body>
@@ -78,10 +81,12 @@
                     <i class="fas fa-file-alt me-2"></i> Documents
                   </a>
                 </li>
-                {% endif %}
-                {% if can_access_module('custom_fields') %}
+                {% endif %} {% if can_access_module('custom_fields') %}
                 <li>
-                  <a class="dropdown-item" href="{{ url_for('admin_custom_fields') }}">
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('admin_custom_fields') }}"
+                  >
                     <i class="fas fa-cogs me-2"></i> Custom Fields
                   </a>
                 </li>
@@ -112,7 +117,8 @@
                     class="dropdown-item"
                     href="{{ url_for('active_tenders_report') }}"
                   >
-                    <i class="fas fa-play-circle me-2 text-success"></i> Active Tenders
+                    <i class="fas fa-play-circle me-2 text-success"></i> Active
+                    Tenders
                   </a>
                 </li>
                 <li>
@@ -120,7 +126,8 @@
                     class="dropdown-item"
                     href="{{ url_for('closed_tenders_report') }}"
                   >
-                    <i class="fas fa-check-circle me-2 text-secondary"></i> Closed Tenders
+                    <i class="fas fa-check-circle me-2 text-secondary"></i>
+                    Closed Tenders
                   </a>
                 </li>
                 <li>
@@ -128,7 +135,8 @@
                     class="dropdown-item"
                     href="{{ url_for('overdue_tenders_report') }}"
                   >
-                    <i class="fas fa-exclamation-triangle me-2 text-danger"></i> Overdue Tenders
+                    <i class="fas fa-exclamation-triangle me-2 text-danger"></i>
+                    Overdue Tenders
                   </a>
                 </li>
                 <li>
@@ -136,15 +144,20 @@
                     class="dropdown-item"
                     href="{{ url_for('tenders_by_category_report') }}"
                   >
-                    <i class="fas fa-tags me-2 text-info"></i> Tenders by Category
+                    <i class="fas fa-tags me-2 text-info"></i> Tenders by
+                    Category
                   </a>
                 </li>
-                
+
                 {% if can_access_module('reporting') %}
                 <li><hr class="dropdown-divider" /></li>
                 <li>
-                  <a class="dropdown-item" href="{{ url_for('advanced_reports') }}">
-                    <i class="fas fa-chart-line me-2 text-primary"></i> Advanced Analytics
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('tender_reports') }}"
+                  >
+                    <i class="fas fa-chart-line me-2 text-primary"></i> Advanced
+                    Analytics
                   </a>
                 </li>
                 {% endif %}
@@ -152,7 +165,26 @@
             </div>
 
             <!-- Company Features Menu -->
-            {% if can_access_module('company_management') or can_access_module('notes_comments') %}
+            <!-- Company Features Menu -->
+            {% if can_access_module('company_management') or
+            can_access_module('notes_comments') %}
+            <style>
+              .dropdown-submenu {
+                position: relative;
+              }
+
+              .dropdown-submenu .dropdown-menu {
+                top: 0;
+                left: 100%;
+                margin-top: -1px;
+                border-radius: 0 6px 6px 6px;
+              }
+
+              .dropdown-submenu:hover .dropdown-menu {
+                display: block;
+              }
+            </style>
+
             <div class="nav-item dropdown">
               <a
                 class="nav-link dropdown-toggle"
@@ -161,21 +193,79 @@
                 role="button"
                 data-bs-toggle="dropdown"
               >
-                <i class="fas fa-building me-1"></i> Company
+                <i class="fas fa-external-link-alt me-2"></i> External Links
               </a>
-              <ul class="dropdown-menu">
+
+              <ul class="dropdown-menu" aria-labelledby="companyDropdown">
                 {% if can_access_module('company_management') %}
                 <li>
-                  <a class="dropdown-item" href="{{ url_for('my_company_modules') }}">
-                    <i class="fas fa-puzzle-piece me-2"></i> My Modules
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('my_company_modules') }}"
+                  >
+                    <i class="fas fa-puzzle-piece me-2"></i> CIPC
                   </a>
                 </li>
-                {% endif %}
-                {% if can_access_module('notes_comments') %}
-                <li>
-                  <a class="dropdown-item" href="{{ url_for('company_notes') }}">
-                    <i class="fas fa-sticky-note me-2"></i> Company Notes
+
+                {% endif %} {% if can_access_module('notes_comments') %}
+                <li class="dropdown-submenu">
+                  <a
+                    class="dropdown-item dropdown-toggle"
+                    href="#"
+                    id="sarsDropdown"
+                  >
+                    <i class="fas fa-calculator me-2"></i> SARS
                   </a>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://secure.sarsefiling.co.za/vatvendorsearch.aspx"
+                        target="_blank"
+                      >
+                        <i class="fas fa-search me-2"></i> VAT Vendor Search
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://tools.sars.gov.za/sarsonlinequery/tcr01/tcr_verify"
+                        target="_blank"
+                      >
+                        <i class="fas fa-file-invoice me-2"></i> Tax Compliance
+                        System
+                      </a>
+                    </li>
+                  </ul>
+                </li>
+                <li class="dropdown-submenu">
+                  <a
+                    class="dropdown-item dropdown-toggle"
+                    href="#"
+                    id="sarsDropdown"
+                  >
+                    <i class="fas fa-external-link-alt me-2"></i> CIBD
+                  </a>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://www.cidb.org.za/cidb-tenders/current-tenders/"
+                        target="_blank"
+                      >
+                        <i class="fas fa-search me-2"></i> Tender Search
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="https://eroc.cidb.org.za/sign-in"
+                        target="_blank"
+                      >
+                        <i class="fas fa-file-invoice me-2"></i> Register/Login
+                      </a>
+                    </li>
+                  </ul>
                 </li>
                 {% endif %}
               </ul>
@@ -220,30 +310,67 @@
             <!-- Billing Menu (Super Admin Only) -->
             {% if session.is_super_admin %}
             <div class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" id="billingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                id="billingDropdown"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
                 <i class="fas fa-coins me-1"></i> Billing
               </a>
               <ul class="dropdown-menu" aria-labelledby="billingDropdown">
-                <li><a class="dropdown-item" href="{{ url_for('billing_dashboard') }}">
-                  <i class="fas fa-tachometer-alt me-2"></i> Dashboard
-                </a></li>
-                <li><a class="dropdown-item" href="{{ url_for('billing_bills') }}">
-                  <i class="fas fa-file-invoice me-2"></i> Monthly Bills
-                </a></li>
-                <li><a class="dropdown-item" href="{{ url_for('billing_pricing') }}">
-                  <i class="fas fa-tags me-2"></i> Company Pricing
-                </a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="{{ url_for('manage_modules') }}">
-                  <i class="fas fa-puzzle-piece me-2"></i> Manage Modules
-                </a></li>
-                <li><a class="dropdown-item" href="{{ url_for('generate_bill') }}">
-                  <i class="fas fa-plus me-2"></i> Generate Bill
-                </a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="{{ url_for('billing_reports') }}">
-                  <i class="fas fa-chart-line me-2"></i> Reports
-                </a></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_dashboard') }}"
+                  >
+                    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_bills') }}"
+                  >
+                    <i class="fas fa-file-invoice me-2"></i> Monthly Bills
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_pricing') }}"
+                  >
+                    <i class="fas fa-tags me-2"></i> Company Pricing
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('manage_modules') }}"
+                  >
+                    <i class="fas fa-puzzle-piece me-2"></i> Manage Modules
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('generate_bill') }}"
+                  >
+                    <i class="fas fa-plus me-2"></i> Generate Bill
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('billing_reports') }}"
+                  >
+                    <i class="fas fa-chart-line me-2"></i> Reports
+                  </a>
+                </li>
               </ul>
             </div>
             {% endif %}
@@ -403,9 +530,8 @@
     <main class="container-fluid">
       <div class="row">
         <div class="col-12">
-          {% with messages = get_flashed_messages(with_categories=true) %} 
-          {% if messages %} 
-          {% for category, message in messages %}
+          {% with messages = get_flashed_messages(with_categories=true) %} {% if
+          messages %} {% for category, message in messages %}
           <div
             class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show"
             role="alert"
@@ -421,10 +547,8 @@
               aria-label="Close"
             ></button>
           </div>
-          {% endfor %} 
-          {% endif %} 
-          {% endwith %} 
-          {% block content %}{% endblock %}
+          {% endfor %} {% endif %} {% endwith %} {% block content %}{% endblock
+          %}
         </div>
       </div>
     </main>
