@@ -6,6 +6,7 @@ ENV/
 .env/
 
 # Python
+*.pyc
 __pycache__/
 *.py[cod]
 *$py.class
@@ -75,3 +76,5 @@ coverage.xml
 # Temporary files
 *.tmp
 *.temp
+
+scripts/

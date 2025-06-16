@@ -69,6 +69,6 @@ from models import Document
 from models import TenderDocument, DocumentType
 
 from werkzeug.utils import secure_filename
-from werkzeug.utils import secure_filename
+
 from flask import send_file, send_from_directory
 

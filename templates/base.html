@@ -74,23 +74,7 @@
                     <i class="fas fa-list me-2"></i> List Tenders
                   </a>
                 </li>
-                {% if can_access_module('document_management') %}
-                <li><hr class="dropdown-divider" /></li>
-                <li>
-                  <a class="dropdown-item" href="{{ url_for('documents') }}">
-                    <i class="fas fa-file-alt me-2"></i> Documents
-                  </a>
-                </li>
-                {% endif %} {% if can_access_module('custom_fields') %}
-                <li>
-                  <a
-                    class="dropdown-item"
-                    href="{{ url_for('admin_custom_fields') }}"
-                  >
-                    <i class="fas fa-cogs me-2"></i> Custom Fields
-                  </a>
-                </li>
-                {% endif %}
+             
               </ul>
             </div>
 
