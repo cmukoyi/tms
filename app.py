@@ -3515,12 +3515,12 @@ def my_company_modules():
     """View modules for current user's company"""
     # Get the current user's company
     if not current_user.is_authenticated:
-    flash('Please log in', 'error')
-    return redirect(url_for('login'))
-        company_id = session.get('company_id')
-        if not company_id:
-            flash('No company associated', 'error')
-            return redirect(url_for('dashboard'))
+        flash('Please log in', 'error')
+        return redirect(url_for('login'))
+    company_id = session.get('company_id')
+    if not company_id:
+        flash('No company associated', 'error')
+        return redirect(url_for('dashboard'))
     
     company = Company.query.get_or_404(current_user.company_id)
     
