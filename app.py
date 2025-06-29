@@ -6799,7 +6799,371 @@ def generate_quote_html_fallback(quote_data):
     filename = f"Quote_{quote_data['quote_ref']}_{quote_data['quote_date'].strftime('%Y%m%d')}.html"
     return quote_html.encode('utf-8'), filename, 'text/html'  
 
-  
+
+@app.route('/api/notifications/count')
+@login_required
+def get_notification_count():
+    """API endpoint to get notification count"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company_id:
+            return jsonify({'count': 0})
+        
+        # Get notification days setting for company
+        settings = CompanySettings.query.filter_by(company_id=user.company_id).first()
+        notification_days = settings.notification_days if settings else 7
+        
+        # Calculate cutoff date
+        cutoff_date = datetime.now() + timedelta(days=notification_days)
+        
+        # Count unread notifications for tenders approaching deadline
+        count = TenderNotification.query.join(Tender).filter(
+            TenderNotification.company_id == user.company_id,
+            TenderNotification.is_read == False,
+            TenderNotification.is_processed == False,
+            ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+        ).count()
+        
+        return jsonify({'count': count})
+    except Exception as e:
+        print(f"Error getting notification count: {str(e)}")
+        return jsonify({'count': 0})
+
+@app.route('/api/notifications')
+@login_required
+def get_notifications():
+    """API endpoint to get notifications"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company_id:
+            return jsonify({'notifications': []})
+        
+        # Get notifications for company
+        notifications = TenderNotification.query.join(Tender).filter(
+            TenderNotification.company_id == user.company_id,
+            TenderNotification.is_processed == False,
+            ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+        ).order_by(TenderNotification.created_at.desc()).limit(10).all()
+        
+        notification_data = []
+        for n in notifications:
+            notification_data.append({
+                'id': n.id,
+                'message': n.message,
+                'tender_id': n.tender_id,
+                'tender_title': n.tender.title,
+                'tender_reference': n.tender.reference_number,
+                'days_remaining': n.days_remaining,
+                'created_at': n.created_at.strftime('%Y-%m-%d %H:%M'),
+                'is_read': n.is_read
+            })
+        
+        return jsonify({'notifications': notification_data})
+    except Exception as e:
+        print(f"Error getting notifications: {str(e)}")
+        return jsonify({'notifications': []})
+
+@app.route('/notifications')
+@login_required
+def notifications_page():
+    """Notifications management page"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company_id:
+            flash('Access denied. No company associated.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        # Get all notifications for the company
+        notifications = TenderNotification.query.join(Tender).filter(
+            TenderNotification.company_id == user.company_id
+        ).order_by(TenderNotification.created_at.desc()).all()
+        
+        # Get company notification settings
+        settings = CompanySettings.query.filter_by(company_id=user.company_id).first()
+        
+        return render_template('notifications/index.html', 
+                             notifications=notifications,
+                             settings=settings)
+    except Exception as e:
+        print(f"Error loading notifications page: {str(e)}")
+        flash('Error loading notifications', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def mark_notification_read(notification_id):
+    """Mark notification as read"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'})
+        
+        notification = TenderNotification.query.filter_by(
+            id=notification_id,
+            company_id=user.company_id
+        ).first()
+        
+        if notification:
+            notification.is_read = True
+            db.session.commit()
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': 'Notification not found'})
+    except Exception as e:
+        print(f"Error marking notification as read: {str(e)}")
+        return jsonify({'success': False, 'error': 'Database error'})
+
+@app.route('/notifications/<int:notification_id>/process', methods=['POST'])
+@login_required
+def process_notification(notification_id):
+    """Process a single notification"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'})
+        
+        data = request.get_json()
+        note = data.get('note', '') if data else ''
+        
+        notification = TenderNotification.query.filter_by(
+            id=notification_id,
+            company_id=user.company_id
+        ).first()
+        
+        if notification:
+            notification.is_processed = True
+            notification.processed_by = user.id
+            notification.processed_at = datetime.utcnow()
+            notification.processing_note = note
+            notification.is_read = True
+            db.session.commit()
+            
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': 'Notification not found'})
+    except Exception as e:
+        print(f"Error processing notification: {str(e)}")
+        return jsonify({'success': False, 'error': 'Database error'})
+
+@app.route('/notifications/process-all', methods=['POST'])
+@login_required
+def process_all_notifications():
+    """Process all notifications for the company"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not user.company_id:
+            return jsonify({'success': False, 'error': 'User or company not found'})
+        
+        data = request.get_json()
+        note = data.get('note', '') if data else ''
+        
+        # Get all unprocessed notifications for the company
+        notifications = TenderNotification.query.filter_by(
+            company_id=user.company_id,
+            is_processed=False
+        ).all()
+        
+        count = 0
+        for notification in notifications:
+            notification.is_processed = True
+            notification.processed_by = user.id
+            notification.processed_at = datetime.utcnow()
+            notification.processing_note = note
+            notification.is_read = True
+            count += 1
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'count': count})
+    except Exception as e:
+        print(f"Error processing all notifications: {str(e)}")
+        return jsonify({'success': False, 'error': 'Database error'})
+
+# =====================================================
+# SUPER ADMIN COMPANY NOTIFICATION SETTINGS
+# =====================================================
+
+@app.route('/admin/companies/<int:company_id>/notification-settings', methods=['GET', 'POST'])
+@super_admin_required
+def company_notification_settings(company_id):
+    """Manage notification settings for a company (Super Admin only)"""
+    try:
+        company = Company.query.get_or_404(company_id)
+        settings = CompanySettings.query.filter_by(company_id=company_id).first()
+        
+        if request.method == 'POST':
+            notification_days = int(request.form.get('notification_days', 7))
+            
+            if not settings:
+                settings = CompanySettings(
+                    company_id=company_id,
+                    notification_days=notification_days
+                )
+                db.session.add(settings)
+            else:
+                settings.notification_days = notification_days
+                settings.updated_at = datetime.utcnow()
+            
+            db.session.commit()
+            flash(f'Notification settings updated for {company.name}.', 'success')
+            return redirect(url_for('company_notification_settings', company_id=company_id))
+        
+        return render_template('admin/company_notification_settings.html', 
+                             company=company, 
+                             settings=settings)
+    except Exception as e:
+        print(f"Error managing notification settings: {str(e)}")
+        flash('Error managing notification settings', 'error')
+        return redirect(url_for('admin_companies'))
+
+# =====================================================
+# BACKGROUND TASK TO GENERATE NOTIFICATIONS
+# =====================================================
+
+@app.route('/admin/generate-notifications', methods=['POST'])
+@super_admin_required
+def manual_generate_notifications():
+    """Manually trigger notification generation (for testing)"""
+    try:
+        generated_count = 0
+        
+        # Get all active companies
+        companies = Company.query.filter_by(is_active=True).all()
+        
+        for company in companies:
+            # Get company notification days setting
+            settings = CompanySettings.query.filter_by(company_id=company.id).first()
+            notification_days = settings.notification_days if settings else 7
+            
+            # Calculate cutoff date
+            cutoff_date = datetime.now() + timedelta(days=notification_days)
+            
+            # Find tenders approaching deadline (not closed/cancelled)
+            approaching_tenders = Tender.query.filter(
+                Tender.company_id == company.id,
+                Tender.submission_deadline <= cutoff_date,
+                Tender.submission_deadline >= datetime.now(),
+                ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+            ).all()
+            
+            for tender in approaching_tenders:
+                # Check if notification already exists
+                existing = TenderNotification.query.filter_by(
+                    tender_id=tender.id,
+                    company_id=company.id,
+                    notification_type='deadline_approaching'
+                ).first()
+                
+                if not existing:
+                    days_remaining = (tender.submission_deadline - datetime.now()).days
+                    
+                    # Create notification
+                    notification = TenderNotification(
+                        tender_id=tender.id,
+                        company_id=company.id,
+                        notification_type='deadline_approaching',
+                        message=f"Tender '{tender.title}' (#{tender.reference_number}) deadline in {days_remaining} days",
+                        days_remaining=days_remaining
+                    )
+                    db.session.add(notification)
+                    generated_count += 1
+        
+        db.session.commit()
+        
+        flash(f'Generated {generated_count} notifications successfully.', 'success')
+        return redirect(url_for('admin_companies'))
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error generating notifications: {str(e)}")
+        flash('Error generating notifications', 'error')
+        return redirect(url_for('admin_companies'))
+
+# =====================================================
+# HELPER FUNCTION TO AUTO-GENERATE NOTIFICATIONS
+# =====================================================
+
+def auto_generate_notifications():
+    """
+    Auto-generate notifications for tenders approaching deadline.
+    This function should be called periodically (e.g., via cron job or scheduler)
+    """
+    try:
+        with app.app_context():
+            generated_count = 0
+            
+            # Get all active companies
+            companies = Company.query.filter_by(is_active=True).all()
+            
+            for company in companies:
+                # Get company notification days setting
+                settings = CompanySettings.query.filter_by(company_id=company.id).first()
+                notification_days = settings.notification_days if settings else 7
+                
+                # Calculate cutoff date
+                cutoff_date = datetime.now() + timedelta(days=notification_days)
+                
+                # Find tenders approaching deadline (not closed/cancelled)
+                approaching_tenders = Tender.query.filter(
+                    Tender.company_id == company.id,
+                    Tender.submission_deadline <= cutoff_date,
+                    Tender.submission_deadline >= datetime.now(),
+                    ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+                ).all()
+                
+                for tender in approaching_tenders:
+                    # Check if notification already exists for this tender today
+                    today = datetime.now().date()
+                    existing = TenderNotification.query.filter(
+                        TenderNotification.tender_id == tender.id,
+                        TenderNotification.company_id == company.id,
+                        TenderNotification.notification_type == 'deadline_approaching',
+                        TenderNotification.created_at >= today
+                    ).first()
+                    
+                    if not existing:
+                        days_remaining = (tender.submission_deadline - datetime.now()).days
+                        
+                        # Create notification
+                        notification = TenderNotification(
+                            tender_id=tender.id,
+                            company_id=company.id,
+                            notification_type='deadline_approaching',
+                            message=f"Tender '{tender.title}' (#{tender.reference_number}) deadline in {days_remaining} days",
+                            days_remaining=days_remaining
+                        )
+                        db.session.add(notification)
+                        generated_count += 1
+            
+            db.session.commit()
+            print(f"Auto-generated {generated_count} notifications at {datetime.now()}")
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in auto_generate_notifications: {str(e)}")
+
+# =====================================================
+# SCHEDULER SETUP (Optional - for automatic notifications)
+# =====================================================
+
+# Create scheduler
+scheduler = BackgroundScheduler()
+
+# Add job to run every hour
+scheduler.add_job(
+    func=auto_generate_notifications,
+    trigger="interval",
+    hours=1,
+    id='auto_notifications'
+)
+
+# Start scheduler
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
+
+      
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

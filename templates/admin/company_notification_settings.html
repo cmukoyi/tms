@@ -1,0 +1,647 @@
+<!-- templates/admin/company_notification_settings.html -->
+{% extends "admin/base.html" %}
+{% block title %}Company Notification Settings{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-bell-slash"></i> Company Notification Settings</h2>
+            <p class="text-muted">Manage notification preferences for all companies</p>
+        </div>
+        <div>
+            <button class="btn btn-success" onclick="generateNotifications()" id="generateBtn">
+                <i class="fas fa-sync-alt"></i> Generate Notifications
+            </button>
+            <button class="btn btn-outline-primary" onclick="exportSettings()">
+                <i class="fas fa-download"></i> Export Settings
+            </button>
+        </div>
+    </div>
+
+    <!-- Global Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-primary">
+                        <i class="fas fa-building"></i> Total Companies
+                    </h5>
+                    <h3 class="card-text text-primary">{{ companies|length }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">
+                        <i class="fas fa-check-circle"></i> Active Settings
+                    </h5>
+                    <h3 class="card-text text-success">{{ companies|selectattr("settings")|list|length }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-warning">
+                        <i class="fas fa-bell"></i> Total Notifications
+                    </h5>
+                    <h3 class="card-text text-warning">{{ total_notifications }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-info">
+                        <i class="fas fa-hourglass-half"></i> Pending
+                    </h5>
+                    <h3 class="card-text text-info">{{ pending_notifications }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="searchCompany" class="form-label">Search Companies:</label>
+                    <input type="text" class="form-control" id="searchCompany" 
+                           placeholder="Search by company name..." onkeyup="filterCompanies()">
+                </div>
+                <div class="col-md-3">
+                    <label for="statusFilter" class="form-label">Filter by Status:</label>
+                    <select class="form-select" id="statusFilter" onchange="filterCompanies()">
+                        <option value="">All Companies</option>
+                        <option value="active">Active Only</option>
+                        <option value="inactive">Inactive Only</option>
+                        <option value="configured">Configured Settings</option>
+                        <option value="unconfigured">No Settings</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="notificationFilter" class="form-label">Notification Days:</label>
+                    <select class="form-select" id="notificationFilter" onchange="filterCompanies()">
+                        <option value="">All</option>
+                        <option value="1">1 day</option>
+                        <option value="3">3 days</option>
+                        <option value="7">7 days</option>
+                        <option value="14">14 days</option>
+                        <option value="30">30 days</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button class="btn btn-outline-secondary" onclick="clearFilters()">
+                            <i class="fas fa-times"></i> Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-tasks"></i> Bulk Actions
+                <span class="badge bg-primary ms-2" id="selectedCount">0 selected</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="bulkNotificationDays" 
+                               placeholder="Notification days" min="1" max="30" value="7">
+                        <button class="btn btn-outline-primary" onclick="bulkUpdateSettings()" id="bulkUpdateBtn" disabled>
+                            <i class="fas fa-edit"></i> Update Selected
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="btn-group">
+                        <button class="btn btn-outline-success" onclick="bulkActivate()" id="bulkActivateBtn" disabled>
+                            <i class="fas fa-play"></i> Activate
+                        </button>
+                        <button class="btn btn-outline-warning" onclick="bulkDeactivate()" id="bulkDeactivateBtn" disabled>
+                            <i class="fas fa-pause"></i> Deactivate
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="bulkDelete()" id="bulkDeleteBtn" disabled>
+                            <i class="fas fa-trash"></i> Delete Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Companies Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-building"></i> Company Settings
+                <span class="badge bg-secondary ms-2" id="filteredCount">{{ companies|length }}</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="companiesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="5%">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                            </th>
+                            <th width="25%">Company</th>
+                            <th width="15%">Status</th>
+                            <th width="15%">Notification Days</th>
+                            <th width="15%">Notifications</th>
+                            <th width="15%">Last Updated</th>
+                            <th width="10%">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="companiesTableBody">
+                        {% for company in companies %}
+                        <tr class="company-row" 
+                            data-company-name="{{ company.name|lower }}"
+                            data-status="{{ 'active' if company.is_active else 'inactive' }}"
+                            data-configured="{{ 'configured' if company.settings else 'unconfigured' }}"
+                            data-notification-days="{{ company.settings.notification_days if company.settings else 0 }}">
+                            <td>
+                                <input type="checkbox" class="company-checkbox" value="{{ company.id }}">
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div>
+                                        <strong>{{ company.name }}</strong><br>
+                                        <small class="text-muted">{{ company.email }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if company.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                                
+                                {% if company.settings %}
+                                    <br><span class="badge bg-info mt-1">Configured</span>
+                                {% else %}
+                                    <br><span class="badge bg-warning mt-1">No Settings</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if company.settings %}
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control notification-days-input" 
+                                               value="{{ company.settings.notification_days }}" 
+                                               min="1" max="30" 
+                                               data-company-id="{{ company.id }}"
+                                               onchange="updateCompanySettings({{ company.id }}, this.value)">
+                                        <span class="input-group-text">days</span>
+                                    </div>
+                                {% else %}
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="createSettings({{ company.id }})">
+                                        <i class="fas fa-plus"></i> Create
+                                    </button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set company_notifications = notifications_by_company.get(company.id, []) %}
+                                <div class="small">
+                                    <div>Total: <span class="badge bg-primary">{{ company_notifications|length }}</span></div>
+                                    <div>Unread: <span class="badge bg-warning">{{ company_notifications|selectattr("is_read", "equalto", false)|list|length }}</span></div>
+                                    <div>Pending: <span class="badge bg-info">{{ company_notifications|selectattr("is_processed", "equalto", false)|list|length }}</span></div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if company.settings %}
+                                    <small class="text-muted">
+                                        {{ company.settings.updated_at.strftime('%m/%d/%Y') if company.settings.updated_at else 'N/A' }}<br>
+                                        {{ company.settings.updated_at.strftime('%H:%M') if company.settings.updated_at else '' }}
+                                    </small>
+                                {% else %}
+                                    <small class="text-muted">Never</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group-vertical btn-group-sm">
+                                    <a href="{{ url_for('admin.company_details', company_id=company.id) }}" 
+                                       class="btn btn-outline-primary btn-sm" title="View Company">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    
+                                    {% if company_notifications %}
+                                        <a href="{{ url_for('admin.company_notifications', company_id=company.id) }}" 
+                                           class="btn btn-outline-info btn-sm" title="View Notifications">
+                                            <i class="fas fa-bell"></i>
+                                        </a>
+                                    {% endif %}
+                                    
+                                    {% if company.settings %}
+                                        <button class="btn btn-outline-danger btn-sm" 
+                                                onclick="deleteSettings({{ company.id }})" title="Delete Settings">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Settings Modal -->
+    <div class="modal fade" id="createSettingsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Notification Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newNotificationDays" class="form-label">Notification Days Before Deadline:</label>
+                        <input type="number" class="form-control" id="newNotificationDays" 
+                               min="1" max="30" value="7" required>
+                        <div class="form-text">Number of days before tender deadline to send notifications</div>
+                    </div>
+                    <input type="hidden" id="createCompanyId">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmCreateSettings()">
+                        <i class="fas fa-save"></i> Create Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal fade" id="exportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Export Notification Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Export Format:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="exportFormat" id="exportCSV" value="csv" checked>
+                            <label class="form-check-label" for="exportCSV">CSV File</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="exportFormat" id="exportJSON" value="json">
+                            <label class="form-check-label" for="exportJSON">JSON File</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Include:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeInactive" checked>
+                            <label class="form-check-label" for="includeInactive">Inactive Companies</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeNotifications" checked>
+                            <label class="form-check-label" for="includeNotifications">Notification Counts</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="performExport()">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Company Notification Settings JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    // Add change listeners to checkboxes
+    document.querySelectorAll('.company-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedCount);
+    });
+    
+    // Auto-save notification days after 1 second of no typing
+    let updateTimeouts = {};
+    document.querySelectorAll('.notification-days-input').forEach(input => {
+        input.addEventListener('input', function() {
+            const companyId = this.dataset.companyId;
+            clearTimeout(updateTimeouts[companyId]);
+            updateTimeouts[companyId] = setTimeout(() => {
+                updateCompanySettings(companyId, this.value);
+            }, 1000);
+        });
+    });
+});
+
+// Filter companies based on search and filters
+function filterCompanies() {
+    const searchTerm = document.getElementById('searchCompany').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const notificationFilter = document.getElementById('notificationFilter').value;
+    
+    const rows = document.querySelectorAll('.company-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        let show = true;
+        
+        // Search filter
+        if (searchTerm && !row.dataset.companyName.includes(searchTerm)) {
+            show = false;
+        }
+        
+        // Status filter
+        if (statusFilter && show) {
+            if (statusFilter === 'active' && row.dataset.status !== 'active') show = false;
+            if (statusFilter === 'inactive' && row.dataset.status !== 'inactive') show = false;
+            if (statusFilter === 'configured' && row.dataset.configured !== 'configured') show = false;
+            if (statusFilter === 'unconfigured' && row.dataset.configured !== 'unconfigured') show = false;
+        }
+        
+        // Notification days filter
+        if (notificationFilter && show) {
+            const days = parseInt(row.dataset.notificationDays);
+            if (days !== parseInt(notificationFilter)) show = false;
+        }
+        
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+    
+    document.getElementById('filteredCount').textContent = visibleCount;
+}
+
+// Clear all filters
+function clearFilters() {
+    document.getElementById('searchCompany').value = '';
+    document.getElementById('statusFilter').value = '';
+    document.getElementById('notificationFilter').value = '';
+    filterCompanies();
+}
+
+// Toggle select all checkboxes
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.company-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        if (checkbox.closest('tr').style.display !== 'none') {
+            checkbox.checked = selectAll.checked;
+        }
+    });
+    
+    updateSelectedCount();
+}
+
+// Update selected count and button states
+function updateSelectedCount() {
+    const selected = document.querySelectorAll('.company-checkbox:checked');
+    const count = selected.length;
+    
+    document.getElementById('selectedCount').textContent = `${count} selected`;
+    
+    // Enable/disable bulk action buttons
+    const buttons = ['bulkUpdateBtn', 'bulkActivateBtn', 'bulkDeactivateBtn', 'bulkDeleteBtn'];
+    buttons.forEach(btnId => {
+        document.getElementById(btnId).disabled = count === 0;
+    });
+}
+
+// Update company notification settings
+async function updateCompanySettings(companyId, notificationDays) {
+    if (notificationDays < 1 || notificationDays > 30) {
+        alert('Notification days must be between 1 and 30');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/companies/${companyId}/notification-settings`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                notification_days: parseInt(notificationDays)
+            })
+        });
+        
+        if (response.ok) {
+            showToast('Settings updated successfully', 'success');
+        } else {
+            showToast('Error updating settings', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating settings:', error);
+        showToast('Error updating settings', 'error');
+    }
+}
+
+// Create notification settings for a company
+function createSettings(companyId) {
+    document.getElementById('createCompanyId').value = companyId;
+    document.getElementById('newNotificationDays').value = 7;
+    new bootstrap.Modal(document.getElementById('createSettingsModal')).show();
+}
+
+// Confirm create settings
+async function confirmCreateSettings() {
+    const companyId = document.getElementById('createCompanyId').value;
+    const notificationDays = document.getElementById('newNotificationDays').value;
+    
+    if (!notificationDays || notificationDays < 1 || notificationDays > 30) {
+        alert('Notification days must be between 1 and 30');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/companies/${companyId}/notification-settings`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                notification_days: parseInt(notificationDays)
+            })
+        });
+        
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('createSettingsModal')).hide();
+            showToast('Settings created successfully', 'success');
+            location.reload();
+        } else {
+            showToast('Error creating settings', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating settings:', error);
+        showToast('Error creating settings', 'error');
+    }
+}
+
+// Delete notification settings
+async function deleteSettings(companyId) {
+    if (!confirm('Are you sure you want to delete notification settings for this company?')) return;
+    
+    try {
+        const response = await fetch(`/admin/api/companies/${companyId}/notification-settings`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        if (response.ok) {
+            showToast('Settings deleted successfully', 'success');
+            location.reload();
+        } else {
+            showToast('Error deleting settings', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting settings:', error);
+        showToast('Error deleting settings', 'error');
+    }
+}
+
+// Bulk update settings
+async function bulkUpdateSettings() {
+    const selected = document.querySelectorAll('.company-checkbox:checked');
+    const notificationDays = document.getElementById('bulkNotificationDays').value;
+    
+    if (selected.length === 0) {
+        alert('Please select companies to update');
+        return;
+    }
+    
+    if (!notificationDays || notificationDays < 1 || notificationDays > 30) {
+        alert('Notification days must be between 1 and 30');
+        return;
+    }
+    
+    if (!confirm(`Update notification settings to ${notificationDays} days for ${selected.length} companies?`)) return;
+    
+    let updated = 0;
+    for (const checkbox of selected) {
+        try {
+            const response = await fetch(`/admin/api/companies/${checkbox.value}/notification-settings`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify({
+                    notification_days: parseInt(notificationDays)
+                })
+            });
+            
+            if (response.ok) updated++;
+        } catch (error) {
+            console.error('Error updating company settings:', error);
+        }
+    }
+    
+    showToast(`Updated ${updated} of ${selected.length} companies`, 'success');
+    location.reload();
+}
+
+// Generate notifications manually
+async function generateNotifications() {
+    if (!confirm('Generate notifications for all companies? This will check all tenders approaching deadlines.')) return;
+    
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    
+    try {
+        const response = await fetch('/admin/api/notifications/generate', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Generated ${data.count || 0} new notifications`, 'success');
+            location.reload();
+        } else {
+            showToast('Error generating notifications', 'error');
+        }
+    } catch (error) {
+        console.error('Error generating notifications:', error);
+        showToast('Error generating notifications', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Generate Notifications';
+    }
+}
+
+// Export settings
+function exportSettings() {
+    new bootstrap.Modal(document.getElementById('exportModal')).show();
+}
+
+// Perform export
+function performExport() {
+    const format = document.querySelector('input[name="exportFormat"]:checked').value;
+    const includeInactive = document.getElementById('includeInactive').checked;
+    const includeNotifications = document.getElementById('includeNotifications').checked;
+    
+    const params = new URLSearchParams({
+        format: format,
+        include_inactive: includeInactive,
+        include_notifications: includeNotifications
+    });
+    
+    window.open(`/admin/api/notification-settings/export?${params}`, '_blank');
+    bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+}
+
+// Utility functions
+function getCSRFToken() {
+    const token = document.querySelector('meta[name="csrf-token"]');
+    return token ? token.getAttribute('content') : '';
+}
+
+function showToast(message, type = 'info') {
+    const alertClass = type === 'success' ? 'alert-success' : 
+                      type === 'error' ? 'alert-danger' : 'alert-info';
+    
+    const toast = document.createElement('div');
+    toast.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 3000);
+}
+</script>
+{% endblock %}

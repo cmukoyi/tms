@@ -1,18 +1,12 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from decimal import Decimal
 from sqlalchemy import Numeric
 
-
-
-
-
 db = SQLAlchemy()
 
-def __str__(self):
-        return self.name
 class Company(db.Model):
     __tablename__ = 'companies'
     
@@ -24,147 +18,38 @@ class Company(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Logo fields
+    logo_filename = db.Column(db.String(255))
+    logo_file_path = db.Column(db.String(500))
+    logo_mime_type = db.Column(db.String(100))
+    logo_file_size = db.Column(db.Integer)
+    logo_uploaded_at = db.Column(db.DateTime)
+    
     # Relationships
     users = db.relationship('User', backref='company', lazy=True)
     tenders = db.relationship('Tender', backref='company', lazy=True)
-    # Add these static methods to your existing CompanyModule class in models/__init__.py
-    # Add them right before the __repr__ method
     
-    @staticmethod
-    def get_enabled_modules(company_id):
-        """Get list of enabled module names for a company"""
-        enabled = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
-            CompanyModule.company_id == company_id,
-            CompanyModule.is_enabled == True
-        ).all()
-        
-        return [module.module_name for company_module, module in enabled]
+    @property
+    def has_logo(self):
+        """Check if company has a logo"""
+        return bool(self.logo_filename and self.logo_file_path)
     
-    @staticmethod
-    def is_module_enabled(company_id, module_name):
-        """Check if a specific module is enabled for a company"""
-        enabled = db.session.query(CompanyModule).join(ModuleDefinition).filter(
-            CompanyModule.company_id == company_id,
-            ModuleDefinition.module_name == module_name,
-            CompanyModule.is_enabled == True
-        ).first()
+    def delete_logo(self):
+        """Delete company logo from disk and database"""
+        import os
+        if self.has_logo and os.path.exists(self.logo_file_path):
+            try:
+                os.remove(self.logo_file_path)
+            except Exception as e:
+                print(f"Error deleting logo file: {e}")
         
-        return enabled is not None
+        # Clear logo fields
+        self.logo_filename = None
+        self.logo_file_path = None
+        self.logo_mime_type = None
+        self.logo_file_size = None
+        self.logo_uploaded_at = None
     
-    @staticmethod
-    def enable_module(company_id, module_name, enabled_by_user_id=None, notes=None):
-        """Enable a module for a company"""
-        # Get module by name
-        module = ModuleDefinition.query.filter_by(module_name=module_name).first()
-        if not module:
-            raise ValueError(f"Module '{module_name}' not found")
-        
-        # Check if company_module record exists
-        company_module = CompanyModule.query.filter_by(
-            company_id=company_id, 
-            module_id=module.id
-        ).first()
-        
-        if not company_module:
-            # Create new record
-            company_module = CompanyModule(
-                company_id=company_id,
-                module_id=module.id,
-                enabled_by=enabled_by_user_id,
-                notes=notes
-            )
-            db.session.add(company_module)
-        else:
-            # Update existing record
-            company_module.is_enabled = True
-            company_module.enabled_at = datetime.utcnow()
-            company_module.disabled_at = None
-            company_module.enabled_by = enabled_by_user_id
-            company_module.disabled_by = None
-            if notes:
-                company_module.notes = notes
-        
-        db.session.commit()
-        return company_module
-    
-    @staticmethod
-    def disable_module(company_id, module_name, disabled_by_user_id=None):
-        """Disable a module for a company"""
-        # Get module by name
-        module = ModuleDefinition.query.filter_by(module_name=module_name).first()
-        if not module:
-            raise ValueError(f"Module '{module_name}' not found")
-        
-        # Don't allow disabling core modules
-        if module.is_core:
-            raise ValueError(f"Cannot disable core module '{module_name}'")
-        
-        company_module = CompanyModule.query.filter_by(
-            company_id=company_id, 
-            module_id=module.id
-        ).first()
-        
-        if company_module:
-            company_module.is_enabled = False
-            company_module.disabled_at = datetime.utcnow()
-            company_module.disabled_by = disabled_by_user_id
-            db.session.commit()
-        
-        return company_module
-    
-    @staticmethod
-    def get_company_modules_with_status(company_id):
-        """Get all modules with their enabled status for a company"""
-        # Get all modules
-        all_modules = ModuleDefinition.query.filter_by(is_active=True).order_by(
-            ModuleDefinition.sort_order, ModuleDefinition.module_name
-        ).all()
-        
-        # Get enabled modules for this company
-        enabled_module_ids = {
-            cm.module_id for cm in 
-            CompanyModule.query.filter_by(
-                company_id=company_id, 
-                is_enabled=True
-            ).all()
-        }
-        
-        # Create status list
-        modules_status = []
-        for module in all_modules:
-            is_enabled = module.id in enabled_module_ids or module.is_core
-            modules_status.append({
-                'id': module.id,
-                'name': module.module_name,
-                'display_name': module.display_name,
-                'description': module.description,
-                'price': float(module.monthly_price) if module.monthly_price else 0.0,
-                'is_core': module.is_core,
-                'category': module.category,
-                'enabled': is_enabled,
-                'can_disable': not module.is_core
-            })
-        
-        return modules_status
-    
-    @staticmethod
-    def get_monthly_cost(company_id):
-        """Calculate monthly cost for enabled modules"""
-        enabled_modules = db.session.query(CompanyModule, ModuleDefinition).join(ModuleDefinition).filter(
-            CompanyModule.company_id == company_id,
-            CompanyModule.is_enabled == True
-        ).all()
-        
-        total_cost = sum(float(module.monthly_price) if module.monthly_price else 0.0 
-                        for company_module, module in enabled_modules)
-        
-        return total_cost
-    
-    def __repr__(self):
-        return f'<Company {self.name}>'
-
-    def __str__(self):
-        return str(self.id)
     def get_enabled_modules(self):
         """Get enabled module names for this company"""
         return CompanyModule.get_enabled_modules(self.id)
@@ -177,73 +62,12 @@ class Company(db.Model):
         """Get monthly cost for enabled modules"""
         return CompanyModule.get_monthly_cost(self.id)
     
-class TenderHistory(db.Model):
-    __tablename__ = 'tender_history'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
-    action_type = db.Column(db.String(50), nullable=False)  # CREATE, UPDATE, DELETE, NOTE_ADD, NOTE_EDIT, NOTE_DELETE, DOCUMENT_UPLOAD, DOCUMENT_DELETE, etc.
-    action_description = db.Column(db.Text, nullable=False)  # Human readable description
-    details = db.Column(db.JSON, nullable=True)  # Additional structured data
-    performed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    ip_address = db.Column(db.String(45), nullable=True)  # For audit purposes
-    
-    # Relationships
-    tender = db.relationship('Tender', backref=db.backref('history_entries', lazy=True, order_by='TenderHistory.created_at.desc()'))
-    performed_by = db.relationship('User', foreign_keys=[performed_by_id], backref='performed_actions')
-    
     def __repr__(self):
-        return f'<TenderHistory {self.id}: {self.action_type} on Tender {self.tender_id}>'
-    
-    def to_dict(self):
-        """Convert history entry to dictionary for JSON serialization"""
-        return {
-            'id': self.id,
-            'tender_id': self.tender_id,
-            'action_type': self.action_type,
-            'action_description': self.action_description,
-            'details': self.details,
-            'performed_by_id': self.performed_by_id,
-            'performed_by_name': f"{self.performed_by.first_name} {self.performed_by.last_name}" if self.performed_by else 'Unknown',
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'ip_address': self.ip_address
-        }
-
-
-    def __str__(self):
-        return str(self.id)
-class TenderNote(db.Model):
-    __tablename__ = 'tender_notes'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships - IMPORTANT: Make sure the foreign key references match your actual table names
-    tender = db.relationship('Tender', backref=db.backref('notes', lazy=True, order_by='TenderNote.created_at.desc()'))
-    created_by_user = db.relationship('User', foreign_keys=[created_by_id], backref='created_tender_notes')
-    
-    def __repr__(self):
-        return f'<TenderNote {self.id}: {self.content[:50]}...>'
-    
-    def to_dict(self):
-        """Convert note to dictionary for JSON serialization"""
-        return {
-            'id': self.id,
-            'tender_id': self.tender_id,
-            'content': self.content,
-            'created_by_id': self.created_by_id,
-            'created_by_name': f"{self.created_by_user.first_name} {self.created_by_user.last_name}" if self.created_by_user else 'Unknown',
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
+        return f'<Company {self.name}>'
 
     def __str__(self):
         return self.name
+
 class Role(db.Model):
     __tablename__ = 'roles'
     
@@ -258,7 +82,8 @@ class Role(db.Model):
         return f'<Role {self.name}>'
 
     def __str__(self):
-        return str(self.id)
+        return self.name
+
 class User(db.Model):
     __tablename__ = 'users'
     
@@ -293,17 +118,17 @@ class User(db.Model):
         """Return full name"""
         return f"{self.first_name} {self.last_name}"
     
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-    def __str__(self):
-        return self.name
-    
     def can_access_company(self, company_id):
         """Check if user can access a specific company"""
         if self.is_super_admin:
             return True
         return self.company_id == company_id
+    
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+    def __str__(self):
+        return self.username
 
 class TenderCategory(db.Model):
     __tablename__ = 'tender_categories'
@@ -322,6 +147,7 @@ class TenderCategory(db.Model):
 
     def __str__(self):
         return self.name
+
 class TenderStatus(db.Model):
     __tablename__ = 'tender_statuses'
     
@@ -339,7 +165,8 @@ class TenderStatus(db.Model):
         return f'<TenderStatus {self.name}>'
 
     def __str__(self):
-        return str(self.id)
+        return self.name
+
 class Tender(db.Model):
     __tablename__ = 'tenders'
     
@@ -383,7 +210,8 @@ class Tender(db.Model):
         return f'<Tender {self.reference_number}>'
 
     def __str__(self):
-        return str(self.id)
+        return self.reference_number
+
 class DocumentType(db.Model):
     __tablename__ = 'document_types'
     
@@ -407,7 +235,8 @@ class DocumentType(db.Model):
         return f'<DocumentType {self.name}>'
 
     def __str__(self):
-        return str(self.id)
+        return self.name
+
 class TenderDocument(db.Model):
     __tablename__ = 'tender_documents'
     
@@ -437,7 +266,8 @@ class TenderDocument(db.Model):
         return f'<TenderDocument {self.original_filename}>'
 
     def __str__(self):
-        return str(self.id)
+        return self.original_filename
+
 class CustomField(db.Model):
     __tablename__ = 'custom_fields'
     
@@ -472,8 +302,79 @@ class CustomField(db.Model):
         return f'<CustomField {self.field_name}>'
 
     def __str__(self):
-        return str(self.id)
-# Replace your ModuleDefinition and CompanyModule classes with these fixed versions:
+        return self.field_label
+
+class TenderNote(db.Model):
+    __tablename__ = 'tender_notes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    tender = db.relationship('Tender', backref=db.backref('notes', lazy=True, order_by='TenderNote.created_at.desc()'))
+    created_by_user = db.relationship('User', foreign_keys=[created_by_id], backref='created_tender_notes')
+    
+    def to_dict(self):
+        """Convert note to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'tender_id': self.tender_id,
+            'content': self.content,
+            'created_by_id': self.created_by_id,
+            'created_by_name': f"{self.created_by_user.first_name} {self.created_by_user.last_name}" if self.created_by_user else 'Unknown',
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def __repr__(self):
+        return f'<TenderNote {self.id}: {self.content[:50]}...>'
+
+    def __str__(self):
+        return f"Note #{self.id}"
+
+class TenderHistory(db.Model):
+    __tablename__ = 'tender_history'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    action_type = db.Column(db.String(50), nullable=False)  # CREATE, UPDATE, DELETE, NOTE_ADD, etc.
+    action_description = db.Column(db.Text, nullable=False)  # Human readable description
+    details = db.Column(db.JSON, nullable=True)  # Additional structured data
+    performed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ip_address = db.Column(db.String(45), nullable=True)  # For audit purposes
+    
+    # Relationships
+    tender = db.relationship('Tender', backref=db.backref('history_entries', lazy=True, order_by='TenderHistory.created_at.desc()'))
+    performed_by = db.relationship('User', foreign_keys=[performed_by_id], backref='performed_actions')
+    
+    def to_dict(self):
+        """Convert history entry to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'tender_id': self.tender_id,
+            'action_type': self.action_type,
+            'action_description': self.action_description,
+            'details': self.details,
+            'performed_by_id': self.performed_by_id,
+            'performed_by_name': f"{self.performed_by.first_name} {self.performed_by.last_name}" if self.performed_by else 'Unknown',
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'ip_address': self.ip_address
+        }
+    
+    def __repr__(self):
+        return f'<TenderHistory {self.id}: {self.action_type} on Tender {self.tender_id}>'
+
+    def __str__(self):
+        return f"History #{self.id}"
+
+# =====================================================
+# MODULE SYSTEM MODELS
+# =====================================================
 
 class ModuleDefinition(db.Model):
     """Available modules/features in the system"""
@@ -489,8 +390,6 @@ class ModuleDefinition(db.Model):
     sort_order = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # FIXED: Remove conflicting relationships - let CompanyModule define them
     
     @staticmethod
     def get_all_modules():
@@ -510,9 +409,8 @@ class ModuleDefinition(db.Model):
     def __repr__(self):
         return f'<ModuleDefinition {self.display_name}>'
 
-
-# Add this CompanyModule class to your models/__init__.py file
-# Place it AFTER the ModuleDefinition class and BEFORE the Feature class
+    def __str__(self):
+        return self.display_name
 
 class CompanyModule(db.Model):
     """Company module assignments with pricing support"""
@@ -568,13 +466,6 @@ class CompanyModule(db.Model):
             is_active=True
         ).first() is not None
     
-    def get_pricing_history(self):
-        """Get pricing history for this company module"""
-        return CompanyModulePricing.query.filter_by(
-            company_id=self.company_id,
-            module_id=self.module_id
-        ).order_by(CompanyModulePricing.effective_date.desc()).all()
-    
     @staticmethod
     def get_enabled_modules(company_id):
         """Get list of enabled module names for a company"""
@@ -620,82 +511,6 @@ class CompanyModule(db.Model):
         
         return result is not None
     
-    @staticmethod
-    def enable_module(company_id, module_name, enabled_by_user_id=None, notes=None):
-        """Enable a module for a company"""
-        try:
-            # Find the module definition
-            module_def = ModuleDefinition.query.filter_by(module_name=module_name).first()
-            if not module_def:
-                return False, f"Module '{module_name}' not found"
-            
-            # Check if company module record exists
-            company_module = CompanyModule.query.filter_by(
-                company_id=company_id,
-                module_id=module_def.id
-            ).first()
-            
-            if company_module:
-                # Update existing record
-                company_module.is_enabled = True
-                company_module.enabled_at = datetime.utcnow()
-                company_module.enabled_by = enabled_by_user_id
-                company_module.disabled_at = None
-                company_module.disabled_by = None
-                if notes:
-                    company_module.notes = notes
-            else:
-                # Create new record
-                company_module = CompanyModule(
-                    company_id=company_id,
-                    module_id=module_def.id,
-                    is_enabled=True,
-                    enabled_at=datetime.utcnow(),
-                    enabled_by=enabled_by_user_id,
-                    monthly_cost=module_def.monthly_price or 0.0,
-                    billing_start_date=datetime.utcnow(),
-                    notes=notes
-                )
-                db.session.add(company_module)
-            
-            db.session.commit()
-            return True, f"Module '{module_name}' enabled successfully"
-        
-        except Exception as e:
-            db.session.rollback()
-            return False, f"Error enabling module: {str(e)}"
-    
-    @staticmethod
-    def disable_module(company_id, module_name, disabled_by_user_id=None, notes=None):
-        """Disable a module for a company"""
-        try:
-            # Find the module definition
-            module_def = ModuleDefinition.query.filter_by(module_name=module_name).first()
-            if not module_def:
-                return False, f"Module '{module_name}' not found"
-            
-            # Find the company module record
-            company_module = CompanyModule.query.filter_by(
-                company_id=company_id,
-                module_id=module_def.id
-            ).first()
-            
-            if company_module:
-                company_module.is_enabled = False
-                company_module.disabled_at = datetime.utcnow()
-                company_module.disabled_by = disabled_by_user_id
-                if notes:
-                    company_module.notes = notes
-                
-                db.session.commit()
-                return True, f"Module '{module_name}' disabled successfully"
-            else:
-                return False, f"Module '{module_name}' not found for this company"
-        
-        except Exception as e:
-            db.session.rollback()
-            return False, f"Error disabling module: {str(e)}"
-    
     def to_dict(self):
         """Convert to dictionary for JSON serialization"""
         return {
@@ -720,54 +535,6 @@ class CompanyModule(db.Model):
         module_name = self.module_definition.module_name if self.module_definition else f'Module#{self.module_id}'
         return f"Company {self.company_id} - {module_name}"
 
-
-
-class Feature(db.Model):
-    """Legacy feature model"""
-    __tablename__ = 'features'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    code = db.Column(db.String(50), nullable=False, unique=True)
-    description = db.Column(db.Text)
-    category = db.Column(db.String(50))
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    company_features = db.relationship('CompanyFeature', backref='feature', lazy=True)
-    
-    def __repr__(self):
-        return f'<Feature {self.code}>'
-
-    def __str__(self):
-        return self.name
-
-class CompanyFeature(db.Model):
-    """Legacy company-feature relationship model"""
-    __tablename__ = 'company_features'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
-    feature_id = db.Column(db.Integer, db.ForeignKey('features.id'), nullable=False)
-    enabled = db.Column(db.Boolean, default=True)
-    enabled_at = db.Column(db.DateTime)
-    enabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    code = db.Column(db.String(50))  # Duplicate of feature.code for performance
-    is_enabled = db.Column(db.Boolean, default=True)  # Another enabled field
-    
-    # Relationships
-    company = db.relationship('Company', backref='legacy_company_features')
-    enabled_by_user = db.relationship('User', foreign_keys=[enabled_by])
-    
-    # Unique constraint
-    __table_args__ = (db.UniqueConstraint('company_id', 'feature_id', name='unique_company_feature'),)
-    
-    def __repr__(self):
-        return f'<CompanyFeature {self.company_id}-{self.feature_id}>'
-
-    def __str__(self):
-        return f"Company {self.company_id} - Feature {self.feature_id}"
 class CompanyModulePricing(db.Model):
     """Custom pricing for modules per company"""
     __tablename__ = 'company_module_pricing'
@@ -800,8 +567,15 @@ class CompanyModulePricing(db.Model):
             'is_active': self.is_active
         }
 
+    def __repr__(self):
+        return f'<CompanyModulePricing {self.company_id}-{self.module_id}>'
+
+# =====================================================
+# BILLING MODELS
+# =====================================================
+
 class MonthlyBill(db.Model):
-    """Monthly bills for companies - matches your existing monthly_bills table"""
+    """Monthly bills for companies"""
     __tablename__ = 'monthly_bills'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -856,7 +630,7 @@ class MonthlyBill(db.Model):
         return f"Bill {self.id} - {self.bill_period}"
 
 class BillLineItem(db.Model):
-    """Individual line items for bills - matches your existing bill_line_items table"""
+    """Individual line items for bills"""
     __tablename__ = 'bill_line_items'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -896,6 +670,10 @@ class BillLineItem(db.Model):
 # Add this alias for backward compatibility
 Bill = MonthlyBill  # This allows existing code to use Bill instead of MonthlyBill
 
+# =====================================================
+# DOCUMENT MODELS
+# =====================================================
+
 class Document(db.Model):
     __tablename__ = 'documents'
     
@@ -919,7 +697,8 @@ class Document(db.Model):
     def __repr__(self):
         return f'<Document {self.original_filename}>'
 
-# Add this to your models.py or models file
+    def __str__(self):
+        return self.original_filename
 
 class CompanyDocument(db.Model):
     __tablename__ = 'company_documents'
@@ -942,17 +721,255 @@ class CompanyDocument(db.Model):
     company = db.relationship('Company', backref='documents')
     uploader = db.relationship('User', backref='uploaded_company_docs')
     
-    def __repr__(self):
-        return f'<CompanyDocument {self.document_name}>'
-    
     @property
     def file_size_human(self):
         """Return human readable file size"""
         if not self.file_size:
             return "Unknown"
         
+        size = self.file_size
         for unit in ['B', 'KB', 'MB', 'GB']:
-            if self.file_size < 1024.0:
-                return f"{self.file_size:.1f} {unit}"
-            self.file_size /= 1024.0
-        return f"{self.file_size:.1f} TB"
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
+    
+    def __repr__(self):
+        return f'<CompanyDocument {self.document_name}>'
+
+    def __str__(self):
+        return self.document_name
+
+# =====================================================
+# NOTIFICATION MODELS
+# =====================================================
+
+class CompanySettings(db.Model):
+    __tablename__ = 'company_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    notification_days = db.Column(db.Integer, default=7)  # Days before deadline to notify
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    company = db.relationship('Company', backref=db.backref('settings', uselist=False))
+    
+    def __repr__(self):
+        return f'<CompanySettings {self.company_id}>'
+
+    def __str__(self):
+        return f"Settings for Company {self.company_id}"
+
+class TenderNotification(db.Model):
+    __tablename__ = 'tender_notifications'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    notification_type = db.Column(db.String(50), default='deadline_approaching')
+    message = db.Column(db.Text)
+    days_remaining = db.Column(db.Integer)
+    is_read = db.Column(db.Boolean, default=False)
+    is_processed = db.Column(db.Boolean, default=False)
+    processed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    processing_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    tender = db.relationship('Tender', backref='notifications')
+    company = db.relationship('Company')
+    processor = db.relationship('User', foreign_keys=[processed_by])
+    
+    def to_dict(self):
+        """Convert notification to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'tender_id': self.tender_id,
+            'company_id': self.company_id,
+            'notification_type': self.notification_type,
+            'message': self.message,
+            'days_remaining': self.days_remaining,
+            'is_read': self.is_read,
+            'is_processed': self.is_processed,
+            'processed_by': self.processed_by,
+            'processed_at': self.processed_at.isoformat() if self.processed_at else None,
+            'processing_note': self.processing_note,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<TenderNotification {self.id}: {self.notification_type}>'
+
+    def __str__(self):
+        return f"Notification #{self.id}"
+
+# =====================================================
+# LEGACY MODELS (for backward compatibility)
+# =====================================================
+
+class Feature(db.Model):
+    """Legacy feature model"""
+    __tablename__ = 'features'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    code = db.Column(db.String(50), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    category = db.Column(db.String(50))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    company_features = db.relationship('CompanyFeature', backref='feature', lazy=True)
+    
+    def __repr__(self):
+        return f'<Feature {self.code}>'
+
+    def __str__(self):
+        return self.name
+
+class CompanyFeature(db.Model):
+    """Legacy company-feature relationship model"""
+    __tablename__ = 'company_features'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    feature_id = db.Column(db.Integer, db.ForeignKey('features.id'), nullable=False)
+    enabled = db.Column(db.Boolean, default=True)
+    enabled_at = db.Column(db.DateTime)
+    enabled_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    code = db.Column(db.String(50))  # Duplicate of feature.code for performance
+    is_enabled = db.Column(db.Boolean, default=True)  # Another enabled field
+    
+    # Relationships
+    company = db.relationship('Company', backref='legacy_company_features')
+    enabled_by_user = db.relationship('User', foreign_keys=[enabled_by])
+    
+    # Unique constraint
+    __table_args__ = (db.UniqueConstraint('company_id', 'feature_id', name='unique_company_feature'),)
+    
+    def __repr__(self):
+        return f'<CompanyFeature {self.company_id}-{self.feature_id}>'
+
+    def __str__(self):
+        return f"Company {self.company_id} - Feature {self.feature_id}"
+
+# =====================================================
+# NOTIFICATION SERVICE
+# =====================================================
+
+class NotificationService:
+    
+    @staticmethod
+    def generate_deadline_notifications():
+        """Generate notifications for tenders approaching deadline"""
+        # Get all companies and their notification settings
+        companies = Company.query.filter_by(is_active=True).all()
+        
+        for company in companies:
+            # Get company notification days setting
+            settings = CompanySettings.query.filter_by(company_id=company.id).first()
+            notification_days = settings.notification_days if settings else 7
+            
+            # Calculate cutoff date
+            cutoff_date = datetime.now() + timedelta(days=notification_days)
+            
+            # Find tenders approaching deadline (not closed/cancelled)
+            approaching_tenders = Tender.query.filter(
+                Tender.company_id == company.id,
+                Tender.submission_deadline <= cutoff_date,
+                Tender.submission_deadline >= datetime.now(),
+                ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+            ).all()
+            
+            for tender in approaching_tenders:
+                # Check if notification already exists
+                existing = TenderNotification.query.filter_by(
+                    tender_id=tender.id,
+                    company_id=company.id,
+                    notification_type='deadline_approaching'
+                ).first()
+                
+                if not existing:
+                    days_remaining = (tender.submission_deadline - datetime.now()).days
+                    
+                    # Create notification
+                    notification = TenderNotification(
+                        tender_id=tender.id,
+                        company_id=company.id,
+                        notification_type='deadline_approaching',
+                        message=f"Tender '{tender.title}' deadline in {days_remaining} days",
+                        days_remaining=days_remaining
+                    )
+                    db.session.add(notification)
+        
+        db.session.commit()
+    
+    @staticmethod
+    def get_company_notifications(company_id, unread_only=True):
+        """Get notifications for a specific company"""
+        query = TenderNotification.query.filter_by(
+            company_id=company_id,
+            is_processed=False
+        ).join(Tender).filter(
+            ~Tender.status_id.in_([3, 6])  # Exclude closed/cancelled tenders
+        )
+        
+        if unread_only:
+            query = query.filter_by(is_read=False)
+            
+        return query.order_by(TenderNotification.created_at.desc()).all()
+    
+    @staticmethod
+    def get_notification_count(company_id):
+        """Get count of unread notifications for a company"""
+        return TenderNotification.query.filter_by(
+            company_id=company_id,
+            is_read=False,
+            is_processed=False
+        ).join(Tender).filter(
+            ~Tender.status_id.in_([3, 6])
+        ).count()
+    
+    @staticmethod
+    def mark_notification_read(notification_id):
+        """Mark a notification as read"""
+        notification = TenderNotification.query.get(notification_id)
+        if notification:
+            notification.is_read = True
+            db.session.commit()
+    
+    @staticmethod
+    def process_notification(notification_id, user_id, note=None):
+        """Process/close a notification"""
+        notification = TenderNotification.query.get(notification_id)
+        if notification:
+            notification.is_processed = True
+            notification.processed_by = user_id
+            notification.processed_at = datetime.utcnow()
+            notification.processing_note = note
+            notification.is_read = True
+            db.session.commit()
+            return True
+        return False
+    
+    @staticmethod
+    def process_all_notifications(company_id, user_id, note=None):
+        """Process all notifications for a company"""
+        notifications = TenderNotification.query.filter_by(
+            company_id=company_id,
+            is_processed=False
+        ).all()
+        
+        for notification in notifications:
+            notification.is_processed = True
+            notification.processed_by = user_id
+            notification.processed_at = datetime.utcnow()
+            notification.processing_note = note
+            notification.is_read = True
+        
+        db.session.commit()
+        return len(notifications)
