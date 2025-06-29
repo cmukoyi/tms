@@ -6800,33 +6800,32 @@ def generate_quote_html_fallback(quote_data):
     return quote_html.encode('utf-8'), filename, 'text/html'  
 
 
+
+
+logger = logging.getLogger(__name__)
+
 @app.route('/api/notifications/count')
 @login_required
 def get_notification_count():
     """API endpoint to get notification count"""
     try:
-        user = AuthService.get_user_by_id(session['user_id'])
-        if not user or not user.company_id:
+        # Use company_id directly from session (it's already there!)
+        company_id = session.get('company_id')
+        if not company_id:
+            logger.error("No company_id in session")
             return jsonify({'count': 0})
         
-        # Get notification days setting for company
-        settings = CompanySettings.query.filter_by(company_id=user.company_id).first()
-        notification_days = settings.notification_days if settings else 7
-        
-        # Calculate cutoff date
-        cutoff_date = datetime.now() + timedelta(days=notification_days)
-        
-        # Count unread notifications for tenders approaching deadline
-        count = TenderNotification.query.join(Tender).filter(
-            TenderNotification.company_id == user.company_id,
-            TenderNotification.is_read == False,
-            TenderNotification.is_processed == False,
-            ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+        # Count unread/unprocessed notifications for this company
+        count = TenderNotification.query.filter_by(
+            company_id=company_id,
+            is_processed=False
         ).count()
         
+        logger.info(f"Found {count} unprocessed notifications for company {company_id}")
         return jsonify({'count': count})
+        
     except Exception as e:
-        print(f"Error getting notification count: {str(e)}")
+        logger.error(f"Error getting notification count: {str(e)}", exc_info=True)
         return jsonify({'count': 0})
 
 @app.route('/api/notifications')
@@ -6834,33 +6833,61 @@ def get_notification_count():
 def get_notifications():
     """API endpoint to get notifications"""
     try:
-        user = AuthService.get_user_by_id(session['user_id'])
-        if not user or not user.company_id:
+        # Use company_id directly from session
+        company_id = session.get('company_id')
+        if not company_id:
+            logger.error("No company_id in session")
             return jsonify({'notifications': []})
         
-        # Get notifications for company
-        notifications = TenderNotification.query.join(Tender).filter(
-            TenderNotification.company_id == user.company_id,
-            TenderNotification.is_processed == False,
-            ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
-        ).order_by(TenderNotification.created_at.desc()).limit(10).all()
+        # Get unprocessed notifications for this company
+        notifications = TenderNotification.query.filter_by(
+            company_id=company_id,
+            is_processed=False
+        ).order_by(TenderNotification.created_at.desc()).limit(20).all()
+        
+        logger.info(f"Found {len(notifications)} notifications for company {company_id}")
         
         notification_data = []
         for n in notifications:
-            notification_data.append({
-                'id': n.id,
-                'message': n.message,
-                'tender_id': n.tender_id,
-                'tender_title': n.tender.title,
-                'tender_reference': n.tender.reference_number,
-                'days_remaining': n.days_remaining,
-                'created_at': n.created_at.strftime('%Y-%m-%d %H:%M'),
-                'is_read': n.is_read
-            })
+            try:
+                # Safely get tender information
+                tender_title = 'Unknown Tender'
+                tender_reference = 'N/A'
+                submission_deadline = 'No deadline'
+                
+                if n.tender:
+                    tender_title = n.tender.title or 'Unknown Tender'
+                    tender_reference = getattr(n.tender, 'reference_number', 'N/A')
+                    if hasattr(n.tender, 'submission_deadline') and n.tender.submission_deadline:
+                        submission_deadline = n.tender.submission_deadline.strftime('%Y-%m-%d %H:%M')
+                
+                notification_data.append({
+                    'id': n.id,
+                    'message': n.message or f'Notification for tender ID {n.tender_id}',
+                    'tender_id': n.tender_id,
+                    'tender_title': tender_title,
+                    'tender_reference': tender_reference,
+                    'submission_deadline': submission_deadline,
+                    'days_remaining': n.days_remaining or 0,
+                    'created_at': n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else 'Unknown',
+                    'is_read': n.is_read,
+                    'is_processed': n.is_processed,
+                    'processing_note': n.processing_note
+                })
+            except Exception as item_error:
+                logger.error(f"Error processing notification {n.id}: {str(item_error)}")
+                # Still include the notification with minimal data
+                notification_data.append({
+                    'id': n.id,
+                    'message': n.message or f'Notification {n.id}',
+                    'tender_id': n.tender_id,
+                    'error': 'Error loading details'
+                })
         
         return jsonify({'notifications': notification_data})
+        
     except Exception as e:
-        print(f"Error getting notifications: {str(e)}")
+        logger.error(f"Error getting notifications: {str(e)}", exc_info=True)
         return jsonify({'notifications': []})
 
 @app.route('/notifications')
@@ -6868,25 +6895,29 @@ def get_notifications():
 def notifications_page():
     """Notifications management page"""
     try:
-        user = AuthService.get_user_by_id(session['user_id'])
-        if not user or not user.company_id:
-            flash('Access denied. No company associated.', 'error')
+        # Use company_id directly from session
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your session', 'error')
             return redirect(url_for('dashboard'))
         
-        # Get all notifications for the company
-        notifications = TenderNotification.query.join(Tender).filter(
-            TenderNotification.company_id == user.company_id
+        # Get ALL notifications for this company (not just unprocessed)
+        notifications = TenderNotification.query.filter_by(
+            company_id=company_id
         ).order_by(TenderNotification.created_at.desc()).all()
         
         # Get company notification settings
-        settings = CompanySettings.query.filter_by(company_id=user.company_id).first()
+        settings = CompanySettings.query.filter_by(company_id=company_id).first()
+        
+        logger.info(f"Loading notifications page: {len(notifications)} notifications for company {company_id}")
         
         return render_template('notifications/index.html', 
                              notifications=notifications,
                              settings=settings)
+                             
     except Exception as e:
-        print(f"Error loading notifications page: {str(e)}")
-        flash('Error loading notifications', 'error')
+        logger.error(f"Error loading notifications page: {str(e)}", exc_info=True)
+        flash(f'Error loading notifications: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
 @app.route('/notifications/<int:notification_id>/read', methods=['POST'])
@@ -6894,90 +6925,214 @@ def notifications_page():
 def mark_notification_read(notification_id):
     """Mark notification as read"""
     try:
-        user = AuthService.get_user_by_id(session['user_id'])
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'})
+        # Use company_id from session for security
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
         
+        if not company_id or not user_id:
+            return jsonify({'success': False, 'error': 'Invalid session'})
+        
+        # Find notification belonging to user's company
         notification = TenderNotification.query.filter_by(
             id=notification_id,
-            company_id=user.company_id
+            company_id=company_id
         ).first()
         
-        if notification:
-            notification.is_read = True
-            db.session.commit()
-            return jsonify({'success': True})
-        else:
-            return jsonify({'success': False, 'error': 'Notification not found'})
+        if not notification:
+            logger.warning(f"Notification {notification_id} not found for company {company_id}")
+            return jsonify({'success': False, 'error': 'Notification not found or access denied'})
+        
+        notification.is_read = True
+        db.session.commit()
+        
+        logger.info(f"Notification {notification_id} marked as read by user {user_id}")
+        return jsonify({'success': True, 'message': 'Notification marked as read'})
+        
     except Exception as e:
-        print(f"Error marking notification as read: {str(e)}")
-        return jsonify({'success': False, 'error': 'Database error'})
+        db.session.rollback()
+        logger.error(f"Error marking notification as read: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'})
 
 @app.route('/notifications/<int:notification_id>/process', methods=['POST'])
 @login_required
 def process_notification(notification_id):
     """Process a single notification"""
     try:
-        user = AuthService.get_user_by_id(session['user_id'])
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'})
+        # Use session data
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
         
-        data = request.get_json()
-        note = data.get('note', '') if data else ''
+        if not company_id or not user_id:
+            return jsonify({'success': False, 'error': 'Invalid session'})
         
+        # Get JSON data safely
+        try:
+            data = request.get_json() or {}
+        except Exception:
+            data = {}
+        
+        action_comment = data.get('comment', '').strip()
+        if not action_comment:
+            return jsonify({'success': False, 'error': 'Action comment is required'})
+        
+        # Find notification belonging to user's company
         notification = TenderNotification.query.filter_by(
             id=notification_id,
-            company_id=user.company_id
+            company_id=company_id
         ).first()
         
-        if notification:
-            notification.is_processed = True
-            notification.processed_by = user.id
-            notification.processed_at = datetime.utcnow()
-            notification.processing_note = note
-            notification.is_read = True
-            db.session.commit()
-            
-            return jsonify({'success': True})
-        else:
-            return jsonify({'success': False, 'error': 'Notification not found'})
+        if not notification:
+            logger.warning(f"Notification {notification_id} not found for company {company_id}")
+            return jsonify({'success': False, 'error': 'Notification not found or access denied'})
+        
+        # Update notification
+        notification.is_processed = True
+        notification.processed_by = user_id
+        notification.processed_at = datetime.utcnow()
+        notification.processing_note = action_comment
+        notification.is_read = True
+        
+        db.session.commit()
+        
+        logger.info(f"Notification {notification_id} processed by user {user_id}")
+        return jsonify({
+            'success': True,
+            'message': 'Notification processed successfully'
+        })
+        
     except Exception as e:
-        print(f"Error processing notification: {str(e)}")
-        return jsonify({'success': False, 'error': 'Database error'})
+        db.session.rollback()
+        logger.error(f"Error processing notification: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'})
 
 @app.route('/notifications/process-all', methods=['POST'])
 @login_required
 def process_all_notifications():
-    """Process all notifications for the company"""
+    """Process all unprocessed notifications for the company"""
     try:
-        user = AuthService.get_user_by_id(session['user_id'])
-        if not user or not user.company_id:
-            return jsonify({'success': False, 'error': 'User or company not found'})
+        # Use session data
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
         
-        data = request.get_json()
-        note = data.get('note', '') if data else ''
+        if not company_id or not user_id:
+            return jsonify({'success': False, 'error': 'Invalid session'})
         
-        # Get all unprocessed notifications for the company
+        # Get JSON data safely
+        try:
+            data = request.get_json() or {}
+        except Exception:
+            data = {}
+        
+        action_comment = data.get('comment', '').strip()
+        if not action_comment:
+            return jsonify({'success': False, 'error': 'Action comment is required'})
+        
+        # Get all unprocessed notifications for this company
         notifications = TenderNotification.query.filter_by(
-            company_id=user.company_id,
+            company_id=company_id,
             is_processed=False
         ).all()
         
         count = 0
         for notification in notifications:
             notification.is_processed = True
-            notification.processed_by = user.id
+            notification.processed_by = user_id
             notification.processed_at = datetime.utcnow()
-            notification.processing_note = note
+            notification.processing_note = action_comment
             notification.is_read = True
             count += 1
         
-        db.session.commit()
+        if count > 0:
+            db.session.commit()
         
-        return jsonify({'success': True, 'count': count})
+        logger.info(f"Processed {count} notifications for company {company_id} by user {user_id}")
+        return jsonify({
+            'success': True, 
+            'count': count,
+            'message': f'Successfully processed {count} notifications'
+        })
+        
     except Exception as e:
-        print(f"Error processing all notifications: {str(e)}")
-        return jsonify({'success': False, 'error': 'Database error'})
+        db.session.rollback()
+        logger.error(f"Error processing all notifications: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'})
+
+# Helper function to create notifications for tenders approaching deadline
+def create_notifications_for_company(company_id, notification_days=7):
+    """Create notifications for tenders approaching submission deadline"""
+    try:
+        today = datetime.now()
+        cutoff_datetime = today + timedelta(days=notification_days)
+        
+        # Find tenders approaching submission deadline
+        tenders_approaching = Tender.query.filter(
+            Tender.submission_deadline.isnot(None),
+            Tender.submission_deadline >= today,
+            Tender.submission_deadline <= cutoff_datetime,
+            ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+        ).all()
+        
+        # Get existing notifications for these tenders
+        existing_tender_ids = set()
+        if tenders_approaching:
+            existing_notifications = TenderNotification.query.filter(
+                TenderNotification.company_id == company_id,
+                TenderNotification.tender_id.in_([t.id for t in tenders_approaching])
+            ).all()
+            existing_tender_ids = {n.tender_id for n in existing_notifications}
+        
+        # Create notifications for tenders without them
+        new_count = 0
+        for tender in tenders_approaching:
+            if tender.id not in existing_tender_ids:
+                days_remaining = (tender.submission_deadline.date() - today.date()).days
+                
+                notification = TenderNotification(
+                    tender_id=tender.id,
+                    company_id=company_id,
+                    notification_type='deadline_approaching',
+                    message=f"Tender '{tender.title}' submission deadline in {days_remaining} day{'s' if days_remaining != 1 else ''}",
+                    days_remaining=days_remaining,
+                    is_read=False,
+                    is_processed=False,
+                    created_at=datetime.utcnow()
+                )
+                
+                db.session.add(notification)
+                new_count += 1
+        
+        if new_count > 0:
+            db.session.commit()
+            logger.info(f"Created {new_count} new notifications for company {company_id}")
+        
+        return new_count
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating notifications: {str(e)}", exc_info=True)
+        return 0
+
+@app.route('/notifications/create-for-deadlines', methods=['POST'])
+@login_required
+def create_deadline_notifications():
+    """Manually create notifications for approaching deadlines"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            return jsonify({'success': False, 'error': 'No company in session'})
+        
+        count = create_notifications_for_company(company_id)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Created {count} new notifications',
+            'count': count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in create_deadline_notifications: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)})
+
 
 # =====================================================
 # SUPER ADMIN COMPANY NOTIFICATION SETTINGS
@@ -7083,78 +7238,167 @@ def manual_generate_notifications():
 # HELPER FUNCTION TO AUTO-GENERATE NOTIFICATIONS
 # =====================================================
 
-def auto_generate_notifications():
-    """
-    Auto-generate notifications for tenders approaching deadline.
-    This function should be called periodically (e.g., via cron job or scheduler)
-    """
+# Add this function to your app.py file
+
+def create_notifications_for_company_tenders(company_id, notification_days=7):
+    """Create notifications for tenders owned by the company approaching submission deadline"""
     try:
-        with app.app_context():
-            generated_count = 0
-            
-            # Get all active companies
-            companies = Company.query.filter_by(is_active=True).all()
-            
-            for company in companies:
-                # Get company notification days setting
-                settings = CompanySettings.query.filter_by(company_id=company.id).first()
-                notification_days = settings.notification_days if settings else 7
+        today = datetime.now()
+        cutoff_datetime = today + timedelta(days=notification_days)
+        
+        logger.info(f"Creating notifications for company {company_id}, checking tenders until {cutoff_datetime}")
+        
+        # Find company's own tenders approaching deadline
+        company_tenders = Tender.query.filter(
+            Tender.company_id == company_id,  # Only company's own tenders
+            Tender.submission_deadline.isnot(None),
+            Tender.submission_deadline >= today,
+            Tender.submission_deadline <= cutoff_datetime,
+            ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
+        ).all()
+        
+        logger.info(f"Found {len(company_tenders)} tenders approaching deadline for company {company_id}")
+        
+        # Check which ones already have notifications
+        existing_tender_ids = set()
+        if company_tenders:
+            existing_notifications = TenderNotification.query.filter(
+                TenderNotification.company_id == company_id,
+                TenderNotification.tender_id.in_([t.id for t in company_tenders])
+            ).all()
+            existing_tender_ids = {n.tender_id for n in existing_notifications}
+            logger.info(f"Found {len(existing_notifications)} existing notifications for company {company_id}")
+        
+        # Create notifications for tenders without them
+        new_count = 0
+        for tender in company_tenders:
+            if tender.id not in existing_tender_ids:
+                days_remaining = (tender.submission_deadline.date() - today.date()).days
                 
-                # Calculate cutoff date
-                cutoff_date = datetime.now() + timedelta(days=notification_days)
+                notification = TenderNotification(
+                    tender_id=tender.id,
+                    company_id=company_id,
+                    notification_type='deadline_approaching',
+                    message=f"Tender '{tender.title}' submission deadline in {days_remaining} day{'s' if days_remaining != 1 else ''}",
+                    days_remaining=days_remaining,
+                    is_read=False,
+                    is_processed=False,
+                    created_at=datetime.utcnow()
+                )
                 
-                # Find tenders approaching deadline (not closed/cancelled)
-                approaching_tenders = Tender.query.filter(
-                    Tender.company_id == company.id,
-                    Tender.submission_deadline <= cutoff_date,
-                    Tender.submission_deadline >= datetime.now(),
-                    ~Tender.status_id.in_([3, 6])  # Not closed or cancelled
-                ).all()
-                
-                for tender in approaching_tenders:
-                    # Check if notification already exists for this tender today
-                    today = datetime.now().date()
-                    existing = TenderNotification.query.filter(
-                        TenderNotification.tender_id == tender.id,
-                        TenderNotification.company_id == company.id,
-                        TenderNotification.notification_type == 'deadline_approaching',
-                        TenderNotification.created_at >= today
-                    ).first()
-                    
-                    if not existing:
-                        days_remaining = (tender.submission_deadline - datetime.now()).days
-                        
-                        # Create notification
-                        notification = TenderNotification(
-                            tender_id=tender.id,
-                            company_id=company.id,
-                            notification_type='deadline_approaching',
-                            message=f"Tender '{tender.title}' (#{tender.reference_number}) deadline in {days_remaining} days",
-                            days_remaining=days_remaining
-                        )
-                        db.session.add(notification)
-                        generated_count += 1
-            
+                db.session.add(notification)
+                new_count += 1
+                logger.info(f"Created notification for tender {tender.id} ({tender.title}) - {days_remaining} days remaining")
+        
+        if new_count > 0:
             db.session.commit()
-            print(f"Auto-generated {generated_count} notifications at {datetime.now()}")
-            
+            logger.info(f"Successfully created {new_count} notifications for company {company_id}")
+        else:
+            logger.info(f"No new notifications needed for company {company_id}")
+        
+        return new_count
+        
     except Exception as e:
         db.session.rollback()
-        print(f"Error in auto_generate_notifications: {str(e)}")
+        logger.error(f"Error creating notifications for company {company_id}: {str(e)}", exc_info=True)
+        return 0
+    
+# Also update your auto_generate_notifications function to use the correct function name:
+def auto_generate_notifications_main():
+    """Auto-generate notifications for all companies - runs daily at midnight"""
+    job_id = 'daily_notifications'
+    start_time = datetime.now()
+    
+    # Log job start
+    log_job_execution(job_id, 'running')
+    
+    try:
+        logger.info(f"Starting daily notification generation at {start_time}")
+        
+        # Get all active companies
+        companies = Company.query.filter_by(is_active=True).all()
+        
+        total_created = 0
+        total_companies = len(companies)
+        
+        logger.info(f"Processing {total_companies} active companies")
+        
+        for company in companies:
+            try:
+                # Use the correct function name
+                count = create_notifications_for_company_tenders(company.id, 7)
+                total_created += count
+                
+                if count > 0:
+                    logger.info(f"Created {count} notifications for company {company.id} ({getattr(company, 'name', 'Unknown')})")
+                
+            except Exception as company_error:
+                logger.error(f"Error creating notifications for company {company.id}: {str(company_error)}")
+                continue
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        
+        logger.info(f"Daily notification generation completed:")
+        logger.info(f"- Processed {total_companies} companies")
+        logger.info(f"- Created {total_created} notifications")
+        logger.info(f"- Duration: {duration:.2f} seconds")
+        
+        # Log successful completion
+        log_job_execution(job_id, 'success', duration, total_created)
+        
+        return total_created
+        
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        error_msg = str(e)
+        
+        logger.error(f"Error in daily notification generation: {error_msg}", exc_info=True)
+        
+        # Log error
+        log_job_execution(job_id, 'error', duration, 0, error_msg)
+        
+        return 0
 
+# Make sure you also have the logging function:
+job_execution_history = []
+
+def log_job_execution(job_id, status, duration=None, created_count=None, error=None):
+    """Log job execution for history tracking"""
+    global job_execution_history
+    
+    execution_log = {
+        'job_id': job_id,
+        'timestamp': datetime.now(),
+        'status': status,  # 'success', 'error', 'running'
+        'duration': duration,
+        'created_count': created_count,
+        'error': error
+    }
+    
+    job_execution_history.append(execution_log)
+    
+    # Keep only last 50 executions
+    if len(job_execution_history) > 50:
+        job_execution_history = job_execution_history[-50:]
 # =====================================================
-# SCHEDULER SETUP (Optional - for automatic notifications)
+# SCHEDULER SETUP (for automatic notifications)
 # =====================================================
 
 # Create scheduler
 scheduler = BackgroundScheduler()
 
 # Add job to run every hour
+scheduler = BackgroundScheduler(timezone='Africa/Johannesburg')
 scheduler.add_job(
-    func=auto_generate_notifications,
-    trigger="interval",
-    hours=1,
-    id='auto_notifications'
+    func=auto_generate_notifications_main,
+    trigger=CronTrigger(hour=0, minute=0),
+    id='daily_notifications',
+    name='Daily Notification Generation',
+    max_instances=1,
+    coalesce=True,
+    misfire_grace_time=3600
 )
 
 # Start scheduler
@@ -7163,7 +7407,344 @@ scheduler.start()
 # Shut down the scheduler when exiting the app
 atexit.register(lambda: scheduler.shutdown())
 
-      
+
+
+
+# Global variable to track job execution history
+job_execution_history = []
+
+def log_job_execution(job_id, status, duration=None, created_count=None, error=None):
+    """Log job execution for history tracking"""
+    global job_execution_history
+    
+    execution_log = {
+        'job_id': job_id,
+        'timestamp': datetime.now(),
+        'status': status,  # 'success', 'error', 'running'
+        'duration': duration,
+        'created_count': created_count,
+        'error': error
+    }
+    
+    job_execution_history.append(execution_log)
+    
+    # Keep only last 50 executions
+    if len(job_execution_history) > 50:
+        job_execution_history = job_execution_history[-50:]
+
+# Updated notification function with logging
+def auto_generate_notifications():
+    """Auto-generate notifications with execution logging"""
+    job_id = 'daily_notifications'
+    start_time = datetime.now()
+    
+    # Log job start
+    log_job_execution(job_id, 'running')
+    
+    try:
+        logger.info(f"Starting daily notification generation at {start_time}")
+        
+        # Get all active companies
+        companies = Company.query.filter_by(is_active=True).all()
+        
+        total_created = 0
+        total_companies = len(companies)
+        
+        for company in companies:
+            try:
+                count = create_notifications_for_company_tenders(company.id, 7)
+                total_created += count
+                
+                if count > 0:
+                    logger.info(f"Created {count} notifications for company {company.id}")
+                
+            except Exception as company_error:
+                logger.error(f"Error creating notifications for company {company.id}: {str(company_error)}")
+                continue
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        
+        logger.info(f"Daily notification generation completed: {total_created} notifications in {duration:.2f}s")
+        
+        # Log successful completion
+        log_job_execution(job_id, 'success', duration, total_created)
+        
+        return total_created
+        
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        error_msg = str(e)
+        
+        logger.error(f"Error in daily notification generation: {error_msg}", exc_info=True)
+        
+        # Log error
+        log_job_execution(job_id, 'error', duration, 0, error_msg)
+        
+        return 0
+
+@app.route('/admin/scheduler')
+@login_required
+def scheduler_admin():
+    """Admin page for scheduler management"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not getattr(user, 'is_super_admin', False):
+            flash('Super admin access required', 'error')
+            return redirect(url_for('dashboard'))
+        
+        return render_template('admin/scheduler.html')
+        
+    except Exception as e:
+        logger.error(f"Error loading scheduler admin: {str(e)}")
+        flash('Error loading scheduler admin', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/api/admin/scheduler/status')
+@login_required
+def get_scheduler_status():
+    """API endpoint to get scheduler status"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not getattr(user, 'is_super_admin', False):
+            return jsonify({'error': 'Super admin access required'}), 403
+        
+        if not scheduler.running:
+            return jsonify({
+                'status': 'stopped',
+                'running': False,
+                'jobs': [],
+                'execution_history': []
+            })
+        
+        jobs = []
+        for job in scheduler.get_jobs():
+            # Calculate time until next run
+            next_run = None
+            time_until_next = None
+            
+            if job.next_run_time:
+                next_run = job.next_run_time.isoformat()
+                time_until_next = (job.next_run_time - datetime.now(job.next_run_time.tzinfo)).total_seconds()
+            
+            jobs.append({
+                'id': job.id,
+                'name': getattr(job, 'name', job.id),
+                'trigger': str(job.trigger),
+                'next_run': next_run,
+                'time_until_next': time_until_next,
+                'max_instances': getattr(job, 'max_instances', 1),
+                'coalesce': getattr(job, 'coalesce', False)
+            })
+        
+        # Get recent execution history
+        recent_history = []
+        for log in job_execution_history[-10:]:  # Last 10 executions
+            recent_history.append({
+                'job_id': log['job_id'],
+                'timestamp': log['timestamp'].isoformat(),
+                'status': log['status'],
+                'duration': log['duration'],
+                'created_count': log['created_count'],
+                'error': log['error']
+            })
+        
+        return jsonify({
+            'status': 'running',
+            'running': True,
+            'jobs': jobs,
+            'execution_history': recent_history,
+            'total_jobs': len(jobs),
+            'current_time': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/scheduler/trigger/<job_id>', methods=['POST'])
+@login_required
+def trigger_scheduler_job(job_id):
+    """API endpoint to manually trigger a scheduler job"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not getattr(user, 'is_super_admin', False):
+            return jsonify({'error': 'Super admin access required'}), 403
+        
+        if not scheduler.running:
+            return jsonify({'error': 'Scheduler is not running'}), 400
+        
+        # Find the job
+        job = scheduler.get_job(job_id)
+        if not job:
+            return jsonify({'error': f'Job {job_id} not found'}), 404
+        
+        # Trigger the job manually
+        if job_id == 'daily_notifications':
+            # Run notification generation
+            count = auto_generate_notifications_main()
+            return jsonify({
+                'success': True,
+                'message': f'Notification job triggered successfully',
+                'created_count': count,
+                'timestamp': datetime.now().isoformat()
+            })
+        elif job_id == 'weekly_cleanup':
+            # Run cleanup job
+            count = cleanup_old_notifications()
+            return jsonify({
+                'success': True,
+                'message': f'Cleanup job triggered successfully',
+                'cleaned_count': count,
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            # Generic job trigger
+            scheduler.modify_job(job_id, next_run_time=datetime.now())
+            return jsonify({
+                'success': True,
+                'message': f'Job {job_id} triggered successfully',
+                'timestamp': datetime.now().isoformat()
+            })
+        
+    except Exception as e:
+        logger.error(f"Error triggering job {job_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/scheduler/control/<action>', methods=['POST'])
+@login_required
+def control_scheduler(action):
+    """API endpoint to start/stop scheduler"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not getattr(user, 'is_super_admin', False):
+            return jsonify({'error': 'Super admin access required'}), 403
+        
+        if action == 'start':
+            if not scheduler.running:
+                scheduler.start()
+                return jsonify({
+                    'success': True,
+                    'message': 'Scheduler started successfully',
+                    'status': 'running'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Scheduler is already running',
+                    'status': 'running'
+                })
+        
+        elif action == 'stop':
+            if scheduler.running:
+                scheduler.shutdown(wait=False)
+                return jsonify({
+                    'success': True,
+                    'message': 'Scheduler stopped successfully',
+                    'status': 'stopped'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Scheduler is already stopped',
+                    'status': 'stopped'
+                })
+        
+        else:
+            return jsonify({'error': f'Invalid action: {action}'}), 400
+        
+    except Exception as e:
+        logger.error(f"Error controlling scheduler: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/scheduler/history')
+@login_required
+def get_scheduler_history():
+    """API endpoint to get detailed execution history"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not getattr(user, 'is_super_admin', False):
+            return jsonify({'error': 'Super admin access required'}), 403
+        
+        # Get execution history with pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        # Convert history to serializable format
+        history = []
+        for log in reversed(job_execution_history):  # Most recent first
+            history.append({
+                'job_id': log['job_id'],
+                'timestamp': log['timestamp'].isoformat(),
+                'status': log['status'],
+                'duration': log['duration'],
+                'created_count': log['created_count'],
+                'error': log['error']
+            })
+        
+        # Simple pagination
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated_history = history[start:end]
+        
+        return jsonify({
+            'history': paginated_history,
+            'total': len(history),
+            'page': page,
+            'per_page': per_page,
+            'pages': (len(history) + per_page - 1) // per_page
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduler history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/scheduler/stats')
+@login_required
+def get_scheduler_stats():
+    """API endpoint to get scheduler statistics"""
+    try:
+        user = AuthService.get_user_by_id(session['user_id'])
+        if not user or not getattr(user, 'is_super_admin', False):
+            return jsonify({'error': 'Super admin access required'}), 403
+        
+        # Calculate statistics from execution history
+        total_executions = len(job_execution_history)
+        successful_executions = len([log for log in job_execution_history if log['status'] == 'success'])
+        failed_executions = len([log for log in job_execution_history if log['status'] == 'error'])
+        
+        # Calculate average duration and total notifications created
+        durations = [log['duration'] for log in job_execution_history if log['duration']]
+        avg_duration = sum(durations) / len(durations) if durations else 0
+        
+        total_notifications = sum([log['created_count'] or 0 for log in job_execution_history])
+        
+        # Get last execution info
+        last_execution = None
+        if job_execution_history:
+            last_log = job_execution_history[-1]
+            last_execution = {
+                'timestamp': last_log['timestamp'].isoformat(),
+                'status': last_log['status'],
+                'created_count': last_log['created_count']
+            }
+        
+        return jsonify({
+            'total_executions': total_executions,
+            'successful_executions': successful_executions,
+            'failed_executions': failed_executions,
+            'success_rate': (successful_executions / total_executions * 100) if total_executions > 0 else 0,
+            'average_duration': avg_duration,
+            'total_notifications_created': total_notifications,
+            'last_execution': last_execution
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduler stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+   
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

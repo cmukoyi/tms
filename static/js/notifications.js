@@ -167,7 +167,8 @@ class NotificationSystem {
      */
     async markNotificationRead(notificationId) {
         try {
-            await fetch(`/api/notifications/${notificationId}/read`, {
+            // FIXED: Removed /api/ from URL
+            await fetch(`/notifications/${notificationId}/read`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -183,20 +184,27 @@ class NotificationSystem {
     }
 
     /**
-     * Process individual notification with optional note
+     * Process individual notification with comment (FIXED)
      */
     async processNotification(notificationId) {
-        const note = prompt('Add a processing note (optional):');
-        if (note === null) return; // User cancelled
+        const comment = prompt('Add a processing comment (required):');
+        if (comment === null) return; // User cancelled
+        
+        // Validate comment is not empty
+        if (!comment || comment.trim() === '') {
+            this.showToast('Processing comment is required', 'error');
+            return;
+        }
         
         try {
-            const response = await fetch(`/api/notifications/${notificationId}/process`, {
+            // FIXED: Removed /api/ from URL and changed 'note' to 'comment'
+            const response = await fetch(`/notifications/${notificationId}/process`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': this.getCSRFToken()
                 },
-                body: JSON.stringify({ note: note })
+                body: JSON.stringify({ comment: comment.trim() })  // FIXED: 'comment' not 'note'
             });
             
             const data = await response.json();
@@ -205,52 +213,71 @@ class NotificationSystem {
                 this.showToast('Notification processed successfully', 'success');
                 this.loadNotificationCount();
                 this.notificationsLoaded = false; // Force reload
+                
+                // Close dropdown after successful processing
+                const dropdown = document.getElementById('notificationsDropdown');
+                if (dropdown) {
+                    const bsDropdown = bootstrap.Dropdown.getInstance(dropdown);
+                    if (bsDropdown) {
+                        bsDropdown.hide();
+                    }
+                }
             } else {
-                this.showToast('Error processing notification', 'error');
+                this.showToast(`Error: ${data.error}`, 'error');
             }
         } catch (error) {
             console.error('Error processing notification:', error);
-            this.showToast('Error processing notification', 'error');
+            this.showToast('Network error processing notification', 'error');
         }
     }
 
     /**
-     * Process all notifications at once
+     * Process all notifications at once (FIXED)
      */
     async processAllNotifications() {
-        const note = prompt('Add a processing note for all notifications (optional):');
-        if (note === null) return; // User cancelled
+        const comment = prompt('Add a processing comment for all notifications (required):');
+        if (comment === null) return; // User cancelled
+        
+        // Validate comment is not empty
+        if (!comment || comment.trim() === '') {
+            this.showToast('Processing comment is required', 'error');
+            return;
+        }
         
         if (!confirm('Are you sure you want to process all notifications?')) return;
         
         try {
-            const response = await fetch('/api/notifications/process-all', {
+            // FIXED: Removed /api/ from URL and changed 'note' to 'comment'
+            const response = await fetch('/notifications/process-all', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': this.getCSRFToken()
                 },
-                body: JSON.stringify({ note: note })
+                body: JSON.stringify({ comment: comment.trim() })  // FIXED: 'comment' not 'note'
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.showToast(`Processed ${data.processed_count} notifications`, 'success');
+                this.showToast(`Processed ${data.count} notifications`, 'success');
                 this.loadNotificationCount();
                 this.notificationsLoaded = false; // Force reload
                 
                 // Close dropdown
                 const dropdown = document.getElementById('notificationsDropdown');
                 if (dropdown) {
-                    dropdown.click();
+                    const bsDropdown = bootstrap.Dropdown.getInstance(dropdown);
+                    if (bsDropdown) {
+                        bsDropdown.hide();
+                    }
                 }
             } else {
-                this.showToast('Error processing notifications', 'error');
+                this.showToast(`Error: ${data.error}`, 'error');
             }
         } catch (error) {
             console.error('Error processing all notifications:', error);
-            this.showToast('Error processing notifications', 'error');
+            this.showToast('Network error processing notifications', 'error');
         }
     }
 
@@ -279,12 +306,12 @@ class NotificationSystem {
         
         document.body.appendChild(toast);
         
-        // Auto remove after 3 seconds
+        // Auto remove after 4 seconds
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.parentNode.removeChild(toast);
             }
-        }, 3000);
+        }, 4000);
     }
 
     /**
