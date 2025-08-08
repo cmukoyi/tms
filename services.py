@@ -1381,4 +1381,7 @@ class TenderHistoryService:
         ).group_by(TenderHistory.action_type).all()
         
         return {stat.action_type: stat.count for stat in stats}
+
+
+
 # End of services.py file

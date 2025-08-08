@@ -82,3 +82,13 @@ import logging
 import atexit
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger  # Add this line
+
+
+from sqlalchemy import text, func
+import openai  # pip install openai
+import logging
+
+
+from services.chatbot_service import TenderChatbot, get_chatbot_suggestions, get_chatbot_quick_stats
+from services.municipal_tender_service import municipal_tender_service
+from services.tender_scraping_manager import tender_scraping_manager
