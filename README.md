@@ -18,3 +18,6 @@ release: 1.0.2 - added new menu items date: 2025-06-15
   - Integration with External Systems
   - Mobile Access
 - modules features:
+
+
+pip install pandas beautifulsoup4 requests schedule lxml selenium python-dateutil

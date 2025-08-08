@@ -7748,7 +7748,1615 @@ def get_scheduler_stats():
         logger.error(f"Error getting scheduler stats: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-   
+
+
+
+# Initialize chatbot
+chatbot = TenderChatbot(app)
+
+# Your Flask routes
+@app.route('/api/chatbot', methods=['POST'])
+@login_required
+def chatbot_api():
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'Message is required'}), 400
+        
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        if not company_id:
+            return jsonify({'success': False, 'error': 'No company associated'}), 400
+        
+        # Process message using service
+        response = chatbot.process_message(message, company_id, user_id)
+        
+        return jsonify({
+            'success': True,
+            'response': response['response'],
+            'type': response['type'],
+            'data': response.get('data'),
+            'powered_by': response.get('powered_by', 'TenderBot')
+        })
+        
+    except Exception as e:
+        logger.error(f"Chatbot API error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Processing error'}), 500
+
+@app.route('/api/chatbot/suggestions')
+@login_required 
+def chatbot_suggestions():
+    try:
+        company_id = session.get('company_id')
+        suggestions = get_chatbot_suggestions(company_id)
+        return jsonify({'success': True, 'suggestions': suggestions})
+    except Exception as e:
+        return jsonify({'success': False, 'error': 'Could not load suggestions'}), 500
+
+@app.route('/api/chatbot/quick-stats')
+@login_required
+def chatbot_quick_stats():
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            return jsonify({'success': False, 'error': 'No company'}), 400
+        
+        stats = get_chatbot_quick_stats(company_id)
+        return jsonify({'success': True, 'stats': stats})
+    except Exception as e:
+        return jsonify({'success': False, 'error': 'Could not load stats'}), 500
+    
+
+
+# ============================================================================
+# B-BBEE PLATFORM ROUTES
+# ============================================================================
+
+@app.route('/bbee-platform')
+@login_required
+def bbee_platform():
+    """Main B-BBEE platform page"""
+    try:
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        # Get company's current B-BBEE status if exists
+        current_status = get_company_bbee_status(company_id)
+        
+        return render_template('bbee_platform.html', 
+                             current_status=current_status,
+                             company_id=company_id)
+    except Exception as e:
+        logger.error(f"Error loading B-BBEE platform: {str(e)}")
+        flash("Error loading B-BBEE platform", "error")
+        return redirect(url_for('dashboard'))
+
+@app.route('/api/bbee/calculate', methods=['POST'])
+@login_required
+def bbee_calculate():
+    """Calculate and save B-BBEE score"""
+    try:
+        data = request.get_json()
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        # Validate input data
+        required_fields = ['companySize', 'sector', 'blackOwnership', 'blackManagement']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Calculate B-BBEE score (detailed calculation)
+        score_breakdown = calculate_detailed_bbee_score(data)
+        
+        # Save calculation to database
+        calculation_id = save_bbee_calculation(company_id, user_id, data, score_breakdown)
+        
+        return jsonify({
+            'success': True,
+            'calculation_id': calculation_id,
+            'score': score_breakdown['total_score'],
+            'level': score_breakdown['level'],
+            'breakdown': score_breakdown['breakdown'],
+            'suggestions': score_breakdown['suggestions']
+        })
+        
+    except Exception as e:
+        logger.error(f"B-BBEE calculation error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Calculation failed. Please try again.'
+        }), 500
+
+@app.route('/api/bbee/partners')
+@login_required
+def bbee_partners():
+    """Get potential B-BBEE partners"""
+    try:
+        company_id = session.get('company_id')
+        
+        # Get company profile for matching
+        company_profile = get_company_profile(company_id)
+        
+        # Find matching partners
+        partners = find_bbee_partners(company_profile)
+        
+        return jsonify({
+            'success': True,
+            'partners': partners
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching partners: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to load partners'
+        }), 500
+
+@app.route('/api/bbee/connect-partner', methods=['POST'])
+@login_required
+def bbee_connect_partner():
+    """Send partnership connection request"""
+    try:
+        data = request.get_json()
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        partner_id = data.get('partnerId')
+        message = data.get('message', '')
+        
+        if not partner_id:
+            return jsonify({
+                'success': False,
+                'error': 'Partner ID is required'
+            }), 400
+        
+        # Create partnership request
+        request_id = create_partnership_request(company_id, partner_id, user_id, message)
+        
+        # Send notification email to partner
+        send_partnership_notification(partner_id, company_id, message)
+        
+        return jsonify({
+            'success': True,
+            'request_id': request_id,
+            'message': 'Partnership request sent successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error connecting partner: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to send partnership request'
+        }), 500
+
+@app.route('/api/bbee/integrations')
+@login_required
+def bbee_integrations():
+    """Get government system integration status"""
+    try:
+        company_id = session.get('company_id')
+        
+        integrations = {
+            'sars': check_sars_integration(company_id),
+            'cidb': check_cidb_integration(company_id),
+            'csd': check_csd_integration(company_id),
+            'etender': check_etender_integration(company_id)
+        }
+        
+        return jsonify({
+            'success': True,
+            'integrations': integrations
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking integrations: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to check integration status'
+        }), 500
+
+@app.route('/api/bbee/transformation-progress')
+@login_required
+def bbee_transformation_progress():
+    """Get transformation tracking data"""
+    try:
+        company_id = session.get('company_id')
+        
+        progress = {
+            'skills_development': get_skills_development_progress(company_id),
+            'enterprise_development': get_enterprise_development_progress(company_id),
+            'supplier_development': get_supplier_development_progress(company_id),
+            'employment_equity': get_employment_equity_progress(company_id)
+        }
+        
+        return jsonify({
+            'success': True,
+            'progress': progress
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching transformation progress: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to load transformation progress'
+        }), 500
+
+@app.route('/api/analytics/track', methods=['POST'])
+@login_required
+def track_analytics():
+    """Track user analytics events"""
+    try:
+        data = request.get_json()
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        event_name = data.get('event')
+        event_data = data.get('data', {})
+        
+        # Save analytics event
+        save_analytics_event(user_id, company_id, event_name, event_data)
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Analytics tracking error: {str(e)}")
+        return jsonify({'success': False}), 500
+
+# ============================================================================
+# B-BBEE HELPER FUNCTIONS
+# ============================================================================
+
+def calculate_detailed_bbee_score(data):
+    """Calculate detailed B-BBEE score with breakdown"""
+    
+    breakdown = {}
+    total_score = 0
+    
+    # Ownership (25 points)
+    black_ownership = int(data.get('blackOwnership', 0))
+    if black_ownership >= 51:
+        ownership_score = 25
+    elif black_ownership >= 25:
+        ownership_score = 20
+    else:
+        ownership_score = round(black_ownership * 0.49, 1)
+    
+    breakdown['ownership'] = {
+        'score': ownership_score,
+        'max': 25,
+        'percentage': black_ownership
+    }
+    total_score += ownership_score
+    
+    # Management Control (15 points)
+    black_management = int(data.get('blackManagement', 0))
+    if black_management >= 50:
+        management_score = 15
+    elif black_management >= 25:
+        management_score = 12
+    else:
+        management_score = round(black_management * 0.3, 1)
+    
+    breakdown['management'] = {
+        'score': management_score,
+        'max': 15,
+        'percentage': black_management
+    }
+    total_score += management_score
+    
+    # Black Women Ownership (Bonus - 5 points)
+    black_women_ownership = int(data.get('blackWomenOwnership', 0))
+    if black_women_ownership >= 25:
+        women_bonus = 5
+    elif black_women_ownership >= 10:
+        women_bonus = 3
+    else:
+        women_bonus = round(black_women_ownership * 0.2, 1)
+    
+    breakdown['women_ownership'] = {
+        'score': women_bonus,
+        'max': 5,
+        'percentage': black_women_ownership
+    }
+    total_score += women_bonus
+    
+    # Simulated other elements (in real app, these would be separate inputs)
+    # Skills Development (20 points)
+    skills_score = 15  # Simulated
+    breakdown['skills_development'] = {
+        'score': skills_score,
+        'max': 20,
+        'note': 'Based on previous submissions'
+    }
+    total_score += skills_score
+    
+    # Enterprise Development (15 points)
+    enterprise_score = 12  # Simulated
+    breakdown['enterprise_development'] = {
+        'score': enterprise_score,
+        'max': 15,
+        'note': 'Based on previous submissions'
+    }
+    total_score += enterprise_score
+    
+    # Supplier Development (20 points)
+    supplier_score = 16  # Simulated
+    breakdown['supplier_development'] = {
+        'score': supplier_score,
+        'max': 20,
+        'note': 'Based on previous submissions'
+    }
+    total_score += supplier_score
+    
+    # Determine B-BBEE Level
+    if total_score >= 100:
+        level = {"level": 1, "text": "Level 1"}
+    elif total_score >= 95:
+        level = {"level": 2, "text": "Level 2"}
+    elif total_score >= 90:
+        level = {"level": 3, "text": "Level 3"}
+    elif total_score >= 80:
+        level = {"level": 4, "text": "Level 4"}
+    elif total_score >= 75:
+        level = {"level": 5, "text": "Level 5"}
+    elif total_score >= 70:
+        level = {"level": 6, "text": "Level 6"}
+    elif total_score >= 55:
+        level = {"level": 7, "text": "Level 7"}
+    else:
+        level = {"level": 8, "text": "Level 8"}
+    
+    # Generate suggestions
+    suggestions = []
+    if black_ownership < 51:
+        suggestions.append("Increase black ownership to 51% to maximize ownership points")
+    if black_management < 50:
+        suggestions.append("Improve black representation in management positions")
+    if black_women_ownership < 25:
+        suggestions.append("Consider increasing black women ownership for bonus points")
+    if total_score < 100:
+        suggestions.append("Focus on skills development and enterprise development programs")
+    
+    return {
+        'total_score': round(total_score, 1),
+        'level': level,
+        'breakdown': breakdown,
+        'suggestions': suggestions
+    }
+
+def save_bbee_calculation(company_id, user_id, data, score_breakdown):
+    """Save B-BBEE calculation to database"""
+    try:
+        result = db.session.execute(text("""
+            INSERT INTO bbee_calculations 
+            (company_id, user_id, company_size, sector, turnover, 
+             black_ownership, black_management, black_women_ownership,
+             total_score, bbee_level, breakdown_data, created_at)
+            VALUES 
+            (:company_id, :user_id, :company_size, :sector, :turnover,
+             :black_ownership, :black_management, :black_women_ownership,
+             :total_score, :bbee_level, :breakdown_data, NOW())
+        """), {
+            'company_id': company_id,
+            'user_id': user_id,
+            'company_size': data.get('companySize'),
+            'sector': data.get('sector'),
+            'turnover': data.get('turnover', 0),
+            'black_ownership': data.get('blackOwnership', 0),
+            'black_management': data.get('blackManagement', 0),
+            'black_women_ownership': data.get('blackWomenOwnership', 0),
+            'total_score': score_breakdown['total_score'],
+            'bbee_level': score_breakdown['level']['level'],
+            'breakdown_data': str(score_breakdown['breakdown'])
+        })
+        
+        db.session.commit()
+        return result.lastrowid
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error saving B-BBEE calculation: {str(e)}")
+        raise
+
+def get_company_bbee_status(company_id):
+    """Get company's current B-BBEE status"""
+    try:
+        result = db.session.execute(text("""
+            SELECT total_score, bbee_level, created_at
+            FROM bbee_calculations 
+            WHERE company_id = :company_id 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """), {'company_id': company_id})
+        
+        row = result.fetchone()
+        if row:
+            return {
+                'score': row[0],
+                'level': row[1],
+                'last_updated': row[2]
+            }
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting B-BBEE status: {str(e)}")
+        return None
+
+def find_bbee_partners(company_profile):
+    """Find potential B-BBEE partners based on company profile"""
+    try:
+        # In real implementation, this would query a partners database
+        # For now, return mock data with realistic South African companies
+        
+        mock_partners = [
+            {
+                'id': 1,
+                'name': 'Thabo Construction (Pty) Ltd',
+                'bbee_level': 1,
+                'specialties': ['Civil Engineering', 'Infrastructure'],
+                'location': 'Gauteng',
+                'capacity': 'R500M+ projects',
+                'match_percentage': 95,
+                'contact_email': 'info@thaboconstruction.co.za',
+                'verified': True,
+                'certifications': ['CIDB Grade 9', 'ISO 9001'],
+                'past_projects': 15,
+                'success_rate': '92%'
+            },
+            {
+                'id': 2,
+                'name': 'Nomsa Tech Solutions',
+                'bbee_level': 2,
+                'specialties': ['IT Services', 'Software Development'],
+                'location': 'Western Cape',
+                'capacity': 'R100M+ projects',
+                'match_percentage': 88,
+                'contact_email': 'hello@nomsatech.co.za',
+                'verified': True,
+                'certifications': ['ISO 27001', 'ITIL Certified'],
+                'past_projects': 23,
+                'success_rate': '89%'
+            },
+            {
+                'id': 3,
+                'name': 'Ubuntu Consulting Group',
+                'bbee_level': 1,
+                'specialties': ['Management Consulting', 'Strategy'],
+                'location': 'KwaZulu-Natal',
+                'capacity': 'R50M+ projects',
+                'match_percentage': 82,
+                'contact_email': 'contact@ubuntu-consulting.co.za',
+                'verified': True,
+                'certifications': ['PMI Certified', 'McKinsey Alumni'],
+                'past_projects': 31,
+                'success_rate': '94%'
+            },
+            {
+                'id': 4,
+                'name': 'Amandla Engineering',
+                'bbee_level': 3,
+                'specialties': ['Mechanical Engineering', 'Mining'],
+                'location': 'Limpopo',
+                'capacity': 'R200M+ projects',
+                'match_percentage': 76,
+                'contact_email': 'info@amandlaeng.co.za',
+                'verified': False,
+                'certifications': ['ECSA Registered', 'Mine Safety Cert'],
+                'past_projects': 12,
+                'success_rate': '85%'
+            },
+            {
+                'id': 5,
+                'name': 'Sizani Logistics Solutions',
+                'bbee_level': 2,
+                'specialties': ['Logistics', 'Supply Chain'],
+                'location': 'Eastern Cape',
+                'capacity': 'R75M+ projects',
+                'match_percentage': 74,
+                'contact_email': 'ops@sizanilogistics.co.za',
+                'verified': True,
+                'certifications': ['SQAS Certified', 'CILTSA Member'],
+                'past_projects': 18,
+                'success_rate': '91%'
+            }
+        ]
+        
+        return mock_partners
+        
+    except Exception as e:
+        logger.error(f"Error finding partners: {str(e)}")
+        return []
+
+def get_company_profile(company_id):
+    """Get company profile for partner matching"""
+    try:
+        result = db.session.execute(text("""
+            SELECT c.name, c.industry, c.location, c.annual_turnover,
+                   bc.bbee_level, bc.sector
+            FROM companies c
+            LEFT JOIN bbee_calculations bc ON c.id = bc.company_id
+            WHERE c.id = :company_id
+            ORDER BY bc.created_at DESC
+            LIMIT 1
+        """), {'company_id': company_id})
+        
+        row = result.fetchone()
+        if row:
+            return {
+                'name': row[0],
+                'industry': row[1],
+                'location': row[2],
+                'turnover': row[3],
+                'bbee_level': row[4],
+                'sector': row[5]
+            }
+        return {}
+        
+    except Exception as e:
+        logger.error(f"Error getting company profile: {str(e)}")
+        return {}
+
+def create_partnership_request(company_id, partner_id, user_id, message):
+    """Create a partnership request"""
+    try:
+        result = db.session.execute(text("""
+            INSERT INTO partnership_requests 
+            (company_id, partner_id, user_id, message, status, created_at)
+            VALUES 
+            (:company_id, :partner_id, :user_id, :message, 'pending', NOW())
+        """), {
+            'company_id': company_id,
+            'partner_id': partner_id,
+            'user_id': user_id,
+            'message': message
+        })
+        
+        db.session.commit()
+        return result.lastrowid
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating partnership request: {str(e)}")
+        raise
+
+def send_partnership_notification(partner_id, company_id, message):
+    """Send email notification for partnership request"""
+    try:
+        # Get partner and company details
+        partner_email = get_partner_email(partner_id)
+        company_name = get_company_name(company_id)
+        
+        if partner_email and company_name:
+            # In real implementation, send actual email
+            logger.info(f"Partnership notification sent to {partner_email} from {company_name}")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error sending partnership notification: {str(e)}")
+        return False
+
+def get_partner_email(partner_id):
+    """Get partner email (mock implementation)"""
+    partner_emails = {
+        1: 'info@thaboconstruction.co.za',
+        2: 'hello@nomsatech.co.za',
+        3: 'contact@ubuntu-consulting.co.za',
+        4: 'info@amandlaeng.co.za',
+        5: 'ops@sizanilogistics.co.za'
+    }
+    return partner_emails.get(partner_id)
+
+def get_company_name(company_id):
+    """Get company name"""
+    try:
+        result = db.session.execute(text("""
+            SELECT name FROM companies WHERE id = :company_id
+        """), {'company_id': company_id})
+        
+        row = result.fetchone()
+        return row[0] if row else None
+        
+    except Exception as e:
+        logger.error(f"Error getting company name: {str(e)}")
+        return None
+
+def check_sars_integration(company_id):
+    """Check SARS tax compliance integration status"""
+    try:
+        # Mock implementation - in real app, check actual SARS API
+        result = db.session.execute(text("""
+            SELECT sars_tax_number, sars_compliance_status, sars_last_check
+            FROM company_integrations 
+            WHERE company_id = :company_id
+        """), {'company_id': company_id})
+        
+        row = result.fetchone()
+        if row:
+            return {
+                'status': 'connected',
+                'tax_number': row[0],
+                'compliance_status': row[1],
+                'last_check': row[2]
+            }
+        
+        return {'status': 'not_connected'}
+        
+    except Exception as e:
+        logger.error(f"Error checking SARS integration: {str(e)}")
+        return {'status': 'error'}
+
+def check_cidb_integration(company_id):
+    """Check CIDB registration integration status"""
+    try:
+        # Mock implementation
+        return {
+            'status': 'connected',
+            'registration_number': 'CIDB123456789',
+            'grade': 'Grade 9',
+            'valid_until': '2024-12-31'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking CIDB integration: {str(e)}")
+        return {'status': 'error'}
+
+def check_csd_integration(company_id):
+    """Check CSD registration integration status"""
+    try:
+        # Mock implementation
+        return {
+            'status': 'pending',
+            'supplier_number': None,
+            'application_date': '2024-01-15'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking CSD integration: {str(e)}")
+        return {'status': 'error'}
+
+def check_etender_integration(company_id):
+    """Check eTender Portal integration status"""
+    try:
+        # Mock implementation
+        return {
+            'status': 'not_connected',
+            'last_sync': None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking eTender integration: {str(e)}")
+        return {'status': 'error'}
+
+def get_skills_development_progress(company_id):
+    """Get skills development progress"""
+    try:
+        # Mock implementation - in real app, calculate from actual data
+        return {
+            'percentage': 75,
+            'amount_invested': 2400000,  # R2.4M
+            'target_percentage': 1,  # 1% of payroll
+            'employees_trained': 45,
+            'programs_completed': 12
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting skills development progress: {str(e)}")
+        return {}
+
+def get_enterprise_development_progress(company_id):
+    """Get enterprise development progress"""
+    try:
+        # Mock implementation
+        return {
+            'percentage': 60,
+            'amount_invested': 1800000,  # R1.8M
+            'target_percentage': 1,  # 1% of NPAT
+            'enterprises_supported': 8,
+            'jobs_created': 23
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting enterprise development progress: {str(e)}")
+        return {}
+
+def get_supplier_development_progress(company_id):
+    """Get supplier development progress"""
+    try:
+        # Mock implementation
+        return {
+            'percentage': 45,
+            'suppliers_supported': 15,
+            'procurement_spend': 5600000,  # R5.6M
+            'target_percentage': 2,  # 2% of procurement
+            'mentorship_programs': 3
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting supplier development progress: {str(e)}")
+        return {}
+
+def get_employment_equity_progress(company_id):
+    """Get employment equity progress"""
+    try:
+        # Mock implementation
+        return {
+            'percentage': 85,
+            'black_employees': 127,
+            'total_employees': 150,
+            'black_management': 18,
+            'total_management': 25,
+            'target_achieved': True
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting employment equity progress: {str(e)}")
+        return {}
+
+def save_analytics_event(user_id, company_id, event_name, event_data):
+    """Save analytics event to database"""
+    try:
+        db.session.execute(text("""
+            INSERT INTO analytics_events 
+            (user_id, company_id, event_name, event_data, created_at)
+            VALUES 
+            (:user_id, :company_id, :event_name, :event_data, NOW())
+        """), {
+            'user_id': user_id,
+            'company_id': company_id,
+            'event_name': event_name,
+            'event_data': str(event_data)
+        })
+        
+        db.session.commit()
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error saving analytics event: {str(e)}")
+
+
+
+# ============================================================================
+# MUNICIPAL TENDER OPPORTUNITY ENGINE ROUTES
+# ============================================================================
+
+
+@app.route('/api/municipal-tenders')
+@login_required
+def api_municipal_tenders():
+    """Get municipal tenders with filtering"""
+    try:
+        company_id = session.get('company_id')
+        
+        # Get query parameters
+        search = request.args.get('search', '')
+        province = request.args.get('province', '')
+        category = request.args.get('category', '')
+        value_range = request.args.get('value_range', '')
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 12))
+        
+        # Get filtered tenders
+        tenders = get_municipal_tenders(
+            company_id=company_id,
+            search=search,
+            province=province,
+            category=category,
+            value_range=value_range,
+            page=page,
+            limit=limit
+        )
+        
+        return jsonify({
+            'success': True,
+            'tenders': tenders,
+            'total_count': len(tenders),  # In real app, get total count separately
+            'page': page,
+            'limit': limit
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching tenders: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch tenders'
+        }), 500
+
+@app.route('/api/municipal-tenders/express-interest', methods=['POST'])
+@login_required
+def express_tender_interest():
+    """Express interest in a municipal tender"""
+    try:
+        data = request.get_json()
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        tender_id = data.get('tender_id')
+        contact_person = data.get('contact_person')
+        contact_email = data.get('contact_email')
+        contact_phone = data.get('contact_phone')
+        message = data.get('message', '')
+        
+        # Validate required fields
+        if not all([tender_id, contact_person, contact_email, contact_phone]):
+            return jsonify({
+                'success': False,
+                'error': 'All fields are required'
+            }), 400
+        
+        # Save interest to database
+        interest_id = save_tender_interest(
+            company_id=company_id,
+            user_id=user_id,
+            tender_id=tender_id,
+            contact_person=contact_person,
+            contact_email=contact_email,
+            contact_phone=contact_phone,
+            message=message
+        )
+        
+        # Send notification email (optional)
+        send_tender_interest_notification(interest_id)
+        
+        return jsonify({
+            'success': True,
+            'interest_id': interest_id,
+            'message': 'Interest submitted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error expressing tender interest: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to submit interest'
+        }), 500
+
+@app.route('/api/municipal-tenders/stats')
+@login_required
+def api_tender_stats():
+    """Get real-time tender statistics"""
+    try:
+        company_id = session.get('company_id')
+        stats = get_municipal_tender_stats(company_id)
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching tender stats: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch statistics'
+        }), 500
+
+@app.route('/api/municipal-tenders/<int:tender_id>')
+@login_required
+def api_tender_details(tender_id):
+    """Get detailed information about a specific tender"""
+    try:
+        tender = get_tender_details(tender_id)
+        
+        if not tender:
+            return jsonify({
+                'success': False,
+                'error': 'Tender not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'tender': tender
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching tender details: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch tender details'
+        }), 500
+
+# ============================================================================
+# MUNICIPAL TENDER HELPER FUNCTIONS
+# ============================================================================
+
+def get_municipal_tender_stats(company_id):
+    """Get real-time municipal tender statistics"""
+    try:
+        # In real implementation, query actual tender database
+        # For now, return mock data with some randomization
+        
+        base_stats = {
+            'active_tenders': 1247,
+            'new_today': 23,
+            'total_value': 847,  # in millions
+            'matched_tenders': 156,
+            'municipalities_monitored': 257
+        }
+        
+        # Add some randomization to simulate real-time updates
+        stats = {
+            'active_tenders': base_stats['active_tenders'] + random.randint(-50, 50),
+            'new_today': base_stats['new_today'] + random.randint(-5, 10),
+            'total_value': base_stats['total_value'] + random.randint(-100, 200),
+            'matched_tenders': base_stats['matched_tenders'] + random.randint(-20, 30),
+            'municipalities_monitored': base_stats['municipalities_monitored']
+        }
+        
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error getting tender stats: {e}")
+        return {
+            'active_tenders': 0,
+            'new_today': 0,
+            'total_value': 0,
+            'matched_tenders': 0,
+            'municipalities_monitored': 257
+        }
+
+def get_ai_tender_insights(company_id):
+    """Get AI-powered tender insights"""
+    try:
+        # In real implementation, this would use ML models
+        # For now, return dynamic insights based on company profile
+        
+        insights = [
+            {
+                'icon': '💡',
+                'title': 'Smart Opportunity',
+                'description': 'City of Cape Town has increased IT spending by 340% this quarter - 5 matching tenders available'
+            },
+            {
+                'icon': '📈',
+                'title': 'Market Trend',
+                'description': 'Rural municipalities are prioritizing infrastructure projects - R2.3B in opportunities'
+            },
+            {
+                'icon': '⚡',
+                'title': 'Quick Win',
+                'description': '12 municipalities have urgent cleaning services tenders with simplified requirements'
+            }
+        ]
+        
+        return insights
+        
+    except Exception as e:
+        logger.error(f"Error getting AI insights: {e}")
+        return []
+
+def get_urgent_tender_alerts(company_id):
+    """Get urgent tender alerts"""
+    try:
+        # Check for tenders closing within 48 hours
+        urgent_count = random.randint(1, 5)  # Mock data
+        
+        return {
+            'count': urgent_count,
+            'message': f'{urgent_count} high-value tenders closing within 48 hours match your company profile!'
+        } if urgent_count > 0 else None
+        
+    except Exception as e:
+        logger.error(f"Error getting urgent alerts: {e}")
+        return None
+
+def get_company_tender_profile(company_id):
+    """Get company profile for tender matching"""
+    try:
+        result = db.session.execute(text("""
+            SELECT c.name, c.industry, c.location, c.annual_turnover,
+                   cp.specialties, cp.certifications, cp.cidb_grade
+            FROM companies c
+            LEFT JOIN company_profiles cp ON c.id = cp.company_id
+            WHERE c.id = :company_id
+        """), {'company_id': company_id})
+        
+        row = result.fetchone()
+        if row:
+            return {
+                'name': row[0],
+                'industry': row[1],
+                'location': row[2],
+                'turnover': row[3],
+                'specialties': row[4].split(',') if row[4] else [],
+                'certifications': row[5].split(',') if row[5] else [],
+                'cidb_grade': row[6]
+            }
+        return {}
+        
+    except Exception as e:
+        logger.error(f"Error getting company profile: {e}")
+        return {}
+
+def get_municipal_tenders(company_id, search='', province='', category='', value_range='', page=1, limit=12):
+    """Get municipal tenders with filtering"""
+    try:
+        # In real implementation, this would query actual municipal tender database
+        # For now, return mock data
+        
+        mock_tenders = [
+            {
+                'id': 1,
+                'municipality': 'City of Cape Town',
+                'province': 'western-cape',
+                'title': 'Supply and Installation of Municipal WiFi Infrastructure',
+                'category': 'it-services',
+                'description': 'Installation of high-speed WiFi networks across 15 municipal buildings and public spaces including Civic Centre, libraries, and community halls.',
+                'value': 45000000,
+                'valueDisplay': 'R45,000,000',
+                'closingDate': '2024-07-15',
+                'daysLeft': 12,
+                'status': 'new',
+                'requirements': ['CIDB Grade 7+', 'ICT Experience', 'B-BBEE Level 1-4'],
+                'matchScore': 94,
+                'tenderNumber': 'CT/2024/IT/045',
+                'publishedDate': '2024-06-15',
+                'contactPerson': 'Ms. Sarah Johnson',
+                'contactEmail': 'tenders@capetown.gov.za',
+                'estimatedDuration': '12 months'
+            },
+            {
+                'id': 2,
+                'municipality': 'Ekurhuleni Metropolitan Municipality',
+                'province': 'gauteng',
+                'title': 'Construction of Community Sports Complex',
+                'category': 'construction',
+                'description': 'Design and construction of multi-purpose sports complex including soccer field, netball courts, swimming pool, and community centre in Germiston.',
+                'value': 125000000,
+                'valueDisplay': 'R125,000,000',
+                'closingDate': '2024-07-08',
+                'daysLeft': 5,
+                'status': 'closing',
+                'requirements': ['CIDB Grade 9', 'Construction Experience', 'Local Content 70%'],
+                'matchScore': 87,
+                'tenderNumber': 'EKU/2024/CON/078',
+                'publishedDate': '2024-05-20',
+                'contactPerson': 'Mr. David Mthembu',
+                'contactEmail': 'procurement@ekurhuleni.gov.za',
+                'estimatedDuration': '18 months'
+            },
+            {
+                'id': 3,
+                'municipality': 'Sol Plaatje Local Municipality',
+                'province': 'northern-cape',
+                'title': 'Waste Management and Recycling Services',
+                'category': 'cleaning',
+                'description': 'Comprehensive waste collection, sorting, and recycling services for residential and commercial areas.',
+                'value': 18500000,
+                'valueDisplay': 'R18,500,000',
+                'closingDate': '2024-07-03',
+                'daysLeft': 1,
+                'status': 'urgent',
+                'requirements': ['Waste Management License', 'Fleet of 25+ Vehicles', 'B-BBEE Level 1-3'],
+                'matchScore': 76,
+                'tenderNumber': 'SP/2024/WM/023',
+                'publishedDate': '2024-06-01',
+                'contactPerson': 'Ms. Nomsa Khumalo',
+                'contactEmail': 'tenders@solplaatje.org.za',
+                'estimatedDuration': '36 months'
+            },
+            {
+                'id': 4,
+                'municipality': 'eThekwini Metropolitan Municipality',
+                'province': 'kwazulu-natal',
+                'title': 'Municipal Financial Management System Upgrade',
+                'category': 'it-services',
+                'description': 'Implementation and customization of integrated financial management system.',
+                'value': 67200000,
+                'valueDisplay': 'R67,200,000',
+                'closingDate': '2024-07-22',
+                'daysLeft': 19,
+                'status': 'new',
+                'requirements': ['Software Development', 'Municipal Finance Experience', '24/7 Support'],
+                'matchScore': 91,
+                'tenderNumber': 'ETH/2024/IT/156',
+                'publishedDate': '2024-06-18',
+                'contactPerson': 'Mr. Sipho Ndlovu',
+                'contactEmail': 'itsupport@durban.gov.za',
+                'estimatedDuration': '24 months'
+            },
+            {
+                'id': 5,
+                'municipality': 'Stellenbosch Local Municipality',
+                'province': 'western-cape',
+                'title': 'Strategic Development Plan Consulting Services',
+                'category': 'consulting',
+                'description': 'Development of 5-year Integrated Development Plan including economic development strategy.',
+                'value': 8750000,
+                'valueDisplay': 'R8,750,000',
+                'closingDate': '2024-07-18',
+                'daysLeft': 15,
+                'status': 'new',
+                'requirements': ['Urban Planning Qualification', 'IDP Experience', 'Community Engagement'],
+                'matchScore': 83,
+                'tenderNumber': 'STELL/2024/CON/012',
+                'publishedDate': '2024-06-10',
+                'contactPerson': 'Dr. Maria van der Merwe',
+                'contactEmail': 'planning@stellenbosch.gov.za',
+                'estimatedDuration': '12 months'
+            },
+            {
+                'id': 6,
+                'municipality': 'Buffalo City Metropolitan Municipality',
+                'province': 'eastern-cape',
+                'title': 'LED Street Lighting Upgrade Project',
+                'category': 'construction',
+                'description': 'Replacement of conventional street lighting with energy-efficient LED systems.',
+                'value': 95000000,
+                'valueDisplay': 'R95,000,000',
+                'closingDate': '2024-07-25',
+                'daysLeft': 22,
+                'status': 'new',
+                'requirements': ['Electrical Installation License', 'LED Experience', '5-Year Warranty'],
+                'matchScore': 89,
+                'tenderNumber': 'BC/2024/ELEC/089',
+                'publishedDate': '2024-06-20',
+                'contactPerson': 'Eng. Thabo Molefe',
+                'contactEmail': 'infrastructure@buffalocity.gov.za',
+                'estimatedDuration': '15 months'
+            }
+        ]
+        
+        # Apply filters
+        filtered_tenders = mock_tenders
+        
+        if search:
+            filtered_tenders = [t for t in filtered_tenders if 
+                search.lower() in t['title'].lower() or 
+                search.lower() in t['municipality'].lower() or
+                search.lower() in t['description'].lower()]
+        
+        if province:
+            filtered_tenders = [t for t in filtered_tenders if t['province'] == province]
+        
+        if category:
+            filtered_tenders = [t for t in filtered_tenders if t['category'] == category]
+        
+        if value_range:
+            filtered_tenders = [t for t in filtered_tenders if filter_by_value_range(t['value'], value_range)]
+        
+        return filtered_tenders
+        
+    except Exception as e:
+        logger.error(f"Error getting municipal tenders: {e}")
+        return []
+
+def filter_by_value_range(value, value_range):
+    """Filter tender by value range"""
+    if value_range == '0-1m':
+        return value <= 1000000
+    elif value_range == '1m-10m':
+        return 1000000 < value <= 10000000
+    elif value_range == '10m-50m':
+        return 10000000 < value <= 50000000
+    elif value_range == '50m+':
+        return value > 50000000
+    return True
+
+def save_tender_interest(company_id, user_id, tender_id, contact_person, contact_email, contact_phone, message):
+    """Save tender interest to database"""
+    try:
+        result = db.session.execute(text("""
+            INSERT INTO tender_interests 
+            (company_id, user_id, tender_id, contact_person, contact_email, contact_phone, message, created_at)
+            VALUES 
+            (:company_id, :user_id, :tender_id, :contact_person, :contact_email, :contact_phone, :message, NOW())
+        """), {
+            'company_id': company_id,
+            'user_id': user_id,
+            'tender_id': tender_id,
+            'contact_person': contact_person,
+            'contact_email': contact_email,
+            'contact_phone': contact_phone,
+            'message': message
+        })
+        
+        db.session.commit()
+        return result.lastrowid
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error saving tender interest: {e}")
+        raise
+
+def send_tender_interest_notification(interest_id):
+    """Send notification email for tender interest"""
+    try:
+        # In real implementation, send email to municipality
+        logger.info(f"Tender interest notification sent for interest ID: {interest_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error sending tender interest notification: {e}")
+        return False
+
+def get_tender_details(tender_id):
+    """Get detailed information about a specific tender"""
+    try:
+        # In real implementation, query tender database
+        # For now, return mock data
+        
+        mock_tender = {
+            'id': tender_id,
+            'municipality': 'City of Cape Town',
+            'title': 'Supply and Installation of Municipal WiFi Infrastructure',
+            'description': 'Full description of the tender requirements...',
+            'value': 45000000,
+            'valueDisplay': 'R45,000,000',
+            'closingDate': '2024-07-15',
+            'requirements': ['CIDB Grade 7+', 'ICT Experience', 'B-BBEE Level 1-4'],
+            'documents': [
+                {'name': 'Tender Document.pdf', 'size': '2.3 MB'},
+                {'name': 'Technical Specifications.pdf', 'size': '1.8 MB'},
+                {'name': 'Pricing Schedule.xlsx', 'size': '0.5 MB'}
+            ],
+            'contactPerson': 'Ms. Sarah Johnson',
+            'contactEmail': 'tenders@capetown.gov.za',
+            'contactPhone': '+27 21 400 1234'
+        }
+        
+        return mock_tender
+        
+    except Exception as e:
+        logger.error(f"Error getting tender details: {e}")
+        return None
+
+def calculate_potential_revenue(company_id):
+    """Calculate potential revenue from matching tenders"""
+    try:
+        # In real implementation, calculate based on company profile and available tenders
+        # For now, return mock calculation
+        
+        base_revenue = 2300000000  # R2.3B
+        company_factor = random.uniform(0.8, 1.5)  # Company-specific multiplier
+        
+        potential = int(base_revenue * company_factor)
+        
+        # Format as display string (e.g., "2.8B")
+        if potential >= 1000000000:
+            return f"{potential / 1000000000:.1f}B"
+        elif potential >= 1000000:
+            return f"{potential / 1000000:.0f}M"
+        else:
+            return f"{potential / 1000:.0f}K"
+        
+    except Exception as e:
+        logger.error(f"Error calculating potential revenue: {e}")
+        return "2.3B"
+
+# ============================================================================
+# DATABASE SCHEMA FOR MUNICIPAL TENDER ENGINE
+# ============================================================================
+
+def create_municipal_tender_tables():
+    """Create tables for Municipal Tender Engine"""
+    try:
+        # Municipal Tenders table
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS municipal_tenders (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                municipality VARCHAR(255) NOT NULL,
+                province VARCHAR(100) NOT NULL,
+                title VARCHAR(500) NOT NULL,
+                description TEXT,
+                category VARCHAR(100),
+                value BIGINT,
+                tender_number VARCHAR(100) UNIQUE,
+                published_date DATE,
+                closing_date DATETIME,
+                status ENUM('new', 'closing', 'urgent', 'closed') DEFAULT 'new',
+                requirements JSON,
+                contact_person VARCHAR(255),
+                contact_email VARCHAR(255),
+                contact_phone VARCHAR(50),
+                estimated_duration VARCHAR(100),
+                documents JSON,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_municipality (municipality),
+                INDEX idx_province (province),
+                INDEX idx_category (category),
+                INDEX idx_closing_date (closing_date),
+                INDEX idx_status (status),
+                INDEX idx_value (value)
+            )
+        """))
+        
+        # Tender Interests table
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS tender_interests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                company_id INT NOT NULL,
+                user_id INT NOT NULL,
+                tender_id INT NOT NULL,
+                contact_person VARCHAR(255) NOT NULL,
+                contact_email VARCHAR(255) NOT NULL,
+                contact_phone VARCHAR(50) NOT NULL,
+                message TEXT,
+                status ENUM('submitted', 'acknowledged', 'responded') DEFAULT 'submitted',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_company_id (company_id),
+                INDEX idx_tender_id (tender_id),
+                INDEX idx_status (status),
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """))
+        
+        # Company Tender Profile table
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS company_tender_profiles (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                company_id INT NOT NULL UNIQUE,
+                specialties TEXT,
+                certifications TEXT,
+                cidb_grade VARCHAR(20),
+                preferred_provinces JSON,
+                preferred_categories JSON,
+                min_tender_value BIGINT DEFAULT 0,
+                max_tender_value BIGINT DEFAULT 999999999999,
+                notifications_enabled BOOLEAN DEFAULT TRUE,
+                auto_match_threshold INT DEFAULT 80,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+            )
+        """))
+        
+        # Tender Alerts table
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS tender_alerts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                company_id INT NOT NULL,
+                tender_id INT NOT NULL,
+                alert_type ENUM('match', 'closing', 'urgent', 'new') NOT NULL,
+                match_score INT,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status ENUM('sent', 'read', 'dismissed') DEFAULT 'sent',
+                INDEX idx_company_id (company_id),
+                INDEX idx_tender_id (tender_id),
+                INDEX idx_alert_type (alert_type),
+                INDEX idx_status (status),
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+            )
+        """))
+        
+        db.session.commit()
+        logger.info("Municipal Tender Engine tables created successfully")
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating Municipal Tender Engine tables: {e}")
+        raise
+
+# tender discovery and scraping manager
+
+@app.route('/municipal-tender-discovery')
+@login_required
+def municipal_tender_discovery():
+    """Municipal Tender Discovery Engine - Simple Test"""
+    try:
+        company_id = session.get('company_id')
+        
+        # Get data from service
+        stats = municipal_tender_service.get_municipal_tender_stats(company_id)
+        tenders = municipal_tender_service.get_municipal_tenders(company_id, limit=6)
+        
+        
+        html = f"""
+      
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Municipal Tender Discovery</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }}
+                .container {{ max-width: 1200px; margin: 0 auto; }}
+                .header {{ background: #1a237e; color: white; padding: 30px; border-radius: 10px; text-align: center; }}
+                .stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }}
+                .stat {{ background: white; padding: 20px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+                .tenders {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }}
+                .tender {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🏛️ Municipal Tender Discovery Engine</h1>
+                    <p>Real-time municipal tenders across South Africa</p>
+                </div>
+                
+                <div class="stats">
+                    <div class="stat">
+                        <h3>{stats['active_tenders']}</h3>
+                        <p>Active Tenders</p>
+                    </div>
+                    <div class="stat">
+                        <h3>{stats['new_today']}</h3>
+                        <p>New Today</p>
+                    </div>
+                    <div class="stat">
+                        <h3>R{stats['total_value']}M</h3>
+                        <p>Total Value</p>
+                    </div>
+                    <div class="stat">
+                        <h3>{stats['matched_tenders']}</h3>
+                        <p>Matched to You</p>
+                    </div>
+                </div>
+                
+                <h2>Latest Tenders</h2>
+                <div class="tenders">
+                
+        """
+        
+        for tender in tenders:
+            html += f"""
+                    <div class="tender">
+                        <h3>{tender['municipality']}</h3>
+                        <h4>{tender['title']}</h4>
+                        <p><strong>Value:</strong> {tender['valueDisplay']}</p>
+                        <p><strong>Closes:</strong> {tender['closingDate']} ({tender['daysLeft']} days)</p>
+                        <p><strong>Match:</strong> {tender['matchScore']}%</p>
+                        <p>{tender['description'][:100]}...</p>
+                    </div>
+            """
+        
+        html += """
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
+        
+    except Exception as e:
+        return f"<h1>Error</h1><p>{str(e)}</p>"
+
+
+# ============================================================================
+# MUNICIPAL TENDER SCRAPING ROUTES
+# ============================================================================
+
+@app.route('/api/municipal-tenders/scrape-status')
+@login_required
+def get_scraping_status():
+    """Get current scraping status"""
+    try:
+        status = tender_scraping_manager.get_scraping_status()
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/municipal-tenders/manual-scrape', methods=['POST'])
+@login_required  
+def manual_scrape():
+    """Manually trigger scraping for a municipality"""
+    try:
+        data = request.get_json()
+        municipality = data.get('municipality')
+        
+        if not municipality:
+            return jsonify({'success': False, 'error': 'Municipality required'})
+        
+        result = tender_scraping_manager.manual_scrape_municipality(municipality)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/municipal-tenders/start-scraping', methods=['POST'])
+@login_required
+def start_scraping():
+    """Start automated scraping (admin only)"""
+    try:
+        if not session.get('is_admin'):
+            return jsonify({'success': False, 'error': 'Admin access required'})
+        
+        tender_scraping_manager.start_scheduled_scraping()
+        return jsonify({
+            'success': True,
+            'message': 'Automated scraping started'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# Initialize scraping when app starts
+
+     
+
+
+
+@app.route('/municipal-tender-engine')
+@login_required
+def municipal_tender_engine():
+    """Municipal Tender Engine with real data"""
+    try:
+        company_id = session.get('company_id')
+        
+        # Get real-time stats
+        stats = municipal_tender_service.get_municipal_tender_stats(company_id)
+        
+        # Get AI insights
+        ai_insights = municipal_tender_service.get_ai_tender_insights(company_id)
+        
+        # Get urgent alerts
+        urgent_alerts = municipal_tender_service.get_urgent_tender_alerts(company_id)
+        
+        # Get initial tenders (now from database if available)
+        initial_tenders = municipal_tender_service.get_municipal_tenders(company_id, limit=12)
+        
+        # Calculate potential revenue
+        potential_revenue = municipal_tender_service.calculate_potential_revenue(company_id)
+        
+        # Get scraping status
+        scraping_status = tender_scraping_manager.get_scraping_status()
+        
+        return render_template('municipal_tender_engine.html',
+                             stats=stats,
+                             ai_insights=ai_insights,
+                             urgent_alerts=urgent_alerts,
+                             company_profile={},
+                             initial_tenders=initial_tenders,
+                             potential_revenue=potential_revenue,
+                             scraping_status=scraping_status)
+                             
+    except Exception as e:
+        logger.error(f"Error loading Municipal Tender Engine: {str(e)}")
+        flash("Error loading Municipal Tender Engine", "error")
+        return redirect(url_for('dashboard'))
+
+@app.route('/api/municipal-tenders/start-scraping', methods=['POST'])
+@login_required
+def start_municipal_scraping():
+    """Start the municipal tender scraping process"""
+    try:
+        if not session.get('is_admin'):
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+        
+        # Start background scraping
+        threading.Thread(target=tender_scraping_manager.daily_tender_scraping, daemon=True).start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Scraping started in background'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting scraping: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to start scraping'
+        }), 500
+
+@app.route('/api/municipal-tenders/scraping-status')
+@login_required
+def get_municipal_scraping_status():
+    """Get current scraping status"""
+    try:
+        status = tender_scraping_manager.get_scraping_status()
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+    
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("🚀 Tender Management System Starting...")

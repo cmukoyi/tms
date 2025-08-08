@@ -109,3 +109,34 @@ __all__ = [
     'TenderHistoryService'
 ]
 from .user_service import UserService
+
+# services/__init__.py
+
+# Import existing services
+try:
+    from .auth_service import AuthService
+    print("✓ AuthService imported from services/auth_service.py")
+except ImportError as e:
+    print(f"Error importing AuthService: {e}")
+
+try:
+    from .company_module_service import CompanyModuleService
+    print("✓ CompanyModuleService imported from services/company_module_service.py")
+except ImportError as e:
+    print(f"Error importing CompanyModuleService: {e}")
+
+# Import chatbot service
+try:
+    from .chatbot_service import TenderChatbot, get_chatbot_suggestions, get_chatbot_quick_stats
+    print("✓ TenderChatbot imported from services/chatbot_service.py")
+except ImportError as e:
+    print(f"Error importing TenderChatbot: {e}")
+
+# Export all services
+__all__ = [
+    'AuthService',
+    'CompanyModuleService', 
+    'TenderChatbot',
+    'get_chatbot_suggestions',
+    'get_chatbot_quick_stats'
+]

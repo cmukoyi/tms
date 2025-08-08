@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Municipal Tender Opportunity Engine{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/municipal_tender_engine.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1><i class="fas fa-search-dollar"></i> Municipal Tender Opportunity Engine</h1>
+    <p>🏛️ Real-time discovery of municipal tenders across all 257 SA municipalities 🏛️</p>
+    <div class="live-indicator">
+        <i class="fas fa-circle"></i> LIVE MONITORING
+    </div>
+</div>
+
+<div class="container">
+    <!-- Real-time Statistics -->
+    <div class="realtime-stats">
+        <div class="stat-card">
+            <span class="stat-number" id="activeTenders">{{ stats.active_tenders or 0 }}</span>
+            <div class="stat-label">Active Municipal Tenders</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number" id="newToday">{{ stats.new_today or 0 }}</span>
+            <div class="stat-label">New Tenders Today</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number" id="totalValue">R{{ stats.total_value or '0' }}M</span>
+            <div class="stat-label">Total Contract Value</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number" id="matchedTenders">{{ stats.matched_tenders or 0 }}</span>
+            <div class="stat-label">Matched to Your Profile</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number" id="municipalities">257</span>
+            <div class="stat-label">Municipalities Monitored</div>
+        </div>
+    </div>
+
+    <!-- Alert Banner -->
+    {% if urgent_alerts %}
+    <div class="alert-banner">
+        <strong><i class="fas fa-exclamation-triangle"></i> URGENT:</strong> 
+        {{ urgent_alerts.count }} high-value tenders closing within 48 hours match your company profile!
+    </div>
+    {% endif %}
+
+    <!-- AI Insights Panel -->
+    <div class="ai-insights">
+        <div class="insights-title">
+            <i class="fas fa-brain"></i> AI Tender Intelligence
+        </div>
+        {% for insight in ai_insights %}
+        <div class="insight-item">
+            <strong>{{ insight.icon }} {{ insight.title }}:</strong> {{ insight.description }}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Main Dashboard -->
+    <div class="tender-dashboard">
+        <div class="dashboard-header">
+            <div class="dashboard-title">
+                <i class="fas fa-bullseye"></i> Tender Discovery Dashboard
+            </div>
+            <div class="search-controls">
+                <input type="text" class="search-input" placeholder="Search tenders, municipalities, keywords..." id="tenderSearch">
+                <select class="filter-select" id="provinceFilter">
+                    <option value="">All Provinces</option>
+                    <option value="gauteng">Gauteng</option>
+                    <option value="western-cape">Western Cape</option>
+                    <option value="kwazulu-natal">KwaZulu-Natal</option>
+                    <option value="eastern-cape">Eastern Cape</option>
+                    <option value="limpopo">Limpopo</option>
+                    <option value="mpumalanga">Mpumalanga</option>
+                    <option value="north-west">North West</option>
+                    <option value="northern-cape">Northern Cape</option>
+                    <option value="free-state">Free State</option>
+                </select>
+                <select class="filter-select" id="categoryFilter">
+                    <option value="">All Categories</option>
+                    <option value="construction">Construction</option>
+                    <option value="it-services">IT Services</option>
+                    <option value="consulting">Consulting</option>
+                    <option value="cleaning">Cleaning Services</option>
+                    <option value="security">Security</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="supply">Goods Supply</option>
+                </select>
+                <select class="filter-select" id="valueFilter">
+                    <option value="">All Values</option>
+                    <option value="0-1m">R0 - R1M</option>
+                    <option value="1m-10m">R1M - R10M</option>
+                    <option value="10m-50m">R10M - R50M</option>
+                    <option value="50m+">R50M+</option>
+                </select>
+                <button class="action-btn" onclick="searchTenders()">
+                    <i class="fas fa-search"></i> Search
+                </button>
+            </div>
+        </div>
+
+        <!-- Quick Filters -->
+        <div class="quick-filters">
+            <button class="filter-chip" onclick="filterByStatus('urgent')" data-filter="urgent">
+                🔥 Urgent (Closing Soon)
+            </button>
+            <button class="filter-chip" onclick="filterByStatus('new')" data-filter="new">
+                ✨ New Today
+            </button>
+            <button class="filter-chip" onclick="filterByStatus('high-match')" data-filter="high-match">
+                🎯 High Match (90%+)
+            </button>
+            <button class="filter-chip" onclick="filterByStatus('high-value')" data-filter="high-value">
+                💰 High Value (R50M+)
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="loading-indicator" id="loadingIndicator" style="display: none;">
+            <i class="fas fa-spinner fa-spin"></i> Loading tenders...
+        </div>
+
+        <!-- Tender Cards -->
+        <div class="tender-grid" id="tenderGrid">
+            <!-- Tender cards will be populated here -->
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination" style="display: none;">
+            <button class="page-btn" onclick="changePage(-1)">
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <span class="page-info" id="pageInfo">Page 1 of 1</span>
+            <button class="page-btn" onclick="changePage(1)">
+                Next <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Interest Modal -->
+    <div class="modal" id="interestModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Express Interest in Tender</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modalTenderInfo"></div>
+                <form id="interestForm">
+                    <input type="hidden" id="modalTenderId">
+                    <div class="form-group">
+                        <label>Contact Person:</label>
+                        <input type="text" id="contactPerson" value="{{ session.username }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email:</label>
+                        <input type="email" id="contactEmail" value="{{ session.email or '' }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone:</label>
+                        <input type="tel" id="contactPhone" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Message (Optional):</label>
+                        <textarea id="interestMessage" rows="3" placeholder="Brief description of your company's capabilities..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-primary" onclick="submitInterest()">
+                    <i class="fas fa-paper-plane"></i> Submit Interest
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Opportunity -->
+    <div class="revenue-opportunity">
+        <div class="revenue-title">Your Potential Revenue Opportunity</div>
+        <div class="revenue-amount">R{{ potential_revenue or '2.3B' }}+</div>
+        <div class="revenue-description">
+            Total value of municipal tenders matching your company profile this year
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Messages -->
+<div id="notification" class="notification" style="display: none;">
+    <div class="notification-content">
+        <span id="notificationMessage"></span>
+        <button class="notification-close" onclick="hideNotification()">&times;</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/municipal_tender_engine.js') }}"></script>
+<script>
+    // Initialize with server data
+    window.municipalTenderData = {
+        companyId: {{ session.company_id or 'null' }},
+        userId: {{ session.user_id or 'null' }},
+        companyProfile: {{ company_profile | tojsonfilter if company_profile else '{}' }},
+        initialTenders: {{ initial_tenders | tojsonfilter if initial_tenders else '[]' }}
+    };
+</script>
+<!-- Add this to your municipal_tender_engine.html template -->
+
+<!-- Scraping Status Panel -->
+<div class="scraping-status-panel">
+    <div class="panel-header">
+        <h4><i class="fas fa-sync-alt"></i> Real-Time Data Status</h4>
+        <button class="refresh-btn" onclick="refreshScrapingStatus()">
+            <i class="fas fa-refresh"></i> Refresh
+        </button>
+    </div>
+    
+    <div class="status-grid">
+        <div class="status-item">
+            <div class="status-label">Scraping Status</div>
+            <div class="status-value" id="scrapingActive">
+                <span class="status-indicator"></span>
+                <span id="scrapingStatusText">Checking...</span>
+            </div>
+        </div>
+        
+        <div class="status-item">
+            <div class="status-label">Last Update</div>
+            <div class="status-value" id="lastScrapeTime">Never</div>
+        </div>
+        
+        <div class="status-item">
+            <div class="status-label">Data Source</div>
+            <div class="status-value">
+                <span class="data-source-badge" id="dataSource">Mixed</span>
+            </div>
+        </div>
+        
+        <div class="status-item">
+            <div class="status-label">Next Update</div>
+            <div class="status-value" id="nextScrapeTime">Scheduled</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

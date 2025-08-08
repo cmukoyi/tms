@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}B-BBEE Smart Compliance Platform{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bbee_platform.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1><i class="fas fa-shield-alt"></i> B-BBEE Smart Compliance Platform</h1>
+    <p>🇿🇦 Revolutionizing South African Government Procurement 🇿🇦</p>
+    <div class="sa-flag">🟢🟡🔴⚫🔵⚪</div>
+</div>
+
+<div class="container">
+    <!-- Market Opportunity -->
+    <div class="market-stats">
+        <div class="stat-card">
+            <span class="stat-number">R2.3T</span>
+            <div class="stat-label">Annual SA Gov Procurement</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number">500K+</span>
+            <div class="stat-label">Registered Companies</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number">R150B</span>
+            <div class="stat-label">Lost Due to Non-Compliance</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-number">80%</span>
+            <div class="stat-label">Tender Rejection Rate</div>
+        </div>
+    </div>
+
+    <!-- Core Features -->
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-users"></i></div>
+            <div class="feature-title">Instant Consortium Builder</div>
+            <div class="feature-description">
+                AI-powered matching of companies to form winning B-BBEE compliant partnerships. 
+                Input your tender requirements and get matched with perfect partners in seconds.
+            </div>
+            <button class="action-btn" onclick="showPartnershipFinder()">Find Partners Now</button>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-calculator"></i></div>
+            <div class="feature-title">Real-Time B-BBEE Calculator</div>
+            <div class="feature-description">
+                Calculate your exact B-BBEE score instantly. See how partnerships affect your level 
+                and optimize for maximum points before submitting tenders.
+            </div>
+            <button class="action-btn" onclick="showCalculator()">Calculate Score</button>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-link"></i></div>
+            <div class="feature-title">Government API Integration</div>
+            <div class="feature-description">
+                Direct integration with SARS, CIDB, CSD, and eTender Portal. 
+                Automated compliance checking and document verification in real-time.
+            </div>
+            <button class="action-btn" onclick="showIntegrations()">Connect Systems</button>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+            <div class="feature-title">Transformation Tracker</div>
+            <div class="feature-description">
+                Monitor skills development, enterprise development, and supplier development 
+                programs. Automated reporting for B-BBEE verification agencies.
+            </div>
+            <button class="action-btn" onclick="showTracker()">Track Progress</button>
+        </div>
+    </div>
+
+    <!-- B-BBEE Calculator Demo -->
+    <div class="bbee-calculator" id="calculatorSection">
+        <div class="calculator-title">
+            <i class="fas fa-calculator"></i> B-BBEE Score Calculator
+        </div>
+        
+        <div class="calculator-grid">
+            <div class="calculator-section">
+                <div class="section-title">
+                    <i class="fas fa-building"></i> Company Information
+                </div>
+                <div class="input-group">
+                    <label>Company Size</label>
+                    <select id="companySize">
+                        <option value="large">Large Enterprise</option>
+                        <option value="medium">Medium Enterprise</option>
+                        <option value="small">Small Enterprise</option>
+                        <option value="micro">Micro Enterprise</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Industry Sector</label>
+                    <select id="sector">
+                        <option value="construction">Construction</option>
+                        <option value="it">IT Services</option>
+                        <option value="consulting">Consulting</option>
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Annual Turnover (R)</label>
+                    <input type="number" id="turnover" placeholder="e.g. 50000000">
+                </div>
+            </div>
+
+            <div class="calculator-section">
+                <div class="section-title">
+                    <i class="fas fa-users"></i> Ownership & Management
+                </div>
+                <div class="input-group">
+                    <label>Black Ownership %</label>
+                    <input type="number" id="blackOwnership" min="0" max="100" placeholder="e.g. 51">
+                </div>
+                <div class="input-group">
+                    <label>Black Management %</label>
+                    <input type="number" id="blackManagement" min="0" max="100" placeholder="e.g. 40">
+                </div>
+                <div class="input-group">
+                    <label>Black Women Ownership %</label>
+                    <input type="number" id="blackWomenOwnership" min="0" max="100" placeholder="e.g. 25">
+                </div>
+            </div>
+        </div>
+
+        <button class="action-btn" onclick="calculateBBEE()">
+            <i class="fas fa-calculator"></i> Calculate B-BBEE Score
+        </button>
+
+        <div class="bbee-score" id="bbeeResult" style="display: none;">
+            <span class="score-number" id="scoreNumber">0</span>
+            <div class="score-level" id="scoreLevel">Calculating...</div>
+            <div class="improvement-suggestions" id="suggestions"></div>
+        </div>
+    </div>
+
+    <!-- Partnership Finder Demo -->
+    <div class="partnership-finder" id="partnershipSection">
+        <div class="partnership-title">
+            <i class="fas fa-handshake"></i> Smart Partnership Matches
+        </div>
+        <p style="text-align: center; opacity: 0.9; margin-bottom: 30px;">
+            Based on your profile, here are potential partners to boost your B-BBEE score:
+        </p>
+
+        <div class="partner-search">
+            <div class="search-filters">
+                <input type="text" id="partnerSearch" placeholder="Search by industry, location, or B-BBEE level...">
+                <button class="action-btn" onclick="searchPartners()">Search Partners</button>
+            </div>
+        </div>
+
+        <div class="partner-cards" id="partnerCards">
+            <!-- Partners will be loaded here dynamically -->
+        </div>
+    </div>
+
+    <!-- Integration Dashboard -->
+    <div class="integration-dashboard" id="integrationSection" style="display: none;">
+        <div class="dashboard-title">
+            <i class="fas fa-link"></i> Government System Integrations
+        </div>
+        
+        <div class="integration-grid">
+            <div class="integration-card">
+                <div class="integration-icon"><i class="fas fa-money-bill-wave"></i></div>
+                <div class="integration-name">SARS Tax Compliance</div>
+                <div class="integration-status connected">Connected</div>
+                <button class="action-btn">View Status</button>
+            </div>
+            
+            <div class="integration-card">
+                <div class="integration-icon"><i class="fas fa-hammer"></i></div>
+                <div class="integration-name">CIDB Registration</div>
+                <div class="integration-status connected">Connected</div>
+                <button class="action-btn">Verify</button>
+            </div>
+            
+            <div class="integration-card">
+                <div class="integration-icon"><i class="fas fa-file-contract"></i></div>
+                <div class="integration-name">CSD Registration</div>
+                <div class="integration-status pending">Pending</div>
+                <button class="action-btn">Connect</button>
+            </div>
+            
+            <div class="integration-card">
+                <div class="integration-icon"><i class="fas fa-globe"></i></div>
+                <div class="integration-name">eTender Portal</div>
+                <div class="integration-status disconnected">Disconnected</div>
+                <button class="action-btn">Setup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transformation Tracker -->
+    <div class="transformation-tracker" id="trackerSection" style="display: none;">
+        <div class="tracker-title">
+            <i class="fas fa-chart-line"></i> Transformation Progress Tracker
+        </div>
+        
+        <div class="tracker-grid">
+            <div class="tracker-card">
+                <div class="tracker-metric">Skills Development</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 75%"></div>
+                </div>
+                <div class="tracker-value">75% of payroll invested</div>
+            </div>
+            
+            <div class="tracker-card">
+                <div class="tracker-metric">Enterprise Development</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 60%"></div>
+                </div>
+                <div class="tracker-value">R2.4M invested this year</div>
+            </div>
+            
+            <div class="tracker-card">
+                <div class="tracker-metric">Supplier Development</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 45%"></div>
+                </div>
+                <div class="tracker-value">15 suppliers supported</div>
+            </div>
+            
+            <div class="tracker-card">
+                <div class="tracker-metric">Employment Equity</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 85%"></div>
+                </div>
+                <div class="tracker-value">Target: 85% achieved</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Stories -->
+    <div class="success-stories">
+        <div class="stories-title">
+            <i class="fas fa-trophy"></i> Success Stories
+        </div>
+        
+        <div class="stories-grid">
+            <div class="story-card">
+                <div class="story-company">Thabo Construction</div>
+                <div class="story-achievement">Won R500M Infrastructure Contract</div>
+                <div class="story-description">
+                    "The B-BBEE platform helped us find the perfect partners and achieve Level 1 status. 
+                    We won our biggest contract ever!"
+                </div>
+            </div>
+            
+            <div class="story-card">
+                <div class="story-company">Ubuntu Tech Solutions</div>
+                <div class="story-achievement">Improved from Level 6 to Level 2</div>
+                <div class="story-description">
+                    "The transformation tracker guided our compliance journey. 
+                    Now we're winning 3x more government contracts."
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/bbee_platform.js') }}"></script>
+{% endblock %}
