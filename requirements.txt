@@ -28,7 +28,7 @@ reportlab==3.6.8
 XlsxWriter==3.0.3
 
 # Timezone Support (Python 3.6 compatibility)
-tzlocal==4.3
+tzlocal==4.2
 pytz==2024.1
 backports.zoneinfo==0.2.1;python_version<"3.9"
 
