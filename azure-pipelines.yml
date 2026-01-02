@@ -78,7 +78,7 @@ stages:
 
                 - script: |
                     echo "Artifact directory contents:"
-                    ls -la $(System.ArtifactsDirectory)/tms-app/
+                    ls -R $(System.ArtifactsDirectory)/tms-app/
                   displayName: 'Debug: List artifact files'
 
                 - task: SSH@0
@@ -95,7 +95,7 @@ stages:
                   inputs:
                     sshEndpoint: 'TMS-Production-SSH'
                     sourceFolder: '$(System.ArtifactsDirectory)/tms-app/'
-                    contents: 'tms-$(Build.BuildId).tar.gz'
+                    contents: '**/*.tar.gz'
                     targetFolder: '/tmp/tms-deploy'
                     cleanTargetFolder: true
                   displayName: 'Copy Files to Server'
@@ -109,7 +109,7 @@ stages:
                       cd /tmp/tms-deploy
                       echo "Contents of /tmp/tms-deploy:"
                       ls -la
-                      sudo tar -xzf tms-$(Build.BuildId).tar.gz -C /var/www/tms
+                      sudo tar -xzf *.tar.gz -C /var/www/tms
                       
                       # Update virtualenv
                       cd /var/www/tms
