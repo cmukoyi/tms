@@ -23,7 +23,7 @@ stages:
       - job: BuildJob
         displayName: 'Build Application'
         pool:
-          vmImage: 'ubuntu-20.04'
+          vmImage: 'ubuntu-latest'
         steps:
           - task: UsePythonVersion@0
             inputs:
