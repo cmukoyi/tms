@@ -62,7 +62,8 @@ stages:
     jobs:
       - deployment: DeployProductionJob
         displayName: 'Deploy to Production Server'
-        environment: 'TMS-Production'
+        environment:
+          name: 'TMS-Production'
         pool:
           vmImage: 'ubuntu-latest'
         strategy:
@@ -99,9 +100,9 @@ stages:
                   inputs:
                     sshEndpoint: 'TMS-Production-SSH'
                     sourceFolder: '$(System.ArtifactsDirectory)/tms-app/'
-                    contents: '**'
+                    contents: '*.tar.gz'
                     targetFolder: '/tmp/tms-deploy'
-                    cleanTargetFolder: false
+                    cleanTargetFolder: true
                   displayName: 'Copy Files to Server'
 
                 - task: SSH@0
@@ -111,10 +112,10 @@ stages:
                     commands: |
                       set -e  # Exit on error
                       
-                      echo "=== Verifying deployment package ==="
-                      ls -la /tmp/tms-deploy/
-                      echo "Files in /tmp/tms-deploy:"
-                      find /tmp/tms-deploy -name "*.tar.gz" -type f
+                      echo "=== Backup current deployment ==="
+                      if [ -d /var/www/tms ]; then
+                        sudo tar -czf /tmp/tms-backup-$(date +%s).tar.gz -C /var/www tms
+                      fi
                       
                       echo "=== Extracting deployment package ==="
                       sudo tar -xzf /tmp/tms-deploy/*.tar.gz -C /var/www/tms
@@ -124,7 +125,10 @@ stages:
                       cd /var/www/tms
                       
                       # Create virtualenv if it doesn't exist
-                      if [ ! -d "venv" ]; then echo "Creating virtualenv..." && sudo -u www-data python3 -m venv venv; fi
+                      if [ ! -d "venv" ]; then
+                        echo "Creating virtualenv..."
+                        sudo -u www-data python3 -m venv venv
+                      fi
                       
                       # Install/update dependencies
                       sudo -u www-data bash -c 'source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt'
@@ -158,6 +162,30 @@ stages:
                       echo "Production deployment successful!"
                     readyTimeout: '20000'
                   displayName: 'Health Check'
+
+                - task: SSH@0
+                  condition: failed()
+                  inputs:
+                    sshEndpoint: 'TMS-Production-SSH'
+                    runOptions: 'commands'
+                    commands: |
+                      echo "Rolling back to previous deployment..."
+                      sudo systemctl stop tms
+                      LATEST_BACKUP=$(ls -t /tmp/tms-backup-*.tar.gz | head -n1)
+                      if [ -f "$LATEST_BACKUP" ]; then
+                        sudo rm -rf /var/www/tms
+                        sudo mkdir -p /var/www/tms
+                        sudo tar -xzf "$LATEST_BACKUP" -C /var/www
+                        sudo chown -R www-data:www-data /var/www/tms
+                        sudo chmod -R 755 /var/www/tms
+                        sudo systemctl start tms
+                        echo "Rollback completed from $LATEST_BACKUP"
+                      else
+                        echo "No backup found, rollback not possible!"
+                        exit 1
+                      fi
+                    readyTimeout: '20000'
+                  displayName: 'Rollback on Failure'
 
                 - task: SSH@0
                   inputs:
