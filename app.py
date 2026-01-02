@@ -1,10 +1,32 @@
 from imports import *
+import logging
+from logging.handlers import RotatingFileHandler
 
 
 app = Flask(__name__)
 
 app.config.from_object(Config)
 app.config['UPLOAD_FOLDER'] = 'uploads'  # Add this line here
+
+# Configure logging
+if not app.debug:
+    # Create logs directory if it doesn't exist
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    
+    # Setup file handler with rotation
+    file_handler = RotatingFileHandler('logs/tms.log', maxBytes=10240000, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('TMS startup')
+else:
+    # Console logging for debug mode
+    app.logger.setLevel(logging.DEBUG)
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -211,24 +233,33 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         
+        app.logger.info(f'Login attempt for username: {username}')
+        
         if not username or not password:
+            app.logger.warning(f'Login failed: Missing credentials for username: {username}')
             flash('Please enter both username and password.', 'error')
             return render_template('login.html')
         
-        user = AuthService.login_user(username, password)
-        if user:
-            # Set session variables
-            session['user_id'] = user.id
-            session['username'] = user.username
-            session['is_super_admin'] = user.is_super_admin
-            session['company_id'] = user.company_id
-            session['full_name'] = user.full_name
-            session['role_name'] = user.role.name if user.role else 'No Role'
-            
-            flash(f'Welcome back, {user.first_name}!', 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid username or password. Please try again.', 'error')
+        try:
+            user = AuthService.login_user(username, password)
+            if user:
+                # Set session variables
+                session['user_id'] = user.id
+                session['username'] = user.username
+                session['is_super_admin'] = user.is_super_admin
+                session['company_id'] = user.company_id
+                session['full_name'] = user.full_name
+                session['role_name'] = user.role.name if user.role else 'No Role'
+                
+                app.logger.info(f'Login successful for user: {username} (ID: {user.id})')
+                flash(f'Welcome back, {user.first_name}!', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                app.logger.warning(f'Login failed: Invalid credentials for username: {username}')
+                flash('Invalid username or password. Please try again.', 'error')
+        except Exception as e:
+            app.logger.error(f'Login error for username {username}: {str(e)}', exc_info=True)
+            flash('An error occurred during login. Please try again.', 'error')
     
     return render_template('login.html')
 
