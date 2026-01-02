@@ -22,7 +22,7 @@ Flask-Login==0.5.0
 python-dotenv==0.20.0
 
 # PDF Generation (Python 3.6 compatible)
-reportlab==3.6.12
+reportlab==3.6.8
 
 # Excel File Generation
 XlsxWriter==3.0.3
