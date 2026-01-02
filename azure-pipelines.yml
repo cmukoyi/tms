@@ -100,7 +100,7 @@ stages:
                     sshEndpoint: 'TMS-Production-SSH'
                     sourceFolder: '$(System.ArtifactsDirectory)/tms-app/'
                     contents: '**'
-                    targetFolder: '/tmp/tms-deploy/'
+                    targetFolder: '/tmp/tms-deploy'
                     cleanTargetFolder: false
                   displayName: 'Copy Files to Server'
 
@@ -111,10 +111,13 @@ stages:
                     commands: |
                       set -e  # Exit on error
                       
+                      echo "=== Verifying deployment package ==="
+                      ls -la /tmp/tms-deploy/
+                      echo "Files in /tmp/tms-deploy:"
+                      find /tmp/tms-deploy -name "*.tar.gz" -type f
+                      
                       echo "=== Extracting deployment package ==="
-                      cd /tmp/tms-deploy
-                      ls -la
-                      sudo tar -xzf *.tar.gz -C /var/www/tms
+                      sudo tar -xzf /tmp/tms-deploy/*.tar.gz -C /var/www/tms
                       echo "Extraction complete"
                       
                       echo "=== Updating dependencies ==="
