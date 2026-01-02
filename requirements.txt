@@ -35,8 +35,8 @@ backports.zoneinfo==0.2.1;python_version<"3.9"
 # Job Scheduling & Background Tasks (Python 3.6 compatible)
 APScheduler==3.9.1
 
-# AI & Chatbot Integration (Python 3.6 compatible)
-openai==0.10.5
+# AI & Chatbot Integration (OPTIONAL - comment out if issues with Python 3.6)
+# openai==0.10.5
 
 # Web Scraping (Python 3.6 compatible)
 requests==2.27.1
