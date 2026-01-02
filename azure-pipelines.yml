@@ -110,7 +110,7 @@ stages:
                     sshEndpoint: 'TMS-Production-SSH'
                     runOptions: 'commands'
                     commands: |
-                      set -e  # Exit on error
+                      set -e
                       
                       echo "=== Backup current deployment ==="
                       if [ -d /var/www/tms ]; then
@@ -171,7 +171,7 @@ stages:
                     commands: |
                       echo "Rolling back to previous deployment..."
                       sudo systemctl stop tms
-                      LATEST_BACKUP=$(ls -t /tmp/tms-backup-*.tar.gz | head -n1)
+                      LATEST_BACKUP=$(ls -t /tmp/tms-backup-*.tar.gz 2>/dev/null | head -n1)
                       if [ -f "$LATEST_BACKUP" ]; then
                         sudo rm -rf /var/www/tms
                         sudo mkdir -p /var/www/tms
