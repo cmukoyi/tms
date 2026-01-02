@@ -122,7 +122,15 @@ stages:
                       
                       echo "=== Updating dependencies ==="
                       cd /var/www/tms
-                      sudo -u www-data bash -c 'source venv/bin/activate && pip install -r requirements.txt'
+                      
+                      # Create virtualenv if it doesn't exist
+                      if [ ! -d "venv" ]; then
+                        echo "Creating virtualenv..."
+                        sudo -u www-data python3 -m venv venv
+                      fi
+                      
+                      # Install/update dependencies
+                      sudo -u www-data bash -c 'source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt'
                       
                       echo "=== Setting permissions ==="
                       sudo chown -R www-data:www-data /var/www/tms
