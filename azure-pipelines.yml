@@ -11,7 +11,7 @@ trigger:
       - docs/**
 
 variables:
-  pythonVersion: '3.6'
+  pythonVersion: '3.9'
   
 stages:
   # ==========================================
