@@ -141,7 +141,7 @@ stages:
                     commands: |
                       # Health check
                       sleep 5
-                      curl -f http://localhost:5001/login || exit 1
+                      curl -f -s http://localhost:5001/login || exit 1
                       echo "Production deployment successful!"
                     readyTimeout: '20000'
                   displayName: 'Health Check'
