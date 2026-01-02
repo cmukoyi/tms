@@ -109,10 +109,15 @@ stages:
                     sshEndpoint: 'TMS-Production-SSH'
                     runOptions: 'commands'
                     commands: |
+                      # Debug: Check if directory exists and has files
+                      echo "Checking /tmp/tms-deploy:"
+                      ls -la /tmp/tms-deploy/ || echo "/tmp/tms-deploy doesn't exist!"
+                      
+                      echo "Finding all tar.gz files in /tmp:"
+                      find /tmp -name "*.tar.gz" -type f 2>/dev/null
+                      
                       # Extract and deploy
                       cd /tmp/tms-deploy
-                      echo "Contents of /tmp/tms-deploy:"
-                      ls -la
                       sudo tar -xzf *.tar.gz -C /var/www/tms
                       
                       # Update virtualenv
