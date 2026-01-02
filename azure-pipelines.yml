@@ -165,6 +165,6 @@ stages:
                     runOptions: 'commands'
                     commands: |
                       # Log deployment
-                      echo "$(date): Deployed build $(Build.BuildId)" >> /var/www/tms/deployment.log
+                      sudo bash -c "echo \"$(date): Deployed build $(Build.BuildId)\" >> /var/www/tms/deployment.log"
                     readyTimeout: '20000'
                   displayName: 'Log Deployment'
