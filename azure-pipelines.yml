@@ -109,34 +109,33 @@ stages:
                     sshEndpoint: 'TMS-Production-SSH'
                     runOptions: 'commands'
                     commands: |
-                      # Debug: Check if directory exists and has files
-                      echo "Checking /tmp/tms-deploy:"
-                      ls -la /tmp/tms-deploy/ || echo "/tmp/tms-deploy doesn't exist!"
+                      set -e  # Exit on error
                       
-                      echo "Finding all tar.gz files in /tmp:"
-                      find /tmp -name "*.tar.gz" -type f 2>/dev/null
-                      
-                      # Extract and deploy
+                      echo "=== Extracting deployment package ==="
                       cd /tmp/tms-deploy
+                      ls -la
                       sudo tar -xzf *.tar.gz -C /var/www/tms
+                      echo "Extraction complete"
                       
-                      # Update virtualenv
+                      echo "=== Updating dependencies ==="
                       cd /var/www/tms
                       sudo -u www-data bash -c 'source venv/bin/activate && pip install -r requirements.txt'
                       
-                      # Set permissions
+                      echo "=== Setting permissions ==="
                       sudo chown -R www-data:www-data /var/www/tms
                       sudo chmod -R 755 /var/www/tms
                       
-                      # Ensure .env exists
+                      echo "=== Verifying .env file ==="
                       if [ ! -f /var/www/tms/.env ]; then
                         echo "ERROR: .env file missing!"
                         exit 1
                       fi
+                      echo ".env file exists"
                       
-                      # Restart service
+                      echo "=== Starting TMS service ==="
                       sudo systemctl start tms
-                      sudo systemctl status tms
+                      sleep 3
+                      sudo systemctl status tms --no-pager
                     readyTimeout: '20000'
                   displayName: 'Deploy and Restart Service'
 
