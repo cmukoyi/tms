@@ -76,6 +76,11 @@ stages:
                     artifactName: 'tms-app'
                     downloadPath: '$(System.ArtifactsDirectory)'
 
+                - script: |
+                    echo "Artifact directory contents:"
+                    ls -la $(System.ArtifactsDirectory)/tms-app/
+                  displayName: 'Debug: List artifact files'
+
                 - task: SSH@0
                   inputs:
                     sshEndpoint: 'TMS-Production-SSH'
