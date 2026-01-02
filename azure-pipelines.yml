@@ -80,19 +80,10 @@ stages:
                     sshEndpoint: 'TMS-Production-SSH'
                     runOptions: 'commands'
                     commands: |
-                      # Backup current version
-                      sudo mkdir -p /var/www/tms/backups
-                      cd /var/www
-                      sudo tar -czf tms/backups/tms-backup-$(date +%Y%m%d-%H%M%S).tar.gz --exclude='tms/venv' --exclude='tms/logs' --exclude='tms/uploads' --exclude='tms/backups' tms
-                      
-                      # Keep only last 5 backups
-                      cd /var/www/tms/backups
-                      sudo bash -c 'ls -t | tail -n +6 | xargs rm -f'
-                      
                       # Stop the service
                       sudo systemctl stop tms
                     readyTimeout: '20000'
-                  displayName: 'Backup and Stop Service'
+                  displayName: 'Stop Service'
 
                 - task: CopyFilesOverSSH@0
                   inputs:
