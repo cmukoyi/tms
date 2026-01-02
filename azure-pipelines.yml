@@ -82,7 +82,8 @@ stages:
                     commands: |
                       # Backup current version
                       sudo mkdir -p /var/www/tms/backups
-                      sudo tar -czf /var/www/tms/backups/tms-backup-$(date +%Y%m%d-%H%M%S).tar.gz --exclude='/var/www/tms/venv' --exclude='/var/www/tms/logs' --exclude='/var/www/tms/uploads' /var/www/tms
+                      cd /var/www
+                      sudo tar -czf tms/backups/tms-backup-$(date +%Y%m%d-%H%M%S).tar.gz --exclude='tms/venv' --exclude='tms/logs' --exclude='tms/uploads' --exclude='tms/backups' tms
                       
                       # Keep only last 5 backups
                       cd /var/www/tms/backups
