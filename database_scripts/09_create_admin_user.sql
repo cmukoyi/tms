@@ -15,6 +15,9 @@ USE tms_db;
 -- Password hash for 'Admin@2026' using werkzeug.security
 -- In production, you should change this immediately!
 
+-- Delete existing admin user first to recreate with compatible hash
+DELETE FROM users WHERE username = 'admin';
+
 INSERT INTO users (
     username,
     email,
@@ -28,19 +31,14 @@ INSERT INTO users (
 ) VALUES (
     'admin',
     'admin@tms.local',
-    'scrypt:32768:8:1$SJEwZzOWn9D0Lc8R$d8f0c3e7a1f2b4c9e8d7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7',
+    'pbkdf2:sha256:1000000$63BIwoXEPLNT6COw$49947e6c8677cde8f02a8d0c1b3df8d39e2d24c4b5c1d2a5eca62dbaa2eafb39',
     'System',
     'Administrator',
     TRUE,
     TRUE,
     1,  -- Super Admin role
     NOW()
-)
-ON DUPLICATE KEY UPDATE 
-    email = VALUES(email),
-    first_name = VALUES(first_name),
-    last_name = VALUES(last_name),
-    is_super_admin = VALUES(is_super_admin);
+);
 
 -- Display confirmation
 SELECT 'Default admin user created successfully' AS Status;
