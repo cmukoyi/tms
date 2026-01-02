@@ -55,6 +55,11 @@ AVAILABLE_MODULES = {
         'display_name': 'Advanced Search',
         'description': 'Enhanced search and filtering capabilities',
         'is_core': False
+    },
+    'accounting': {
+        'display_name': 'Accounting',
+        'description': 'General ledger, journal entries, and financial statements',
+        'is_core': False
     }
 }
 

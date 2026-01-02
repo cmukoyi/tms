@@ -317,6 +317,189 @@
             </div>
             {% endif %}
 
+            <!-- Accounting Menu (Company Users) -->
+            {% if session.company_id and not session.is_super_admin and can_access_module('accounting') %}
+            <div class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                id="accountingDropdown"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                <i class="fas fa-calculator me-1"></i> Accounting
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="accountingDropdown">
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('accounting_dashboard') }}"
+                  >
+                    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('chart_of_accounts') }}"
+                  >
+                    <i class="fas fa-list me-2"></i> Chart of Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('journal_entries') }}"
+                  >
+                    <i class="fas fa-book me-2"></i> Journal Entries
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li class="dropdown-header">
+                  <i class="fas fa-file-alt me-2"></i>Financial Statements
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('income_statement') }}"
+                  >
+                    <i class="fas fa-chart-line me-2 text-success"></i> Income Statement
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('balance_sheet') }}"
+                  >
+                    <i class="fas fa-balance-scale me-2 text-info"></i> Balance Sheet
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('accounting_help') }}"
+                  >
+                    <i class="fas fa-question-circle me-2 text-warning"></i> Help
+                  </a>
+                </li>
+              </ul>
+            </div>
+            {% endif %}
+
+            <!-- Workflow Menu (Company Users with Permissions) -->
+            {% if session.company_id and not session.is_super_admin %}
+            <div class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                id="workflowDropdown"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                <i class="fas fa-project-diagram me-1"></i> Workflow
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="workflowDropdown">
+                <!-- My Assignments - Available to all users who can submit for approval -->
+                {% if user_has_workflow_permission('submit_for_approval') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('tenders', view='assigned_to_me') }}"
+                  >
+                    <i class="fas fa-tasks me-2 text-info"></i> My Assignments
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('dashboard') }}"
+                  >
+                    <i class="fas fa-history me-2 text-secondary"></i> My Activity
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                {% endif %}
+                
+                <!-- Statistics - For users who can view all tenders -->
+                {% if user_has_workflow_permission('view_all_tenders') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('workflow_statistics') }}"
+                  >
+                    <i class="fas fa-chart-bar me-2"></i> Statistics
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                {% endif %}
+                
+                <!-- Pending Approvals - For approvers -->
+                {% if user_has_workflow_permission('approve_tenders') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('approval_dashboard') }}"
+                  >
+                    <i class="fas fa-check-circle me-2 text-warning"></i> Pending Approvals
+                    {% if pending_approvals_count > 0 %}
+                    <span class="badge bg-warning text-dark ms-2">{{ pending_approvals_count }}</span>
+                    {% endif %}
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                {% endif %}
+                
+                <!-- Assign Tenders - For team leads/managers -->
+                {% if user_has_workflow_permission('assign_tenders') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('tenders') }}"
+                  >
+                    <i class="fas fa-user-plus me-2 text-info"></i> Assign Tenders
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                {% endif %}
+                
+                <!-- Roles & Permissions Section -->
+                {% if user_has_workflow_permission('manage_roles') or user_has_workflow_permission('view_users') %}
+                <li class="dropdown-header">
+                  <i class="fas fa-shield-alt me-2"></i> Roles & Permissions
+                </li>
+                
+                {% if user_has_workflow_permission('manage_roles') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('manage_roles') }}"
+                  >
+                    <i class="fas fa-user-shield me-2 text-primary"></i> Manage Roles
+                  </a>
+                </li>
+                {% endif %}
+                
+                {% if user_has_workflow_permission('view_users') %}
+                <li>
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('company_users') }}"
+                  >
+                    <i class="fas fa-users me-2 text-success"></i> Team Members
+                  </a>
+                </li>
+                {% endif %}
+                {% endif %}
+              </ul>
+            </div>
+            {% endif %}
+
+            <!-- Premium Features Menu - REMOVED -->
+
             <!-- Billing Menu (Super Admin Only) -->
             {% if session.is_super_admin %}
             <div class="nav-item dropdown">
@@ -1093,6 +1276,11 @@
         .addEventListener("mouseleave", function () {
           this.style.transform = "scale(1)";
         });
+      
+      // Module info modal function
+      function showModuleInfo(moduleName, displayName, description) {
+        alert(`${displayName}\n\n${description}\n\nThis module is enabled for your company. Features may be coming soon or accessible through other menu items.`);
+      }
     </script>
   </body>
 </html>

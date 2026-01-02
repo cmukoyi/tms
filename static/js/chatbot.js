@@ -1,5 +1,5 @@
 /**
- * Tender Chatbot JavaScript
+ * Enhanced Tender Chatbot JavaScript
  * static/js/chatbot.js
  */
 
@@ -8,11 +8,16 @@ class TenderChatbot {
         this.isOpen = false;
         this.isLoading = false;
         this.messageHistory = [];
+        this.conversationId = this.generateConversationId();
         
         this.initializeElements();
         this.attachEventListeners();
         this.loadQuickStats();
         this.showWelcomeMessage();
+    }
+    
+    generateConversationId() {
+        return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
     
     initializeElements() {
@@ -105,13 +110,18 @@ class TenderChatbot {
     showWelcomeMessage() {
         setTimeout(() => {
             this.addBotMessage(
-                "👋 Hi! I'm TenderBot, your AI assistant. I can help you with your tender information.",
+                "👋 Hi! I'm TenderBot, your intelligent AI assistant. I can help you with:\n\n" +
+                "• 📊 Analytics and insights\n" +
+                "• 🔍 Search and filter tenders\n" +
+                "• ⏰ Deadline tracking\n" +
+                "• 📈 Performance analysis\n\n" +
+                "Try asking me anything about your tenders!",
                 'welcome',
                 [
-                    "How many active tenders?",
-                    "Show tenders closing this week",
-                    "What tenders are overdue?",
-                    "Show IT tenders"
+                    "Show performance summary",
+                    "Find IT tenders",
+                    "What's closing this week?",
+                    "Success rate analysis"
                 ]
             );
         }, 500);
@@ -136,7 +146,10 @@ class TenderChatbot {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message: message })
+                body: JSON.stringify({ 
+                    message: message,
+                    conversation_id: this.conversationId
+                })
             });
             
             const data = await response.json();
@@ -145,11 +158,16 @@ class TenderChatbot {
             this.hideTypingIndicator();
             
             if (data.success) {
-                this.addBotMessage(data.response, data.type, null, data.data);
+                this.addBotMessage(
+                    data.response, 
+                    data.type, 
+                    data.suggestions || null, 
+                    data.data
+                );
                 
                 // Update stats if response includes new data
-                if (data.type === 'stats') {
-                    this.loadQuickStats();
+                if (data.type === 'stats' || data.type === 'analytics') {
+                    setTimeout(() => this.loadQuickStats(), 500);
                 }
             } else {
                 this.addBotMessage(
@@ -189,10 +207,10 @@ class TenderChatbot {
         const messageElement = document.createElement('div');
         messageElement.className = 'message bot';
         
-        let html = `<div class="message-bubble">${this.formatMessage(message)}</div>`;
+        let html = `<div class="message-bubble ${type}">${this.formatMessage(message)}</div>`;
         
         // Add data display if present
-        if (data && Array.isArray(data) && data.length > 0) {
+        if (data && (Array.isArray(data) || typeof data === 'object')) {
             html += this.formatDataDisplay(data, type);
         }
         
@@ -226,34 +244,67 @@ class TenderChatbot {
         let className = 'message-data';
         if (type === 'warning') className += ' warning';
         if (type === 'urgent') className += ' urgent';
+        if (type === 'analytics' || type === 'stats') className += ' analytics';
         
         let html = `<div class="${className}">`;
         
-        data.forEach(item => {
-            if (typeof item === 'object') {
-                html += '<div class="data-item">';
-                html += `<strong>${this.escapeHtml(item.title || 'Item')}</strong>`;
-                
-                if (item.deadline) {
-                    html += `<br><small>Deadline: ${item.deadline}</small>`;
-                }
-                if (item.days_remaining !== undefined) {
-                    const urgencyClass = item.days_remaining <= 1 ? 'text-danger' : 
-                                       item.days_remaining <= 3 ? 'text-warning' : '';
-                    html += `<br><small class="${urgencyClass}">Days remaining: ${item.days_remaining}</small>`;
-                }
-                if (item.category) {
-                    html += `<br><small>Category: ${item.category}</small>`;
-                }
-                if (item.value) {
-                    html += `<br><small>Value: R${item.value.toLocaleString()}</small>`;
-                }
-                
-                html += '</div>';
-            } else {
-                html += `<div class="data-item">${this.escapeHtml(item)}</div>`;
+        // Handle object data (like analytics/stats)
+        if (!Array.isArray(data) && typeof data === 'object') {
+            html += '<div class="stats-grid">';
+            for (const [key, value] of Object.entries(data)) {
+                const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                html += `
+                    <div class="stat-item">
+                        <div class="stat-label">${displayKey}</div>
+                        <div class="stat-value">${this.escapeHtml(String(value))}</div>
+                    </div>
+                `;
             }
-        });
+            html += '</div>';
+        }
+        // Handle array data
+        else if (Array.isArray(data)) {
+            data.forEach(item => {
+                if (typeof item === 'object') {
+                    html += '<div class="data-item">';
+                    
+                    // Title or main identifier
+                    if (item.title) {
+                        html += `<strong>${this.escapeHtml(item.title)}</strong>`;
+                    } else if (item.number) {
+                        html += `<strong>${this.escapeHtml(item.number)}</strong>`;
+                    } else if (item.category) {
+                        html += `<strong>${this.escapeHtml(item.category)}</strong>`;
+                    } else if (item.period) {
+                        html += `<strong>${this.escapeHtml(item.period)}</strong>`;
+                    }
+                    
+                    // Additional details
+                    const details = [];
+                    if (item.deadline) details.push(`⏰ ${item.deadline}`);
+                    if (item.days_remaining !== undefined) {
+                        const urgencyClass = item.days_remaining <= 1 ? 'text-danger' : 
+                                           item.days_remaining <= 3 ? 'text-warning' : '';
+                        details.push(`<span class="${urgencyClass}">📅 ${item.days_remaining} days left</span>`);
+                    }
+                    if (item.category && !item.title) details.push(`📁 ${item.category}`);
+                    if (item.value) details.push(`💰 ${item.value}`);
+                    if (item.status) details.push(`📊 ${item.status}`);
+                    if (item.count) details.push(`🔢 ${item.count} tenders`);
+                    if (item.won !== undefined) details.push(`✅ ${item.won} won`);
+                    if (item.success_rate) details.push(`📈 ${item.success_rate} success`);
+                    if (item.total) details.push(`📊 ${item.total} total`);
+                    
+                    if (details.length > 0) {
+                        html += `<br><small>${details.join(' • ')}</small>`;
+                    }
+                    
+                    html += '</div>';
+                } else {
+                    html += `<div class="data-item">${this.escapeHtml(String(item))}</div>`;
+                }
+            });
+        }
         
         html += '</div>';
         return html;
@@ -262,14 +313,18 @@ class TenderChatbot {
     formatSuggestions(suggestions) {
         let html = '<div class="suggestions">';
         suggestions.forEach(suggestion => {
-            html += `<span class="suggestion-chip" onclick="tenderChatbot.sendSuggestion('${this.escapeHtml(suggestion)}')">${this.escapeHtml(suggestion)}</span>`;
+            const escapedSuggestion = this.escapeHtml(suggestion).replace(/'/g, '&apos;');
+            html += `<span class="suggestion-chip" onclick="tenderChatbot.sendSuggestion('${escapedSuggestion}')">${this.escapeHtml(suggestion)}</span>`;
         });
         html += '</div>';
         return html;
     }
     
     sendSuggestion(suggestion) {
-        this.input.value = suggestion;
+        // Decode HTML entities
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = suggestion;
+        this.input.value = textarea.value;
         this.sendMessage();
     }
     

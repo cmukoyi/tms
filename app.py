@@ -30,7 +30,13 @@ def inject_module_access():
     def can_access_module(module_name):
         return user_can_access_module(module_name)
     
-    return dict(can_access_module=can_access_module)
+    # Get enabled modules for the current company
+    enabled_modules = []
+    if session.get('company_id'):
+        enabled_modules_data = CompanyModuleService.get_enabled_modules_for_company(session['company_id'])
+        enabled_modules = [cm.module_definition for cm in enabled_modules_data] if enabled_modules_data else []
+    
+    return dict(can_access_module=can_access_module, enabled_modules=enabled_modules)
 
 @app.context_processor
 def inject_current_date():
@@ -41,13 +47,31 @@ def inject_current_date():
 @app.context_processor
 def inject_permission_helpers():
     """Inject permission helper functions into templates"""
-    from permissions import has_permission, get_user_permissions, has_any_permission, has_all_permissions
+    from permissions import (
+        has_permission, get_user_permissions, has_any_permission, 
+        has_all_permissions, user_has_workflow_permission,
+        get_user_workflow_permissions, get_user_workflow_roles
+    )
+    
+    # Get pending approvals count for badge
+    pending_approvals_count = 0
+    if session.get('user_id') and session.get('company_id'):
+        from services.permissions_service import PermissionsService
+        from services.tender_workflow_service import TenderWorkflowService
+        
+        if PermissionsService.user_has_permission(session['user_id'], 'approve_tenders', session.get('company_id')):
+            pending_tenders = TenderWorkflowService.get_pending_approvals(session['company_id'])
+            pending_approvals_count = len(pending_tenders) if pending_tenders else 0
     
     return dict(
         has_permission=has_permission,
         get_user_permissions=get_user_permissions,
         has_any_permission=has_any_permission,
-        has_all_permissions=has_all_permissions
+        has_all_permissions=has_all_permissions,
+        user_has_workflow_permission=user_has_workflow_permission,
+        get_user_workflow_permissions=get_user_workflow_permissions,
+        get_user_workflow_roles=get_user_workflow_roles,
+        pending_approvals_count=pending_approvals_count
     )
     
 
@@ -129,6 +153,28 @@ def super_admin_required(f):
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
+
+def module_required(module_name):
+    """Decorator to require a specific module to be enabled for the company"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                flash('Please log in to access this page.', 'warning')
+                return redirect(url_for('login'))
+            
+            company_id = session.get('company_id')
+            if not company_id:
+                flash('No company associated with your account.', 'error')
+                return redirect(url_for('dashboard'))
+            
+            if not user_can_access_module(module_name):
+                flash(f'The {module_name.replace("_", " ").title()} module is not enabled for your company. Please contact your administrator.', 'error')
+                return redirect(url_for('dashboard'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 def company_admin_required(f):
     """Decorator to require company admin or super admin privileges"""
@@ -522,6 +568,7 @@ def tenders():
     per_page = request.args.get('per_page', 10, type=int)
     status_filter = request.args.get('status', type=int)
     category_filter = request.args.get('category', type=int)
+    view_filter = request.args.get('view', 'all')  # 'all', 'assigned_to_me', 'unassigned'
     
     # Validate per_page values
     if per_page not in [10, 20, 50]:
@@ -532,6 +579,28 @@ def tenders():
         query = Tender.query
     else:
         query = Tender.query.filter_by(company_id=user.company_id)
+    
+    # Apply view filter based on workflow permissions
+    from services.permissions_service import PermissionsService
+    can_view_all = PermissionsService.user_has_permission(user.id, 'view_all_tenders', user.company_id)
+    
+    if view_filter == 'assigned_to_me':
+        # Show only tenders actively assigned to this user
+        query = query.join(TenderAssignment).filter(
+            TenderAssignment.assigned_to_id == user.id,
+            TenderAssignment.is_active == True
+        )
+    elif view_filter == 'unassigned':
+        # Show only unassigned tenders (no active assignments)
+        query = query.outerjoin(TenderAssignment).filter(
+            (TenderAssignment.id == None) | (TenderAssignment.is_active == False)
+        )
+    elif not can_view_all and not user.is_super_admin:
+        # Regular users without 'view_all_tenders' permission can only see actively assigned tenders
+        query = query.join(TenderAssignment).filter(
+            TenderAssignment.assigned_to_id == user.id,
+            TenderAssignment.is_active == True
+        )
     
     # Apply advanced search if available
     search_query = request.args.get('search', '').strip()
@@ -585,7 +654,9 @@ def tenders():
                          current_category=category_filter,
                          per_page=per_page,
                          permissions=permissions,  # ← Add permissions for template
-                         search_query=search_query)
+                         search_query=search_query,
+                         view_filter=view_filter,
+                         can_view_all=can_view_all)
     
 
 @app.route('/tenders/create', methods=['GET', 'POST'])
@@ -702,10 +773,12 @@ def view_tender(tender_id):
     if permissions and permissions['can_add_notes']:
         tender_notes = TenderNote.query.filter_by(tender_id=tender_id).order_by(TenderNote.created_at.desc()).all()
     
-    # Get tender history (only if audit module is enabled)
-    tender_history = []
-    if permissions and permissions['can_view_audit_log']:
-        tender_history = TenderHistoryService.get_tender_history(tender_id)
+    # Get tender activities for audit trail (only for company admins)
+    from services.permissions_service import PermissionsService
+    is_company_admin = PermissionsService.user_has_permission(user.id, 'manage_company', user.company_id)
+    tender_activities = []
+    if is_company_admin:
+        tender_activities = TenderActivity.query.filter_by(tender_id=tender_id).order_by(TenderActivity.created_at.desc()).all()
 
     return render_template('tenders/view.html', 
                          tender=tender, 
@@ -713,7 +786,8 @@ def view_tender(tender_id):
                          document_types=document_types,
                          custom_fields=custom_fields,
                          tender_notes=tender_notes,
-                         tender_history=tender_history,
+                         tender_activities=tender_activities,
+                         is_company_admin=is_company_admin,
                          current_user=user,
                          permissions=permissions)  # ← Add permissions for template
 
@@ -1004,6 +1078,429 @@ def delete_tender(tender_id):
     
     return redirect(url_for('tenders'))
 
+
+# ============================================================================
+# TENDER WORKFLOW ROUTES
+# ============================================================================
+
+@app.route('/company/tender/<int:tender_id>/assign', methods=['GET', 'POST'])
+@login_required
+def assign_tender(tender_id):
+    """Assign tender to team member"""
+    from datetime import datetime
+    from services.permissions_service import PermissionsService, permission_required
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    # Check permission
+    if not PermissionsService.user_has_permission(session['user_id'], 'assign_tenders', session.get('company_id')):
+        flash('You do not have permission to assign tenders', 'error')
+        return redirect(url_for('tenders'))
+    
+    tender = Tender.query.get_or_404(tender_id)
+    
+    # Verify company access
+    user = User.query.get(session['user_id'])
+    if not user.is_super_admin and tender.company_id != user.company_id:
+        flash('Access denied', 'error')
+        return redirect(url_for('tenders'))
+    
+    if request.method == 'POST':
+        assigned_to_id = request.form.get('assigned_to_id')
+        due_date_str = request.form.get('due_date')
+        notes = request.form.get('notes')
+        
+        # Parse due date
+        due_date = None
+        if due_date_str:
+            try:
+                due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+            except ValueError:
+                flash('Invalid date format', 'error')
+                return redirect(request.url)
+        
+        success, message = TenderWorkflowService.assign_tender(
+            tender_id=tender_id,
+            assigned_to_id=assigned_to_id,
+            assigned_by_id=session['user_id'],
+            due_date=due_date,
+            notes=notes
+        )
+        
+        flash(message, 'success' if success else 'error')
+        return redirect(url_for('view_tender', tender_id=tender_id))
+    
+    # Get company users for assignment
+    company_users = User.query.filter_by(
+        company_id=tender.company_id,
+        is_active=True
+    ).all()
+    
+    return render_template('company/tender_assign.html',
+                         tender=tender,
+                         company_users=company_users,
+                         today=datetime.now().strftime('%Y-%m-%d'))
+
+
+@app.route('/company/tender/<int:tender_id>/submit-approval', methods=['POST'])
+@login_required
+def submit_tender_for_approval(tender_id):
+    """Submit tender for approval"""
+    from services.permissions_service import PermissionsService
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    # Get user first to get their company_id
+    user = User.query.get(session['user_id'])
+    company_id = user.company_id if user else session.get('company_id')
+    
+    # Debug logging
+    print(f"Submit approval - User ID: {session['user_id']}, Company ID: {company_id}")
+    has_perm = PermissionsService.user_has_permission(session['user_id'], 'submit_for_approval', company_id)
+    print(f"Has permission: {has_perm}")
+    
+    if not has_perm:
+        flash('You do not have permission to submit tenders for approval', 'error')
+        return redirect(url_for('tenders'))
+    
+    tender = Tender.query.get_or_404(tender_id)
+    
+    # Verify company access
+    if not user.is_super_admin and tender.company_id != user.company_id:
+        flash('Access denied', 'error')
+        return redirect(url_for('tenders'))
+    
+    success, message = TenderWorkflowService.submit_for_approval(
+        tender_id=tender_id,
+        user_id=session['user_id']
+    )
+    
+    flash(message, 'success' if success else 'error')
+    return redirect(url_for('view_tender', tender_id=tender_id))
+
+
+@app.route('/company/approvals')
+@login_required
+def approval_dashboard():
+    """Dashboard for pending approvals"""
+    from services.permissions_service import PermissionsService
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'approve_tenders', session.get('company_id')):
+        flash('You do not have permission to approve tenders', 'error')
+        return redirect(url_for('dashboard'))
+    
+    user = User.query.get(session['user_id'])
+    
+    # Get pending approvals
+    pending_tenders = TenderWorkflowService.get_pending_approvals(user.company_id)
+    
+    # Get workflow stats
+    stats = TenderWorkflowService.get_workflow_statistics(user.company_id)
+    
+    return render_template('company/approval_dashboard.html',
+                         pending_tenders=pending_tenders,
+                         stats=stats)
+
+
+@app.route('/company/tender/<int:tender_id>/approve', methods=['POST'])
+@login_required
+def approve_tender_submission(tender_id):
+    """Approve a tender submission"""
+    from services.permissions_service import PermissionsService
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'approve_tenders', session.get('company_id')):
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+    
+    tender = Tender.query.get_or_404(tender_id)
+    
+    # Verify company access
+    user = User.query.get(session['user_id'])
+    if not user.is_super_admin and tender.company_id != user.company_id:
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
+    
+    notes = request.form.get('notes')
+    
+    success, message = TenderWorkflowService.approve_tender(
+        tender_id=tender_id,
+        user_id=session['user_id'],
+        notes=notes
+    )
+    
+    if request.headers.get('Accept') == 'application/json':
+        return jsonify({'success': success, 'message': message})
+    
+    flash(message, 'success' if success else 'error')
+    return redirect(url_for('approval_dashboard'))
+
+
+@app.route('/company/tender/<int:tender_id>/reject', methods=['POST'])
+@login_required
+def reject_tender_submission(tender_id):
+    """Reject a tender submission"""
+    from services.permissions_service import PermissionsService
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'approve_tenders', session.get('company_id')):
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+    
+    tender = Tender.query.get_or_404(tender_id)
+    
+    # Verify company access
+    user = User.query.get(session['user_id'])
+    if not user.is_super_admin and tender.company_id != user.company_id:
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
+    
+    notes = request.form.get('notes')
+    
+    success, message = TenderWorkflowService.reject_tender(
+        tender_id=tender_id,
+        user_id=session['user_id'],
+        notes=notes
+    )
+    
+    if request.headers.get('Accept') == 'application/json':
+        return jsonify({'success': success, 'message': message})
+    
+    flash(message, 'success' if success else 'error')
+    return redirect(url_for('approval_dashboard'))
+
+
+@app.route('/company/tender/<int:tender_id>/submit-to-client', methods=['POST'])
+@login_required
+def submit_tender_to_client(tender_id):
+    """Submit approved tender to client"""
+    from services.permissions_service import PermissionsService
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'submit_tenders', session.get('company_id')):
+        flash('You do not have permission to submit tenders to clients', 'error')
+        return redirect(url_for('tenders'))
+    
+    tender = Tender.query.get_or_404(tender_id)
+    
+    # Verify company access
+    user = User.query.get(session['user_id'])
+    if not user.is_super_admin and tender.company_id != user.company_id:
+        flash('Access denied', 'error')
+        return redirect(url_for('tenders'))
+    
+    success, message = TenderWorkflowService.submit_tender(
+        tender_id=tender_id,
+        user_id=session['user_id']
+    )
+    
+    flash(message, 'success' if success else 'error')
+    return redirect(url_for('tender_details', tender_id=tender_id))
+
+
+@app.route('/company/tender/<int:tender_id>/activity')
+@login_required
+def tender_activity_log(tender_id):
+    """View tender activity log"""
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    tender = Tender.query.get_or_404(tender_id)
+    
+    # Verify company access
+    user = User.query.get(session['user_id'])
+    if not user.is_super_admin and tender.company_id != user.company_id:
+        flash('Access denied', 'error')
+        return redirect(url_for('tenders'))
+    
+    activities = TenderWorkflowService.get_tender_activities(tender_id)
+    workflow = TenderWorkflowService.get_tender_workflow(tender_id)
+    
+    return render_template('company/tender_activity.html',
+                         tender=tender,
+                         activities=activities,
+                         workflow=workflow)
+
+
+@app.route('/company/workflow-stats')
+@login_required
+def workflow_statistics():
+    """Workflow statistics dashboard"""
+    from services.permissions_service import PermissionsService
+    from services.tender_workflow_service import TenderWorkflowService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'view_all_tenders', session.get('company_id')):
+        flash('You do not have permission to view workflow statistics', 'error')
+        return redirect(url_for('dashboard'))
+    
+    user = User.query.get(session['user_id'])
+    stats = TenderWorkflowService.get_workflow_statistics(user.company_id)
+    
+    # Get tenders by status
+    from sqlalchemy import and_
+    workflows = db.session.query(TenderWorkflow, Tender).join(
+        Tender
+    ).filter(
+        Tender.company_id == user.company_id
+    ).all()
+    
+    return render_template('company/workflow_stats.html',
+                         stats=stats,
+                         workflows=workflows)
+
+
+# ============================================================================
+# ROLE & PERMISSION MANAGEMENT ROUTES
+# ============================================================================
+
+@app.route('/company/roles')
+@login_required
+def manage_roles():
+    """Role management dashboard"""
+    from services.permissions_service import PermissionsService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'manage_roles', session.get('company_id')):
+        flash('You do not have permission to manage roles', 'error')
+        return redirect(url_for('dashboard'))
+    
+    user = User.query.get(session['user_id'])
+    roles = PermissionsService.get_company_roles(user.company_id)
+    
+    return render_template('company/roles_management.html', roles=roles)
+
+
+@app.route('/company/roles/create', methods=['GET', 'POST'])
+@login_required
+def create_company_role():
+    """Create custom role"""
+    from services.permissions_service import PermissionsService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'manage_roles', session.get('company_id')):
+        flash('You do not have permission to create roles', 'error')
+        return redirect(url_for('dashboard'))
+    
+    user = User.query.get(session['user_id'])
+    
+    if request.method == 'POST':
+        name = request.form.get('name')
+        display_name = request.form.get('display_name')
+        description = request.form.get('description')
+        permission_ids = request.form.getlist('permissions')
+        
+        success, role, message = PermissionsService.create_custom_role(
+            company_id=user.company_id,
+            name=name,
+            display_name=display_name,
+            description=description,
+            permission_ids=permission_ids,
+            created_by_id=session['user_id']
+        )
+        
+        flash(message, 'success' if success else 'error')
+        
+        if success:
+            return redirect(url_for('manage_roles'))
+    
+    # Get all permissions grouped by category
+    permissions = PermissionsService.get_all_permissions()
+    categories = PermissionsService.get_permission_categories()
+    
+    return render_template('company/create_role.html',
+                         permissions=permissions,
+                         categories=categories)
+
+
+@app.route('/company/roles/<int:role_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_company_role(role_id):
+    """Edit role permissions"""
+    from services.permissions_service import PermissionsService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'manage_roles', session.get('company_id')):
+        flash('You do not have permission to edit roles', 'error')
+        return redirect(url_for('dashboard'))
+    
+    role = CompanyRole.query.get_or_404(role_id)
+    
+    # Verify company access
+    user = User.query.get(session['user_id'])
+    if role.company_id != user.company_id:
+        flash('Access denied', 'error')
+        return redirect(url_for('manage_roles'))
+    
+    if request.method == 'POST':
+        permission_ids = request.form.getlist('permissions')
+        
+        success, message = PermissionsService.update_role_permissions(
+            role_id=role_id,
+            permission_ids=permission_ids
+        )
+        
+        flash(message, 'success' if success else 'error')
+        
+        if success:
+            return redirect(url_for('manage_roles'))
+    
+    # Get all permissions and current role permissions
+    all_permissions = PermissionsService.get_all_permissions()
+    role_permissions = role.get_permissions()
+    role_permission_ids = [p.id for p in role_permissions]
+    categories = PermissionsService.get_permission_categories()
+    
+    return render_template('company/edit_role.html',
+                         role=role,
+                         all_permissions=all_permissions,
+                         role_permission_ids=role_permission_ids,
+                         categories=categories)
+
+
+@app.route('/company/users/<int:user_id>/roles', methods=['GET', 'POST'])
+@login_required
+def assign_user_roles(user_id):
+    """Assign roles to a user"""
+    from services.permissions_service import PermissionsService
+    
+    if not PermissionsService.user_has_permission(session['user_id'], 'assign_roles', session.get('company_id')):
+        flash('You do not have permission to assign roles', 'error')
+        return redirect(url_for('dashboard'))
+    
+    target_user = User.query.get_or_404(user_id)
+    current_user = User.query.get(session['user_id'])
+    
+    # Verify company access
+    if target_user.company_id != current_user.company_id:
+        flash('Access denied', 'error')
+        return redirect(url_for('company_users'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        role_id = request.form.get('role_id')
+        
+        if action == 'add':
+            success, message = PermissionsService.assign_role_to_user(
+                user_id=user_id,
+                role_id=role_id,
+                assigned_by_id=session['user_id']
+            )
+        elif action == 'remove':
+            success, message = PermissionsService.remove_role_from_user(
+                user_id=user_id,
+                role_id=role_id
+            )
+        else:
+            success = False
+            message = "Invalid action"
+        
+        flash(message, 'success' if success else 'error')
+        return redirect(request.url)
+    
+    # Get user's current roles and available roles
+    user_roles = PermissionsService.get_user_roles(user_id, current_user.company_id)
+    available_roles = PermissionsService.get_company_roles(current_user.company_id)
+    
+    user_role_ids = [r.id for r in user_roles]
+    
+    return render_template('company/assign_user_roles.html',
+                         target_user=target_user,
+                         user_roles=user_roles,
+                         available_roles=available_roles,
+                         user_role_ids=user_role_ids)
+
+
 # REPORTS ROUTES
 @app.route('/reports')
 @login_required
@@ -1049,10 +1546,20 @@ def tender_reports():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     
+    # Check if user can view all tenders or only assigned ones
+    from services.permissions_service import PermissionsService
+    can_view_all = PermissionsService.user_has_permission(user.id, 'view_all_tenders', user.company_id)
+    
     if user.is_super_admin:
         tenders = TenderService.get_all_tenders()
-    else:
+    elif can_view_all:
         tenders = TenderService.get_tenders_by_company(user.company_id)
+    else:
+        # Non-admin users see only assigned tenders
+        tenders = Tender.query.join(TenderAssignment).filter(
+            TenderAssignment.assigned_to_id == user.id,
+            Tender.company_id == user.company_id
+        ).all()
     
     # Apply date filters if provided
     if start_date:
@@ -1106,14 +1613,18 @@ def active_tenders_report():
     closed_status = TenderStatus.query.filter_by(name='Closed').first()
     closed_status_id = closed_status.id if closed_status else None
     
+    # Check if user can view all tenders
+    from services.permissions_service import PermissionsService
+    can_view_all = PermissionsService.user_has_permission(user.id, 'view_all_tenders', user.company_id)
+    
     if user.is_super_admin:
         # Super admin sees all active tenders
         if closed_status_id:
             tenders = Tender.query.filter(Tender.status_id != closed_status_id).order_by(Tender.created_at.desc()).all()
         else:
             tenders = Tender.query.order_by(Tender.created_at.desc()).all()
-    else:
-        # Company users see only their company's active tenders
+    elif can_view_all:
+        # Company admins see all company's active tenders
         if closed_status_id:
             tenders = Tender.query.filter(
                 Tender.company_id == user.company_id,
@@ -1121,6 +1632,19 @@ def active_tenders_report():
             ).order_by(Tender.created_at.desc()).all()
         else:
             tenders = Tender.query.filter_by(company_id=user.company_id).order_by(Tender.created_at.desc()).all()
+    else:
+        # Regular users see only assigned active tenders
+        if closed_status_id:
+            tenders = Tender.query.join(TenderAssignment).filter(
+                TenderAssignment.assigned_to_id == user.id,
+                Tender.company_id == user.company_id,
+                Tender.status_id != closed_status_id
+            ).order_by(Tender.created_at.desc()).all()
+        else:
+            tenders = Tender.query.join(TenderAssignment).filter(
+                TenderAssignment.assigned_to_id == user.id,
+                Tender.company_id == user.company_id
+            ).order_by(Tender.created_at.desc()).all()
     
     # Handle export
     export_format = request.args.get('export')
@@ -1154,12 +1678,23 @@ def closed_tenders_report():
         flash('No closed status found in system', 'warning')
         return redirect(url_for('reports'))
     
+    # Check if user can view all tenders
+    from services.permissions_service import PermissionsService
+    can_view_all = PermissionsService.user_has_permission(user.id, 'view_all_tenders', user.company_id)
+    
     if user.is_super_admin:
         # Super admin sees all closed tenders
         tenders = Tender.query.filter_by(status_id=closed_status.id).order_by(Tender.updated_at.desc()).all()
-    else:
-        # Company users see only their company's closed tenders
+    elif can_view_all:
+        # Company admins see all company's closed tenders
         tenders = Tender.query.filter(
+            Tender.company_id == user.company_id,
+            Tender.status_id == closed_status.id
+        ).order_by(Tender.updated_at.desc()).all()
+    else:
+        # Regular users see only assigned closed tenders
+        tenders = Tender.query.join(TenderAssignment).filter(
+            TenderAssignment.assigned_to_id == user.id,
             Tender.company_id == user.company_id,
             Tender.status_id == closed_status.id
         ).order_by(Tender.updated_at.desc()).all()
@@ -1190,15 +1725,27 @@ def overdue_tenders_report():
     user = AuthService.get_user_by_id(session['user_id'])
     current_date = datetime.utcnow()
     
+    # Check if user can view all tenders
+    from services.permissions_service import PermissionsService
+    can_view_all = PermissionsService.user_has_permission(user.id, 'view_all_tenders', user.company_id)
+    
     if user.is_super_admin:
         # Super admin sees all overdue tenders
         tenders = Tender.query.filter(
             Tender.submission_deadline < current_date,
             Tender.submission_deadline.isnot(None)
         ).order_by(Tender.submission_deadline.desc()).all()
-    else:
-        # Company users see only their company's overdue tenders
+    elif can_view_all:
+        # Company admins see all company's overdue tenders
         tenders = Tender.query.filter(
+            Tender.company_id == user.company_id,
+            Tender.submission_deadline < current_date,
+            Tender.submission_deadline.isnot(None)
+        ).order_by(Tender.submission_deadline.desc()).all()
+    else:
+        # Regular users see only assigned overdue tenders
+        tenders = Tender.query.join(TenderAssignment).filter(
+            TenderAssignment.assigned_to_id == user.id,
             Tender.company_id == user.company_id,
             Tender.submission_deadline < current_date,
             Tender.submission_deadline.isnot(None)
@@ -1231,12 +1778,22 @@ def tenders_by_category_report():
     user = AuthService.get_user_by_id(session['user_id'])
     current_date = datetime.utcnow()
     
+    # Check if user can view all tenders
+    from services.permissions_service import PermissionsService
+    can_view_all = PermissionsService.user_has_permission(user.id, 'view_all_tenders', user.company_id)
+    
     if user.is_super_admin:
         # Super admin sees all tenders
         tenders = Tender.query.order_by(Tender.category_id, Tender.created_at.desc()).all()
-    else:
-        # Company users see only their company's tenders
+    elif can_view_all:
+        # Company admins see all company's tenders
         tenders = Tender.query.filter_by(company_id=user.company_id).order_by(Tender.category_id, Tender.created_at.desc()).all()
+    else:
+        # Regular users see only assigned tenders
+        tenders = Tender.query.join(TenderAssignment).filter(
+            TenderAssignment.assigned_to_id == user.id,
+            Tender.company_id == user.company_id
+        ).order_by(Tender.category_id, Tender.created_at.desc()).all()
     
     # Group tenders by category
     categories = {}
@@ -4001,6 +4558,368 @@ def company_logo(company_id):
     except Exception as e:
         # Return default logo on error
         return send_from_directory('static/images', 'default-company-logo.png')
+
+
+# =====================================================
+# ACCOUNTING ROUTES
+# =====================================================
+
+@app.route('/accounting/dashboard')
+@login_required
+@module_required('accounting')
+def accounting_dashboard():
+    """Accounting dashboard"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        # Get summary data
+        from models import Account, JournalEntry, Transaction, AccountType
+        
+        # Get account balances by type
+        account_types = AccountType.query.all()
+        balances_by_type = {}
+        
+        for acc_type in account_types:
+            accounts = Account.query.filter_by(
+                company_id=company_id,
+                account_type_id=acc_type.id,
+                is_active=True
+            ).all()
+            total = sum([acc.get_balance() for acc in accounts])
+            balances_by_type[acc_type.name] = {
+                'total': total,
+                'category': acc_type.category
+            }
+        
+        # Calculate financial metrics
+        revenue = sum([v['total'] for k, v in balances_by_type.items() if v['category'] == 'revenue'])
+        expenses = sum([v['total'] for k, v in balances_by_type.items() if v['category'] == 'expense'])
+        assets = sum([v['total'] for k, v in balances_by_type.items() if v['category'] == 'asset'])
+        liabilities = sum([v['total'] for k, v in balances_by_type.items() if v['category'] == 'liability'])
+        equity = sum([v['total'] for k, v in balances_by_type.items() if v['category'] == 'equity'])
+        
+        net_income = revenue - expenses
+        
+        # Get recent journal entries
+        recent_entries = JournalEntry.query.filter_by(
+            company_id=company_id
+        ).order_by(JournalEntry.entry_date.desc()).limit(10).all()
+        
+        return render_template('accounting/dashboard.html',
+                             balances_by_type=balances_by_type,
+                             revenue=revenue,
+                             expenses=expenses,
+                             assets=assets,
+                             liabilities=liabilities,
+                             equity=equity,
+                             net_income=net_income,
+                             recent_entries=recent_entries)
+    
+    except Exception as e:
+        flash(f'Error loading accounting dashboard: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+
+
+@app.route('/accounting/chart-of-accounts')
+@login_required
+@module_required('accounting')
+def chart_of_accounts():
+    """View chart of accounts"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        from models import Account, AccountType
+        
+        accounts = Account.query.filter_by(company_id=company_id).order_by(Account.account_number).all()
+        account_types = AccountType.query.all()
+        
+        return render_template('accounting/chart_of_accounts.html',
+                             accounts=accounts,
+                             account_types=account_types)
+    
+    except Exception as e:
+        flash(f'Error loading chart of accounts: {str(e)}', 'error')
+        return redirect(url_for('accounting_dashboard'))
+
+
+@app.route('/accounting/accounts/create', methods=['GET', 'POST'])
+@login_required
+@module_required('accounting')
+def create_account():
+    """Create new account"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        from models import Account, AccountType
+        
+        if request.method == 'POST':
+            account = Account(
+                company_id=company_id,
+                account_number=request.form.get('account_number'),
+                account_name=request.form.get('account_name'),
+                account_type_id=request.form.get('account_type_id'),
+                description=request.form.get('description'),
+                is_active=True
+            )
+            
+            db.session.add(account)
+            db.session.commit()
+            
+            flash('Account created successfully!', 'success')
+            return redirect(url_for('chart_of_accounts'))
+        
+        account_types = AccountType.query.all()
+        return render_template('accounting/create_account.html', account_types=account_types)
+    
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating account: {str(e)}', 'error')
+        return redirect(url_for('chart_of_accounts'))
+
+
+@app.route('/accounting/journal-entries')
+@login_required
+@module_required('accounting')
+def journal_entries():
+    """View journal entries"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        from models import JournalEntry
+        
+        entries = JournalEntry.query.filter_by(
+            company_id=company_id
+        ).order_by(JournalEntry.entry_date.desc()).all()
+        
+        return render_template('accounting/journal_entries.html', entries=entries)
+    
+    except Exception as e:
+        flash(f'Error loading journal entries: {str(e)}', 'error')
+        return redirect(url_for('accounting_dashboard'))
+
+
+@app.route('/accounting/journal-entries/create', methods=['GET', 'POST'])
+@login_required
+@module_required('accounting')
+def create_journal_entry():
+    """Create new journal entry"""
+    try:
+        company_id = session.get('company_id')
+        user_id = session.get('user_id')
+        
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        from models import Account, JournalEntry, Transaction
+        
+        if request.method == 'POST':
+            # Create journal entry
+            entry = JournalEntry(
+                company_id=company_id,
+                entry_number=request.form.get('entry_number'),
+                entry_date=datetime.strptime(request.form.get('entry_date'), '%Y-%m-%d').date(),
+                description=request.form.get('description'),
+                reference=request.form.get('reference'),
+                created_by=user_id,
+                is_posted=False
+            )
+            
+            db.session.add(entry)
+            db.session.flush()
+            
+            # Create transactions
+            account_ids = request.form.getlist('account_id[]')
+            debits = request.form.getlist('debit[]')
+            credits = request.form.getlist('credit[]')
+            descriptions = request.form.getlist('line_description[]')
+            
+            for i in range(len(account_ids)):
+                if account_ids[i]:
+                    transaction = Transaction(
+                        journal_entry_id=entry.id,
+                        account_id=account_ids[i],
+                        debit_amount=Decimal(debits[i]) if debits[i] else 0,
+                        credit_amount=Decimal(credits[i]) if credits[i] else 0,
+                        description=descriptions[i] if i < len(descriptions) else ''
+                    )
+                    db.session.add(transaction)
+            
+            # Check if balanced
+            if entry.is_balanced():
+                db.session.commit()
+                flash('Journal entry created successfully!', 'success')
+                return redirect(url_for('journal_entries'))
+            else:
+                db.session.rollback()
+                flash('Journal entry is not balanced. Debits must equal credits.', 'error')
+                return redirect(url_for('create_journal_entry'))
+        
+        # GET request
+        accounts = Account.query.filter_by(
+            company_id=company_id,
+            is_active=True
+        ).order_by(Account.account_number).all()
+        
+        # Generate next entry number
+        last_entry = JournalEntry.query.filter_by(company_id=company_id).order_by(JournalEntry.id.desc()).first()
+        next_number = f"JE-{(last_entry.id + 1) if last_entry else 1:05d}"
+        
+        return render_template('accounting/create_journal_entry.html',
+                             accounts=accounts,
+                             next_number=next_number)
+    
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating journal entry: {str(e)}', 'error')
+        return redirect(url_for('journal_entries'))
+
+
+@app.route('/accounting/reports/income-statement')
+@login_required
+@module_required('accounting')
+def income_statement():
+    """Generate income statement"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        from models import Account, AccountType
+        
+        # Get revenue accounts
+        revenue_type = AccountType.query.filter_by(category='revenue').first()
+        revenue_accounts = Account.query.filter_by(
+            company_id=company_id,
+            account_type_id=revenue_type.id,
+            is_active=True
+        ).all() if revenue_type else []
+        
+        # Get expense accounts
+        expense_type = AccountType.query.filter_by(category='expense').first()
+        expense_accounts = Account.query.filter_by(
+            company_id=company_id,
+            account_type_id=expense_type.id,
+            is_active=True
+        ).all() if expense_type else []
+        
+        total_revenue = sum([acc.get_balance() for acc in revenue_accounts])
+        total_expenses = sum([acc.get_balance() for acc in expense_accounts])
+        net_income = total_revenue - total_expenses
+        
+        # Get current date for report
+        from datetime import datetime
+        report_date = datetime.now()
+        
+        return render_template('accounting/income_statement.html',
+                             revenue_accounts=revenue_accounts,
+                             expense_accounts=expense_accounts,
+                             total_revenue=total_revenue,
+                             total_expenses=total_expenses,
+                             net_income=net_income,
+                             report_date=report_date)
+    
+    except Exception as e:
+        flash(f'Error generating income statement: {str(e)}', 'error')
+        return redirect(url_for('accounting_dashboard'))
+
+
+@app.route('/accounting/reports/balance-sheet')
+@login_required
+@module_required('accounting')
+def balance_sheet():
+    """Generate balance sheet"""
+    try:
+        company_id = session.get('company_id')
+        if not company_id:
+            flash('No company associated with your account.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        from models import Account, AccountType
+        
+        # Get assets
+        asset_types = AccountType.query.filter_by(category='asset').all()
+        assets = []
+        total_assets = 0
+        for acc_type in asset_types:
+            accts = Account.query.filter_by(
+                company_id=company_id,
+                account_type_id=acc_type.id,
+                is_active=True
+            ).all()
+            for acc in accts:
+                balance = acc.get_balance()
+                assets.append({'account': acc, 'balance': balance})
+                total_assets += balance
+        
+        # Get liabilities
+        liability_types = AccountType.query.filter_by(category='liability').all()
+        liabilities = []
+        total_liabilities = 0
+        for acc_type in liability_types:
+            accts = Account.query.filter_by(
+                company_id=company_id,
+                account_type_id=acc_type.id,
+                is_active=True
+            ).all()
+            for acc in accts:
+                balance = acc.get_balance()
+                liabilities.append({'account': acc, 'balance': balance})
+                total_liabilities += balance
+        
+        # Get equity
+        equity_types = AccountType.query.filter_by(category='equity').all()
+        equity_accounts = []
+        total_equity = 0
+        for acc_type in equity_types:
+            accts = Account.query.filter_by(
+                company_id=company_id,
+                account_type_id=acc_type.id,
+                is_active=True
+            ).all()
+            for acc in accts:
+                balance = acc.get_balance()
+                equity_accounts.append({'account': acc, 'balance': balance})
+                total_equity += balance
+        
+        # Get current date for report
+        from datetime import datetime
+        report_date = datetime.now()
+        
+        return render_template('accounting/balance_sheet.html',
+                             assets=assets,
+                             liabilities=liabilities,
+                             equity_accounts=equity_accounts,
+                             total_assets=total_assets,
+                             total_liabilities=total_liabilities,
+                             total_equity=total_equity,
+                             report_date=report_date)
+    
+    except Exception as e:
+        flash(f'Error generating balance sheet: {str(e)}', 'error')
+        return redirect(url_for('accounting_dashboard'))
+
+
+@app.route('/accounting/help')
+@login_required
+@module_required('accounting')
+def accounting_help():
+    """Accounting help guide"""
+    return render_template('accounting/help.html')
+
 
 @app.route('/admin/billing/bills/export')
 @super_admin_required
@@ -7393,10 +8312,16 @@ def log_job_execution(job_id, status, duration=None, created_count=None, error=N
 # Create scheduler
 scheduler = BackgroundScheduler()
 
+# Wrapper function to run with app context
+def auto_generate_notifications_with_context():
+    """Wrapper to run notifications with Flask app context"""
+    with app.app_context():
+        return auto_generate_notifications_main()
+
 # Add job to run every hour
 scheduler = BackgroundScheduler(timezone='Africa/Johannesburg')
 scheduler.add_job(
-    func=auto_generate_notifications_main,
+    func=auto_generate_notifications_with_context,
     trigger=CronTrigger(hour=0, minute=0),
     id='daily_notifications',
     name='Daily Notification Generation',
@@ -7734,15 +8659,18 @@ def get_scheduler_stats():
                 'created_count': last_log['created_count']
             }
         
-        return jsonify({
+        stats = {
             'total_executions': total_executions,
             'successful_executions': successful_executions,
             'failed_executions': failed_executions,
-            'success_rate': (successful_executions / total_executions * 100) if total_executions > 0 else 0,
-            'average_duration': avg_duration,
+            'success_rate': (successful_executions / total_executions * 100) if total_executions > 0 else 0.0,
+            'average_duration': avg_duration if avg_duration else 0.0,
             'total_notifications_created': total_notifications,
             'last_execution': last_execution
-        })
+        }
+        
+        logger.info(f"Scheduler stats: {stats}")
+        return jsonify(stats)
         
     except Exception as e:
         logger.error(f"Error getting scheduler stats: {str(e)}")
@@ -7761,6 +8689,7 @@ def chatbot_api():
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
+        conversation_id = data.get('conversation_id')  # Optional conversation tracking
         
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
@@ -7771,14 +8700,15 @@ def chatbot_api():
         if not company_id:
             return jsonify({'success': False, 'error': 'No company associated'}), 400
         
-        # Process message using service
-        response = chatbot.process_message(message, company_id, user_id)
+        # Process message using service with conversation context
+        response = chatbot.process_message(message, company_id, user_id, conversation_id)
         
         return jsonify({
             'success': True,
             'response': response['response'],
             'type': response['type'],
             'data': response.get('data'),
+            'suggestions': response.get('suggestions', []),
             'powered_by': response.get('powered_by', 'TenderBot')
         })
         

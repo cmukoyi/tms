@@ -1,6 +1,5 @@
 
 
-{% block content %}
 <table class="table table-hover">
                         <thead class="table-light">
                             <tr>
@@ -19,12 +18,12 @@
                                     {{ document.original_filename }}
                                 </td>
                                 <td>
-                                    <span class="badge bg-secondary">{{ document.doc_type.name }}</span>
+                                    <span class="badge bg-secondary">{{ document.document_type or 'General' }}</span>
                                 </td>
                                 <td>{{ document.get_file_size_mb() }} MB</td>
                                 <td>
-                                    <small>{{ document.created_at.strftime('%Y-%m-%d') }}</small><br>
-                                    <small class="text-muted">by {{ document.uploaded_by_user.full_name }}</small>
+                                    <small>{{ document.uploaded_at.strftime('%Y-%m-%d') if document.uploaded_at else document.created_at.strftime('%Y-%m-%d') }}</small><br>
+                                    <small class="text-muted">by {{ document.uploaded_by.full_name if document.uploaded_by else 'Unknown' }}</small>
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
@@ -43,4 +42,3 @@
                             {% endfor %}
                         </tbody>
                     </table>
-{% endblock %}

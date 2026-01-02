@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}Accounting Help{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h3 class="mb-0"><i class="fas fa-question-circle me-2"></i>Accounting Help Guide</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Overview -->
+                    <div class="mb-5">
+                        <h4 class="text-primary border-bottom pb-2"><i class="fas fa-info-circle me-2"></i>What is Double-Entry Bookkeeping?</h4>
+                        <p class="lead">The accounting module uses <strong>double-entry bookkeeping</strong>, a system that has been used for over 500 years to ensure accurate financial records.</p>
+                        
+                        <div class="alert alert-info">
+                            <h5><i class="fas fa-lightbulb me-2"></i>Key Principle</h5>
+                            <p class="mb-0"><strong>Every financial transaction affects at least TWO accounts.</strong> This creates a complete picture of where money comes from and where it goes.</p>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>DEBIT Side</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Increases:</strong></p>
+                                        <ul>
+                                            <li>Assets (Cash, Bank, Inventory, Equipment)</li>
+                                            <li>Expenses (Salaries, Rent, Utilities)</li>
+                                        </ul>
+                                        <p><strong>Decreases:</strong></p>
+                                        <ul>
+                                            <li>Liabilities (Loans, Accounts Payable)</li>
+                                            <li>Equity (Owner's Capital)</li>
+                                            <li>Revenue (Sales, Service Income)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-primary">
+                                    <div class="card-header bg-primary text-white">
+                                        <h5 class="mb-0"><i class="fas fa-minus-circle me-2"></i>CREDIT Side</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Increases:</strong></p>
+                                        <ul>
+                                            <li>Liabilities (Loans, Accounts Payable)</li>
+                                            <li>Equity (Owner's Capital)</li>
+                                            <li>Revenue (Sales, Service Income)</li>
+                                        </ul>
+                                        <p><strong>Decreases:</strong></p>
+                                        <ul>
+                                            <li>Assets (Cash, Bank, Inventory, Equipment)</li>
+                                            <li>Expenses (Salaries, Rent, Utilities)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Why Balance -->
+                    <div class="mb-5">
+                        <h4 class="text-primary border-bottom pb-2"><i class="fas fa-balance-scale me-2"></i>Why Must Journal Entries Balance?</h4>
+                        
+                        <div class="alert alert-danger">
+                            <h5><i class="fas fa-exclamation-triangle me-2"></i>The Golden Rule</h5>
+                            <p class="mb-0"><strong>DEBITS MUST ALWAYS EQUAL CREDITS</strong></p>
+                            <p class="mt-2">This ensures your books are mathematically correct and nothing is missing or entered incorrectly.</p>
+                        </div>
+
+                        <h5 class="mt-4">Practical Examples:</h5>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Example 1: Receiving Money from a Customer (R 1,000)</strong>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Account</th>
+                                            <th class="text-end">Debit</th>
+                                            <th class="text-end">Credit</th>
+                                            <th>Explanation</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Bank Account</strong> (Asset)</td>
+                                            <td class="text-end text-success">R 1,000.00</td>
+                                            <td class="text-end">-</td>
+                                            <td>Money coming IN (increase asset)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Sales Revenue</strong> (Income)</td>
+                                            <td class="text-end">-</td>
+                                            <td class="text-end text-primary">R 1,000.00</td>
+                                            <td>Earned income (increase revenue)</td>
+                                        </tr>
+                                        <tr class="table-secondary">
+                                            <th>TOTALS</th>
+                                            <th class="text-end">R 1,000.00</th>
+                                            <th class="text-end">R 1,000.00</th>
+                                            <th><span class="badge bg-success">✓ BALANCED</span></th>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Example 2: Paying Rent (R 5,000)</strong>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Account</th>
+                                            <th class="text-end">Debit</th>
+                                            <th class="text-end">Credit</th>
+                                            <th>Explanation</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Rent Expense</strong> (Expense)</td>
+                                            <td class="text-end text-success">R 5,000.00</td>
+                                            <td class="text-end">-</td>
+                                            <td>Expense incurred (increase expense)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Bank Account</strong> (Asset)</td>
+                                            <td class="text-end">-</td>
+                                            <td class="text-end text-primary">R 5,000.00</td>
+                                            <td>Money going OUT (decrease asset)</td>
+                                        </tr>
+                                        <tr class="table-secondary">
+                                            <th>TOTALS</th>
+                                            <th class="text-end">R 5,000.00</th>
+                                            <th class="text-end">R 5,000.00</th>
+                                            <th><span class="badge bg-success">✓ BALANCED</span></th>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong>Example 3: Taking a Loan (R 50,000)</strong>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Account</th>
+                                            <th class="text-end">Debit</th>
+                                            <th class="text-end">Credit</th>
+                                            <th>Explanation</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Bank Account</strong> (Asset)</td>
+                                            <td class="text-end text-success">R 50,000.00</td>
+                                            <td class="text-end">-</td>
+                                            <td>Money received (increase asset)</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Loan Payable</strong> (Liability)</td>
+                                            <td class="text-end">-</td>
+                                            <td class="text-end text-primary">R 50,000.00</td>
+                                            <td>Amount owed (increase liability)</td>
+                                        </tr>
+                                        <tr class="table-secondary">
+                                            <th>TOTALS</th>
+                                            <th class="text-end">R 50,000.00</th>
+                                            <th class="text-end">R 50,000.00</th>
+                                            <th><span class="badge bg-success">✓ BALANCED</span></th>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature Guide -->
+                    <div class="mb-5">
+                        <h4 class="text-primary border-bottom pb-2"><i class="fas fa-book-open me-2"></i>How to Use Each Feature</h4>
+                        
+                        <div class="accordion" id="featuresAccordion">
+                            <!-- Dashboard -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingDashboard">
+                                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDashboard">
+                                        <i class="fas fa-tachometer-alt me-2"></i> <strong>Dashboard</strong>
+                                    </button>
+                                </h2>
+                                <div id="collapseDashboard" class="accordion-collapse collapse show" data-bs-parent="#featuresAccordion">
+                                    <div class="accordion-body">
+                                        <p><strong>Purpose:</strong> Get a quick overview of your financial position</p>
+                                        <p><strong>What you'll see:</strong></p>
+                                        <ul>
+                                            <li><strong>Total Assets:</strong> Everything your company owns (cash, equipment, inventory)</li>
+                                            <li><strong>Total Liabilities:</strong> Everything your company owes (loans, payables)</li>
+                                            <li><strong>Total Equity:</strong> Net worth (Assets - Liabilities)</li>
+                                            <li><strong>Recent Journal Entries:</strong> Latest transactions</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Chart of Accounts -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingCOA">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCOA">
+                                        <i class="fas fa-list me-2"></i> <strong>Chart of Accounts</strong>
+                                    </button>
+                                </h2>
+                                <div id="collapseCOA" class="accordion-collapse collapse" data-bs-parent="#featuresAccordion">
+                                    <div class="accordion-body">
+                                        <p><strong>Purpose:</strong> Manage all your accounting categories</p>
+                                        <p><strong>What it is:</strong> A complete list of all accounts used to categorize your financial transactions</p>
+                                        <p><strong>How to use:</strong></p>
+                                        <ol>
+                                            <li>Click <strong>"Create New Account"</strong></li>
+                                            <li>Select the <strong>Account Type</strong> (Cash, Bank, Sales, Rent, etc.)</li>
+                                            <li>Enter an <strong>Account Number</strong> (e.g., 1001 for Bank)</li>
+                                            <li>Give it a clear <strong>Name</strong> (e.g., "First National Bank - Checking")</li>
+                                            <li>Accounts are automatically categorized by type</li>
+                                        </ol>
+                                        <p><strong>Account Numbering Guide:</strong></p>
+                                        <ul>
+                                            <li><strong>1000-1999:</strong> Assets (Cash, Bank, Inventory)</li>
+                                            <li><strong>2000-2999:</strong> Liabilities (Loans, Payables)</li>
+                                            <li><strong>3000-3999:</strong> Equity (Capital, Retained Earnings)</li>
+                                            <li><strong>4000-4999:</strong> Revenue (Sales, Service Income)</li>
+                                            <li><strong>5000-9999:</strong> Expenses (Rent, Salaries, Utilities)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Journal Entries -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingJE">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseJE">
+                                        <i class="fas fa-book me-2"></i> <strong>Journal Entries</strong>
+                                    </button>
+                                </h2>
+                                <div id="collapseJE" class="accordion-collapse collapse" data-bs-parent="#featuresAccordion">
+                                    <div class="accordion-body">
+                                        <p><strong>Purpose:</strong> Record all financial transactions</p>
+                                        <p><strong>Step-by-Step Guide:</strong></p>
+                                        <ol>
+                                            <li><strong>Click "Create New Entry"</strong></li>
+                                            <li><strong>Fill in Details:</strong>
+                                                <ul>
+                                                    <li>Date of transaction</li>
+                                                    <li>Description (what happened)</li>
+                                                    <li>Reference number (invoice #, receipt #)</li>
+                                                </ul>
+                                            </li>
+                                            <li><strong>Add Transaction Lines:</strong>
+                                                <ul>
+                                                    <li>At least 2 lines required</li>
+                                                    <li>Select the account affected</li>
+                                                    <li>Enter amount in DEBIT or CREDIT (never both)</li>
+                                                    <li>Add line description if needed</li>
+                                                </ul>
+                                            </li>
+                                            <li><strong>Check Totals:</strong> Debits MUST equal Credits</li>
+                                            <li><strong>Submit</strong></li>
+                                        </ol>
+                                        
+                                        <div class="alert alert-warning mt-3">
+                                            <strong><i class="fas fa-exclamation-triangle me-2"></i>Common Mistake:</strong><br>
+                                            Entering the same amount in BOTH debit and credit columns. Choose only ONE side per line.
+                                        </div>
+
+                                        <p class="mt-3"><strong>Quick Tips:</strong></p>
+                                        <ul>
+                                            <li>Think: "Where is the money coming FROM?" (Credit) and "Where is it GOING TO?" (Debit)</li>
+                                            <li>For expenses: Debit the expense account, Credit your bank</li>
+                                            <li>For sales: Debit your bank, Credit sales revenue</li>
+                                            <li>Use "Add Line" button for transactions affecting more than 2 accounts</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Income Statement -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingIS">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseIS">
+                                        <i class="fas fa-chart-line me-2"></i> <strong>Income Statement</strong>
+                                    </button>
+                                </h2>
+                                <div id="collapseIS" class="accordion-collapse collapse" data-bs-parent="#featuresAccordion">
+                                    <div class="accordion-body">
+                                        <p><strong>Purpose:</strong> Shows if your business is making a profit or loss</p>
+                                        <p><strong>Formula:</strong> <code>Profit = Revenue - Expenses</code></p>
+                                        <p><strong>What it shows:</strong></p>
+                                        <ul>
+                                            <li><strong>Revenue:</strong> All income earned (sales, services)</li>
+                                            <li><strong>Expenses:</strong> All costs incurred (rent, salaries, utilities)</li>
+                                            <li><strong>Net Income:</strong> Bottom line - profit or (loss)</li>
+                                        </ul>
+                                        <p><strong>How to use:</strong></p>
+                                        <ol>
+                                            <li>Select date range (month, quarter, year)</li>
+                                            <li>Review revenue sources</li>
+                                            <li>Analyze expense categories</li>
+                                            <li>Check if profitable (green) or loss-making (red)</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Balance Sheet -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingBS">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBS">
+                                        <i class="fas fa-balance-scale me-2"></i> <strong>Balance Sheet</strong>
+                                    </button>
+                                </h2>
+                                <div id="collapseBS" class="accordion-collapse collapse" data-bs-parent="#featuresAccordion">
+                                    <div class="accordion-body">
+                                        <p><strong>Purpose:</strong> Snapshot of your company's financial position at a specific date</p>
+                                        <p><strong>Formula:</strong> <code>Assets = Liabilities + Equity</code></p>
+                                        <p><strong>What it shows:</strong></p>
+                                        <ul>
+                                            <li><strong>Assets:</strong> What you OWN (cash, equipment, receivables)</li>
+                                            <li><strong>Liabilities:</strong> What you OWE (loans, payables)</li>
+                                            <li><strong>Equity:</strong> What you're WORTH (capital + retained profits)</li>
+                                        </ul>
+                                        <p><strong>How to read it:</strong></p>
+                                        <ul>
+                                            <li>Higher assets vs liabilities = stronger position</li>
+                                            <li>Positive equity = company has net worth</li>
+                                            <li>The report always balances mathematically</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Reference -->
+                    <div class="mb-4">
+                        <h4 class="text-primary border-bottom pb-2"><i class="fas fa-bolt me-2"></i>Quick Reference Card</h4>
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Transaction Type</th>
+                                        <th>Debit</th>
+                                        <th>Credit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Received payment from customer</td>
+                                        <td>Bank / Cash</td>
+                                        <td>Sales Revenue</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Paid rent</td>
+                                        <td>Rent Expense</td>
+                                        <td>Bank / Cash</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Paid salaries</td>
+                                        <td>Salaries Expense</td>
+                                        <td>Bank / Cash</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Purchased equipment</td>
+                                        <td>Equipment (Asset)</td>
+                                        <td>Bank / Cash</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Took a loan</td>
+                                        <td>Bank / Cash</td>
+                                        <td>Loan Payable</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Paid loan installment</td>
+                                        <td>Loan Payable</td>
+                                        <td>Bank / Cash</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Owner invested cash</td>
+                                        <td>Bank / Cash</td>
+                                        <td>Owner's Capital</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Paid electricity bill</td>
+                                        <td>Utilities Expense</td>
+                                        <td>Bank / Cash</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Need More Help -->
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle me-2"></i>Still Need Help?</h5>
+                        <p class="mb-0">
+                            <strong>Remember:</strong> Every transaction tells a story. Ask yourself:<br>
+                            1. What did we receive? (usually Debit)<br>
+                            2. Where did it come from? (usually Credit)<br>
+                            3. Do my totals balance?
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

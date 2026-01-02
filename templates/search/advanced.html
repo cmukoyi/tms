@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Advanced Search{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="fas fa-search"></i> Advanced Search</h2>
+            <p class="text-muted">Use advanced filters to find exactly what you're looking for</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <!-- Saved Searches Sidebar -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-save"></i> Saved Searches</h6>
+                </div>
+                <div class="card-body">
+                    {% if saved_searches %}
+                    <div class="list-group">
+                        {% for search in saved_searches %}
+                        <a href="{{ url_for('advanced_search.load_saved_search', search_id=search.id) }}" 
+                           class="list-group-item list-group-item-action">
+                            <i class="fas fa-folder me-2"></i>{{ search.name }}
+                            <button class="btn btn-sm btn-link float-end text-danger" 
+                                    onclick="event.preventDefault(); deleteSavedSearch({{ search.id }})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted small">No saved searches yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <!-- Search Form -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between">
+                    <h6 class="mb-0"><i class="fas fa-filter"></i> Search Filters</h6>
+                    <button class="btn btn-sm btn-primary" onclick="saveCurrentSearch()">
+                        <i class="fas fa-save"></i> Save Search
+                    </button>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('advanced_search.advanced_search') }}">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label>Search Text</label>
+                                <input type="text" name="search_text" class="form-control" 
+                                       placeholder="Search in title, description, reference..."
+                                       value="{{ filters.get('search_text', '') }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label>Category</label>
+                                <input type="text" name="category" class="form-control" 
+                                       value="{{ filters.get('category', '') }}">
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label>Value Range</label>
+                                <div class="input-group">
+                                    <input type="number" name="min_value" class="form-control" 
+                                           placeholder="Min" value="{{ filters.get('min_value', '') }}">
+                                    <span class="input-group-text">to</span>
+                                    <input type="number" name="max_value" class="form-control" 
+                                           placeholder="Max" value="{{ filters.get('max_value', '') }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label>Created By</label>
+                                <select name="created_by" class="form-control">
+                                    <option value="">All Users</option>
+                                    {% for user in users %}
+                                    <option value="{{ user.id }}" {% if filters.get('created_by') == user.id|string %}selected{% endif %}>
+                                        {{ user.username }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label>Created Date Range</label>
+                                <div class="input-group">
+                                    <input type="date" name="date_from" class="form-control" 
+                                           value="{{ filters.get('date_from', '') }}">
+                                    <span class="input-group-text">to</span>
+                                    <input type="date" name="date_to" class="form-control" 
+                                           value="{{ filters.get('date_to', '') }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label>Closing Date Range</label>
+                                <div class="input-group">
+                                    <input type="date" name="closing_from" class="form-control" 
+                                           value="{{ filters.get('closing_from', '') }}">
+                                    <span class="input-group-text">to</span>
+                                    <input type="date" name="closing_to" class="form-control" 
+                                           value="{{ filters.get('closing_to', '') }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search"></i> Search
+                                </button>
+                                <a href="{{ url_for('advanced_search.advanced_search') }}" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> Clear
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-list"></i> Search Results 
+                        <span class="badge bg-primary">{{ result_count }}</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if tenders %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Reference</th>
+                                    <th>Title</th>
+                                    <th>Category</th>
+                                    <th>Status</th>
+                                    <th>Value</th>
+                                    <th>Closing Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tender in tenders %}
+                                <tr>
+                                    <td><strong>{{ tender.reference_number }}</strong></td>
+                                    <td>
+                                        <a href="{{ url_for('view_tender', tender_id=tender.id) }}">
+                                            {{ tender.title }}
+                                        </a>
+                                    </td>
+                                    <td>{{ tender.category }}</td>
+                                    <td><span class="badge bg-info">{{ tender.status }}</span></td>
+                                    <td>R {{ "{:,.2f}".format(tender.value) if tender.value else '0.00' }}</td>
+                                    <td>{{ tender.closing_date.strftime('%Y-%m-%d') if tender.closing_date else 'N/A' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted py-5">
+                        <i class="fas fa-search fa-3x mb-3"></i><br>
+                        No results found. Try adjusting your search filters.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function saveCurrentSearch() {
+    const name = prompt('Enter a name for this search:');
+    if (!name) return;
+    
+    const form = document.querySelector('form');
+    const formData = new FormData(form);
+    const filters = {};
+    for (let [key, value] of formData.entries()) {
+        if (value) filters[key] = value;
+    }
+    
+    const response = await fetch('/search/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, filters})
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        alert('Search saved successfully!');
+        location.reload();
+    } else {
+        alert('Error: ' + data.message);
+    }
+}
+
+async function deleteSavedSearch(searchId) {
+    if (!confirm('Delete this saved search?')) return;
+    
+    const response = await fetch(`/search/delete/${searchId}`, {
+        method: 'POST'
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+    } else {
+        alert('Error: ' + data.message);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Assign Roles - {{ target_user.first_name }} {{ target_user.last_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-user-tag"></i> Assign Roles</h2>
+                <a href="{{ url_for('company_users') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Users
+                </a>
+            </div>
+
+            <!-- User Info -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5>
+                        <i class="fas fa-user"></i> 
+                        {{ target_user.first_name }} {{ target_user.last_name }}
+                    </h5>
+                    <p class="text-muted mb-0">{{ target_user.email }}</p>
+                </div>
+            </div>
+
+            <!-- Current Roles -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Current Roles ({{ user_roles|length }})</h5>
+                </div>
+                <div class="card-body">
+                    {% if user_roles %}
+                    <div class="list-group">
+                        {% for role in user_roles %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ role.display_name }}</strong><br>
+                                <small class="text-muted">{{ role.description }}</small>
+                            </div>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="action" value="remove">
+                                <input type="hidden" name="role_id" value="{{ role.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No roles assigned yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Add Role -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Add Role</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add">
+                        <div class="form-group">
+                            <label for="role_id">Select Role</label>
+                            <select class="form-control" id="role_id" name="role_id" required>
+                                <option value="">-- Select a role --</option>
+                                {% for role in available_roles if role.id not in user_role_ids %}
+                                <option value="{{ role.id }}">
+                                    {{ role.display_name }} - {{ role.description }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add Role
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

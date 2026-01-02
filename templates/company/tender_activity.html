@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Log - {{ tender.title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-md-10 offset-md-1">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-history"></i> Activity Log</h2>
+                <a href="{{ url_for('view_tender', tender_id=tender.id) }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Tender
+                </a>
+            </div>
+
+            <!-- Tender Info Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">{{ tender.title }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <p><strong>Reference:</strong> {{ tender.reference or 'N/A' }}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p><strong>Status:</strong> 
+                                {% if workflow %}
+                                <span class="badge badge-{{ 
+                                    'warning' if workflow.status == 'pending_approval' 
+                                    else 'success' if workflow.status == 'approved' 
+                                    else 'danger' if workflow.status == 'rejected'
+                                    else 'primary' if workflow.status == 'submitted'
+                                    else 'info' if workflow.status == 'in_progress'
+                                    else 'secondary' }}">
+                                    {{ workflow.status.replace('_', ' ').title() }}
+                                </span>
+                                {% else %}
+                                <span class="badge badge-secondary">Draft</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-3">
+                            <p><strong>Value:</strong> R {{ '{:,.2f}'.format(tender.value) if tender.value else '0.00' }}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p><strong>Submission Date:</strong> {{ tender.submission_date.strftime('%Y-%m-%d') if tender.submission_date else 'N/A' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Timeline -->
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-stream"></i> Activity Timeline ({{ activities|length }} events)</h5>
+                </div>
+                <div class="card-body">
+                    {% if activities %}
+                    <div class="timeline">
+                        {% for activity in activities %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker {{ 
+                                'bg-success' if activity.activity_type in ['approved', 'submitted'] 
+                                else 'bg-danger' if activity.activity_type == 'rejected'
+                                else 'bg-warning' if activity.activity_type == 'submitted_for_approval'
+                                else 'bg-info' if activity.activity_type == 'assigned'
+                                else 'bg-primary' }}">
+                                <i class="fas {{ 
+                                    'fa-check' if activity.activity_type == 'approved' 
+                                    else 'fa-times' if activity.activity_type == 'rejected'
+                                    else 'fa-paper-plane' if activity.activity_type in ['submitted', 'submitted_for_approval']
+                                    else 'fa-user-plus' if activity.activity_type == 'assigned'
+                                    else 'fa-upload' if activity.activity_type == 'document_uploaded'
+                                    else 'fa-comment' if activity.activity_type == 'commented'
+                                    else 'fa-edit' if activity.activity_type == 'updated'
+                                    else 'fa-plus' if activity.activity_type == 'created'
+                                    else 'fa-circle' }}"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <div class="timeline-header">
+                                    <h6 class="mb-0">
+                                        {{ activity.activity_type.replace('_', ' ').title() }}
+                                    </h6>
+                                    <small class="text-muted">
+                                        {{ activity.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                    </small>
+                                </div>
+                                <div class="timeline-body">
+                                    <p class="mb-1">{{ activity.description }}</p>
+                                    {% if activity.user %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-user"></i> 
+                                        {{ activity.user.first_name }} {{ activity.user.last_name }}
+                                    </small>
+                                    {% endif %}
+                                    {% if activity.activity_metadata %}
+                                    <div class="mt-2">
+                                        <details>
+                                            <summary class="text-info" style="cursor: pointer;">
+                                                <i class="fas fa-info-circle"></i> Additional Details
+                                            </summary>
+                                            <pre class="mt-2 p-2 bg-light rounded"><code>{{ activity.activity_metadata }}</code></pre>
+                                        </details>
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.ip_address %}
+                                    <small class="text-muted d-block mt-1">
+                                        <i class="fas fa-network-wired"></i> IP: {{ activity.ip_address }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i>
+                        <h5>No Activity Yet</h5>
+                        <p class="mb-0">No activities have been recorded for this tender.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 70px;
+    margin-bottom: 30px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 15px;
+    top: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+
+.timeline-content {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.timeline-body p {
+    color: #333;
+}
+
+pre code {
+    font-size: 12px;
+    color: #666;
+}
+
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+details summary {
+    font-size: 13px;
+}
+
+details[open] summary {
+    margin-bottom: 10px;
+}
+</style>
+{% endblock %}

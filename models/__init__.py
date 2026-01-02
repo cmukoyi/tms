@@ -7,6 +7,9 @@ from sqlalchemy import Numeric
 
 db = SQLAlchemy()
 
+# Import additional models
+from models.saved_search import SavedSearch
+
 class Company(db.Model):
     __tablename__ = 'companies'
     
@@ -223,7 +226,8 @@ class DocumentType(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     
     # Relationships
-    documents = db.relationship('TenderDocument', backref='doc_type', lazy=True)
+    # NOTE: TenderDocument now uses string document_type instead of FK
+    # documents = db.relationship('TenderDocument', backref='doc_type', lazy=True)
     
     def get_allowed_extensions_list(self):
         """Get allowed extensions as list"""
@@ -237,36 +241,37 @@ class DocumentType(db.Model):
     def __str__(self):
         return self.name
 
-class TenderDocument(db.Model):
-    __tablename__ = 'tender_documents'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(255), nullable=False)
-    original_filename = db.Column(db.String(255), nullable=False)
-    file_path = db.Column(db.String(500), nullable=False)
-    file_size = db.Column(db.Integer)  # in bytes
-    mime_type = db.Column(db.String(100))
-    
-    # Foreign Keys
-    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
-    document_type_id = db.Column(db.Integer, db.ForeignKey('document_types.id'), nullable=False)
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    # Metadata
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    uploaded_by_user = db.relationship('User', foreign_keys=[uploaded_by])
-    
-    def get_file_size_mb(self):
-        """Get file size in MB"""
-        return round(self.file_size / (1024 * 1024), 2) if self.file_size else 0
-    
-    def __repr__(self):
-        return f'<TenderDocument {self.original_filename}>'
-
-    def __str__(self):
-        return self.original_filename
+# OLD TenderDocument model - replaced by workflow version below
+# class TenderDocument(db.Model):
+#     __tablename__ = 'tender_documents'
+#     
+#     id = db.Column(db.Integer, primary_key=True)
+#     filename = db.Column(db.String(255), nullable=False)
+#     original_filename = db.Column(db.String(255), nullable=False)
+#     file_path = db.Column(db.String(500), nullable=False)
+#     file_size = db.Column(db.Integer)  # in bytes
+#     mime_type = db.Column(db.String(100))
+#     
+#     # Foreign Keys
+#     tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+#     document_type_id = db.Column(db.Integer, db.ForeignKey('document_types.id'), nullable=False)
+#     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+#     
+#     # Metadata
+#     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+#     
+#     # Relationships
+#     uploaded_by_user = db.relationship('User', foreign_keys=[uploaded_by])
+#     
+#     def get_file_size_mb(self):
+#         """Get file size in MB"""
+#         return round(self.file_size / (1024 * 1024), 2) if self.file_size else 0
+#     
+#     def __repr__(self):
+#         return f'<TenderDocument {self.original_filename}>'
+# 
+#     def __str__(self):
+#         return self.original_filename
 
 class CustomField(db.Model):
     __tablename__ = 'custom_fields'
@@ -973,3 +978,377 @@ class NotificationService:
         
         db.session.commit()
         return len(notifications)
+
+
+# =====================================================
+# ACCOUNTING MODELS
+# =====================================================
+
+class AccountType(db.Model):
+    """Chart of accounts types"""
+    __tablename__ = 'account_types'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False, unique=True)
+    category = db.Column(db.String(20), nullable=False)  # asset, liability, equity, revenue, expense
+    normal_balance = db.Column(db.String(10), nullable=False)  # debit or credit
+    description = db.Column(db.Text)
+    
+    # Relationships
+    accounts = db.relationship('Account', backref='account_type', lazy=True)
+    
+    def __repr__(self):
+        return f'<AccountType {self.name}>'
+
+
+class Account(db.Model):
+    """General Ledger Accounts"""
+    __tablename__ = 'accounts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    account_number = db.Column(db.String(20), nullable=False)
+    account_name = db.Column(db.String(100), nullable=False)
+    account_type_id = db.Column(db.Integer, db.ForeignKey('account_types.id'), nullable=False)
+    description = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    transactions = db.relationship('Transaction', backref='account', lazy=True)
+    
+    def get_balance(self):
+        """Calculate account balance"""
+        debits = sum([t.debit_amount for t in self.transactions if t.debit_amount])
+        credits = sum([t.credit_amount for t in self.transactions if t.credit_amount])
+        
+        # For normal debit balance accounts (assets, expenses)
+        if self.account_type.normal_balance == 'debit':
+            return debits - credits
+        # For normal credit balance accounts (liabilities, equity, revenue)
+        else:
+            return credits - debits
+    
+    def __repr__(self):
+        return f'<Account {self.account_number} - {self.account_name}>'
+
+
+class JournalEntry(db.Model):
+    """Journal Entry Header"""
+    __tablename__ = 'journal_entries'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    entry_number = db.Column(db.String(50), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    reference = db.Column(db.String(100))
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_posted = db.Column(db.Boolean, default=False)
+    posted_at = db.Column(db.DateTime)
+    
+    # Relationships
+    transactions = db.relationship('Transaction', backref='journal_entry', lazy=True, cascade='all, delete-orphan')
+    creator = db.relationship('User', foreign_keys=[created_by])
+    
+    def get_total_debits(self):
+        """Get total debits for this journal entry"""
+        return sum([t.debit_amount for t in self.transactions if t.debit_amount])
+    
+    def get_total_credits(self):
+        """Get total credits for this journal entry"""
+        return sum([t.credit_amount for t in self.transactions if t.credit_amount])
+    
+    def is_balanced(self):
+        """Check if journal entry is balanced"""
+        return self.get_total_debits() == self.get_total_credits()
+    
+    def __repr__(self):
+        return f'<JournalEntry {self.entry_number}>'
+
+
+class Transaction(db.Model):
+    """Individual transaction lines (General Ledger entries)"""
+    __tablename__ = 'transactions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    journal_entry_id = db.Column(db.Integer, db.ForeignKey('journal_entries.id'), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False)
+    debit_amount = db.Column(Numeric(15, 2), default=0)
+    credit_amount = db.Column(Numeric(15, 2), default=0)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Transaction Account:{self.account_id} Dr:{self.debit_amount} Cr:{self.credit_amount}>'
+
+
+# ============================================================================
+# ROLES & PERMISSIONS SYSTEM
+# ============================================================================
+
+class Permission(db.Model):
+    """
+    Granular permissions that can be assigned to roles
+    Examples: view_tenders, create_tenders, approve_tenders, submit_tenders, etc.
+    """
+    __tablename__ = 'permissions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)  # e.g., 'approve_tenders'
+    display_name = db.Column(db.String(100), nullable=False)  # e.g., 'Approve Tenders'
+    description = db.Column(db.String(255))
+    category = db.Column(db.String(50))  # e.g., 'tenders', 'users', 'reports', 'billing'
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Permission {self.name}>'
+
+
+class CompanyRole(db.Model):
+    """
+    Custom roles within each company (replaces the old Role model for company users)
+    Company admins can create custom roles with specific permissions
+    """
+    __tablename__ = 'company_roles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    display_name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(255))
+    is_system_role = db.Column(db.Boolean, default=False)  # True for pre-defined roles
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    company = db.relationship('Company', backref='company_roles')
+    users = db.relationship(
+        'User', 
+        secondary='user_company_roles',
+        primaryjoin='CompanyRole.id==UserCompanyRole.role_id',
+        secondaryjoin='UserCompanyRole.user_id==User.id',
+        backref='company_roles'
+    )
+    
+    def __repr__(self):
+        return f'<CompanyRole {self.display_name} (Company: {self.company_id})>'
+    
+    def has_permission(self, permission_name):
+        """Check if this role has a specific permission"""
+        return db.session.query(RolePermission).join(Permission).filter(
+            RolePermission.role_id == self.id,
+            Permission.name == permission_name,
+            Permission.is_active == True
+        ).first() is not None
+    
+    def get_permissions(self):
+        """Get all permissions for this role"""
+        return db.session.query(Permission).join(RolePermission).filter(
+            RolePermission.role_id == self.id,
+            Permission.is_active == True
+        ).all()
+
+
+class RolePermission(db.Model):
+    """
+    Many-to-many relationship between roles and permissions
+    """
+    __tablename__ = 'role_permissions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    role_id = db.Column(db.Integer, db.ForeignKey('company_roles.id'), nullable=False)
+    permission_id = db.Column(db.Integer, db.ForeignKey('permissions.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    role = db.relationship('CompanyRole', backref='role_permissions')
+    permission = db.relationship('Permission', backref='role_permissions')
+    
+    def __repr__(self):
+        return f'<RolePermission Role:{self.role_id} Permission:{self.permission_id}>'
+
+
+class UserCompanyRole(db.Model):
+    """
+    Many-to-many relationship between users and company roles
+    A user can have multiple roles within their company
+    """
+    __tablename__ = 'user_company_roles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey('company_roles.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'))  # Admin who assigned the role
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('user_role_assignments', overlaps="company_roles,users"), overlaps="company_roles,users")
+    role = db.relationship('CompanyRole', overlaps="company_roles,users")
+    assigner = db.relationship('User', foreign_keys=[assigned_by])
+    
+    def __repr__(self):
+        return f'<UserCompanyRole User:{self.user_id} Role:{self.role_id}>'
+
+
+# ============================================================================
+# TENDER WORKFLOW SYSTEM
+# ============================================================================
+
+class TenderAssignment(db.Model):
+    """
+    Track tender assignments to users
+    Admin assigns tenders to team members
+    """
+    __tablename__ = 'tender_assignments'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    assigned_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    due_date = db.Column(db.DateTime)
+    notes = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Relationships
+    tender = db.relationship('Tender', backref='assignments')
+    assigned_to = db.relationship('User', foreign_keys=[assigned_to_id], backref='tender_assignments')
+    assigned_by = db.relationship('User', foreign_keys=[assigned_by_id])
+    
+    def __repr__(self):
+        return f'<TenderAssignment Tender:{self.tender_id} AssignedTo:{self.assigned_to_id}>'
+
+
+class TenderWorkflow(db.Model):
+    """
+    Track tender workflow status and approvals
+    Statuses: draft, in_progress, pending_approval, approved, rejected, submitted
+    """
+    __tablename__ = 'tender_workflows'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False, unique=True)
+    status = db.Column(db.String(50), default='draft')  # draft, in_progress, pending_approval, approved, rejected, submitted
+    submitted_for_approval_at = db.Column(db.DateTime)
+    submitted_for_approval_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    approved_rejected_at = db.Column(db.DateTime)
+    approved_rejected_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    approval_notes = db.Column(db.Text)
+    submitted_at = db.Column(db.DateTime)  # When actually submitted to client
+    submitted_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    tender = db.relationship('Tender', backref=db.backref('workflow', uselist=False))
+    submitter = db.relationship('User', foreign_keys=[submitted_for_approval_by])
+    approver = db.relationship('User', foreign_keys=[approved_rejected_by])
+    final_submitter = db.relationship('User', foreign_keys=[submitted_by])
+    
+    def __repr__(self):
+        return f'<TenderWorkflow Tender:{self.tender_id} Status:{self.status}>'
+    
+    def can_submit_for_approval(self):
+        """Check if tender can be submitted for approval"""
+        return self.status in ['draft', 'in_progress', 'rejected']
+    
+    def can_approve(self):
+        """Check if tender can be approved/rejected"""
+        return self.status == 'pending_approval'
+    
+    def can_submit(self):
+        """Check if tender can be submitted to client"""
+        return self.status == 'approved'
+
+
+class TenderDocument(db.Model):
+    """
+    Documents uploaded for a tender (RFP docs, responses, supporting docs)
+    """
+    __tablename__ = 'tender_documents'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    document_type = db.Column(db.String(50))  # rfp, response, supporting, financial, technical
+    filename = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    file_size = db.Column(db.Integer)
+    mime_type = db.Column(db.String(100))
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    version = db.Column(db.Integer, default=1)
+    notes = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Relationships (tender backref defined in Tender model)
+    uploaded_by = db.relationship('User')
+    
+    def get_file_size_mb(self):
+        """Get file size in MB"""
+        if self.file_size:
+            return round(self.file_size / (1024 * 1024), 2)
+        return 0.0
+    
+    def __repr__(self):
+        return f'<TenderDocument {self.filename} (Tender:{self.tender_id})>'
+
+
+class TenderComment(db.Model):
+    """
+    Comments and collaboration on tenders
+    """
+    __tablename__ = 'tender_comments'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    comment = db.Column(db.Text, nullable=False)
+    parent_comment_id = db.Column(db.Integer, db.ForeignKey('tender_comments.id'))  # For threaded comments
+    is_internal = db.Column(db.Boolean, default=True)  # Internal vs client-facing
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = db.Column(db.Boolean, default=False)
+    
+    # Relationships
+    tender = db.relationship('Tender', backref='comments')
+    user = db.relationship('User')
+    replies = db.relationship('TenderComment', backref=db.backref('parent', remote_side=[id]))
+    
+    def __repr__(self):
+        return f'<TenderComment Tender:{self.tender_id} User:{self.user_id}>'
+
+
+class TenderActivity(db.Model):
+    """
+    Audit trail of all tender activities
+    """
+    __tablename__ = 'tender_activities'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    tender_id = db.Column(db.Integer, db.ForeignKey('tenders.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    activity_type = db.Column(db.String(50), nullable=False)  # created, assigned, updated, submitted_for_approval, approved, rejected, submitted
+    description = db.Column(db.Text)
+    activity_metadata = db.Column(db.Text)  # JSON data for additional context
+    ip_address = db.Column(db.String(45))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    tender = db.relationship('Tender', backref='activities')
+    user = db.relationship('User')
+    
+    def __repr__(self):
+        return f'<TenderActivity {self.activity_type} Tender:{self.tender_id}>'
+    
+    def get_metadata_dict(self):
+        """Parse metadata JSON"""
+        if self.activity_metadata:
+            try:
+                return json.loads(self.activity_metadata)
+            except:
+                return {}
+        return {}

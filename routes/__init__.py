@@ -1,13 +1,10 @@
-# routes/admin_routes.py or add to your main app.py
+# routes/__init__.py - Admin blueprint for module management
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 from functools import wraps
 from services.module_service import ModuleService
-from models import ModuleSettings, db
-
-# In routes/__init__.py - make sure this line exists:
-app.register_blueprint(reports_bp, url_prefix='/reports')  # ADD URL PREFIX
+from models import db
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 

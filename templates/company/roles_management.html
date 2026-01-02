@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Role Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-user-shield"></i> Role Management</h2>
+        <a href="{{ url_for('create_company_role') }}" class="btn btn-success">
+            <i class="fas fa-plus"></i> Create Custom Role
+        </a>
+    </div>
+
+    <!-- Roles Grid -->
+    <div class="row">
+        {% for role in roles %}
+        <div class="col-md-6 mb-4">
+            <div class="card role-card {{ 'border-primary' if role.is_system_role else '' }}">
+                <div class="card-header {{ 'bg-primary text-white' if role.is_system_role else 'bg-light' }}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            {% if role.is_system_role %}
+                            <i class="fas fa-shield-alt"></i>
+                            {% else %}
+                            <i class="fas fa-user-tag"></i>
+                            {% endif %}
+                            {{ role.display_name }}
+                        </h5>
+                        {% if role.is_system_role %}
+                        <span class="badge badge-light">System Role</span>
+                        {% else %}
+                        <span class="badge badge-success">Custom</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">{{ role.description }}</p>
+                    
+                    <!-- Permission Count -->
+                    <div class="mb-3">
+                        <strong>
+                            <i class="fas fa-key"></i> 
+                            {{ role.role_permissions|length }} Permissions
+                        </strong>
+                    </div>
+
+                    <!-- Permission Pills -->
+                    <div class="permissions-container mb-3">
+                        {% set permissions = role.get_permissions() %}
+                        {% if permissions %}
+                        <div class="permission-pills">
+                            {% for perm in permissions[:10] %}
+                            <span class="badge badge-info permission-pill">
+                                {{ perm.display_name }}
+                            </span>
+                            {% endfor %}
+                            {% if permissions|length > 10 %}
+                            <span class="badge badge-secondary">
+                                +{{ permissions|length - 10 }} more
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">No permissions assigned</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- User Count -->
+                    <div class="mb-3">
+                        <i class="fas fa-users"></i>
+                        <strong>{{ role.users|length }}</strong> users have this role
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="btn-group btn-group-sm" role="group">
+                        <a href="#" 
+                           class="btn btn-info" 
+                           data-toggle="modal" 
+                           data-target="#viewRoleModal{{ role.id }}"
+                           title="View Details">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                        {% if not role.is_system_role %}
+                        <a href="{{ url_for('edit_company_role', role_id=role.id) }}" 
+                           class="btn btn-warning"
+                           title="Edit Permissions">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-footer bg-light text-muted small">
+                    <i class="fas fa-clock"></i> 
+                    Created: {{ role.created_at.strftime('%Y-%m-%d') }}
+                    {% if role.updated_at and role.updated_at != role.created_at %}
+                    | Updated: {{ role.updated_at.strftime('%Y-%m-%d') }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- View Role Modal -->
+        <div class="modal fade" id="viewRoleModal{{ role.id }}" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-user-shield"></i> {{ role.display_name }}
+                        </h5>
+                        <button type="button" class="close text-white" data-dismiss="modal">
+                            <span>&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <h6><strong>Description:</strong></h6>
+                        <p>{{ role.description }}</p>
+
+                        <h6 class="mt-4"><strong>All Permissions ({{ permissions|length }}):</strong></h6>
+                        <div class="row">
+                            {% for perm in permissions %}
+                            <div class="col-md-6 mb-2">
+                                <div class="permission-item">
+                                    <i class="fas fa-check-circle text-success"></i>
+                                    <strong>{{ perm.display_name }}</strong><br>
+                                    <small class="text-muted">{{ perm.description }}</small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if role.users %}
+                        <h6 class="mt-4"><strong>Users with this role ({{ role.users|length }}):</strong></h6>
+                        <ul class="list-group">
+                            {% for user in role.users %}
+                            <li class="list-group-item">
+                                <i class="fas fa-user"></i> 
+                                {{ user.first_name }} {{ user.last_name }}
+                                <span class="text-muted">({{ user.email }})</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        {% if not role.is_system_role %}
+                        <a href="{{ url_for('edit_company_role', role_id=role.id) }}" class="btn btn-primary">
+                            <i class="fas fa-edit"></i> Edit Permissions
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not roles %}
+    <div class="alert alert-info text-center">
+        <i class="fas fa-info-circle fa-3x mb-3"></i>
+        <h5>No Roles Found</h5>
+        <p class="mb-0">Create your first custom role to get started.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.role-card {
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.role-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.permission-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.permission-pill {
+    font-size: 11px;
+    padding: 5px 10px;
+}
+
+.permission-item {
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    border-left: 3px solid #28a745;
+}
+
+.card-footer {
+    border-radius: 0 0 10px 10px !important;
+}
+
+.border-primary {
+    border-width: 2px !important;
+}
+</style>
+{% endblock %}

@@ -14,9 +14,31 @@
         </p>
     </div>
     <div>
+        <!-- Submit for Approval - Only show if tender can be submitted -->
+        {% if tender.workflow and tender.workflow.status in ['draft', 'in_progress', 'rejected'] %}
+        <form method="POST" action="{{ url_for('submit_tender_for_approval', tender_id=tender.id) }}" style="display: inline;">
+            <button type="submit" class="btn btn-primary me-2" onclick="return confirm('Submit this tender for approval?')">
+                <i class="fas fa-paper-plane"></i> Submit for Approval
+            </button>
+        </form>
+        {% elif tender.workflow and tender.workflow.status == 'pending_approval' %}
+        <button class="btn btn-warning me-2" disabled>
+            <i class="fas fa-clock"></i> Pending Approval
+        </button>
+        {% elif tender.workflow and tender.workflow.status == 'approved' %}
+        <button class="btn btn-success me-2" disabled>
+            <i class="fas fa-check"></i> Approved
+        </button>
+        {% endif %}
+        
         <a href="{{ url_for('create_quote', tender_id=tender.id) }}" class="btn btn-success me-2">
             <i class="fas fa-file-invoice-dollar"></i> Create Quote
         </a>
+        {% if user_has_workflow_permission('assign_tenders') %}
+        <a href="{{ url_for('assign_tender', tender_id=tender.id) }}" class="btn btn-info me-2">
+            <i class="fas fa-user-plus"></i> Assign
+        </a>
+        {% endif %}
         <a href="{{ url_for('edit_tender', tender_id=tender.id) }}" class="btn btn-warning me-2">
             <i class="fas fa-edit"></i> Edit
         </a>
@@ -55,14 +77,16 @@
                             {% endif %}
                         </button>
                     </li>
+                    {% if is_company_admin %}
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="audit-trail-tab" data-bs-toggle="tab" data-bs-target="#audit-trail" type="button" role="tab" aria-controls="audit-trail" aria-selected="false">
                             <i class="fas fa-scroll"></i> Audit Trail
-                            {% if tender.history_entries %}
-                            <span class="badge bg-secondary ms-1">{{ tender.history_entries|length }}</span>
+                            {% if tender_activities %}
+                            <span class="badge bg-secondary ms-1">{{ tender_activities|length }}</span>
                             {% endif %}
                         </button>
                     </li>
+                    {% endif %}
                 </ul>
             </div>
             <div class="card-body">
@@ -92,6 +116,47 @@
                                 </span>
                             </div>
                         </div>
+                        
+                        <!-- Assignment Information -->
+                        {% set active_assignment = tender.assignments|selectattr('is_active', 'equalto', true)|first %}
+                        {% if active_assignment %}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <strong>Assigned To:</strong><br>
+                                <i class="fas fa-user text-primary"></i> {{ active_assignment.assigned_to.first_name }} {{ active_assignment.assigned_to.last_name }}
+                                {% if active_assignment.assigned_to.email %}
+                                <br><small class="text-muted">{{ active_assignment.assigned_to.email }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Assigned By:</strong><br>
+                                <i class="fas fa-user-shield text-success"></i> {{ active_assignment.assigned_by.first_name }} {{ active_assignment.assigned_by.last_name }}
+                                <br><small class="text-muted">{{ active_assignment.assigned_at.strftime('%B %d, %Y') }}</small>
+                            </div>
+                        </div>
+                        {% if active_assignment.due_date %}
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <strong>Due Date:</strong><br>
+                                <i class="fas fa-calendar-alt text-warning"></i> {{ active_assignment.due_date.strftime('%B %d, %Y') }}
+                                {% set now = tender.created_at.__class__.now() %}
+                                {% if active_assignment.due_date < now %}
+                                <span class="badge bg-danger ms-2">Overdue</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if active_assignment.notes %}
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <strong>Assignment Notes:</strong><br>
+                                <div class="alert alert-info mb-0">
+                                    <i class="fas fa-info-circle"></i> {{ active_assignment.notes }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endif %}
                         
                         {% if tender.submission_deadline or tender.opening_date %}
                         <div class="row mb-3">
@@ -181,6 +246,7 @@
                     </div>
 
                     <!-- Audit Trail Tab Content -->
+                    {% if is_company_admin %}
                     <div class="tab-pane fade" id="audit-trail" role="tabpanel" aria-labelledby="audit-trail-tab">
                         <div class="terminal-container">
                             <div class="terminal-header">
@@ -200,46 +266,24 @@
                                     <span class="terminal-command">tail -f /var/log/tender/{{ tender.reference_number }}.log</span>
                                 </div>
                                 
-                                {% if tender.history_entries %}
-                                    {% for history in tender.history_entries %}
-                                    <div class="terminal-log-entry" data-action-type="{{ history.action_type }}">
-                                        <span class="log-timestamp">[{{ history.created_at.strftime('%Y-%m-%d %H:%M:%S') }}]</span>
-                                        <span class="log-level log-level-{{ history.action_type.split('_')[0].lower() }}">
-                                            {% if history.action_type.startswith('TENDER_CREATED') %}INFO{% endif %}
-                                            {% if history.action_type.startswith('TENDER_UPDATED') %}WARN{% endif %}
-                                            {% if history.action_type.startswith('TENDER_DELETED') %}ERROR{% endif %}
-                                            {% if history.action_type.startswith('NOTE_') %}INFO{% endif %}
-                                            {% if history.action_type.startswith('DOCUMENT_') %}INFO{% endif %}
+                                {% if tender_activities %}
+                                    {% for activity in tender_activities %}
+                                    <div class="terminal-log-entry" data-action-type="{{ activity.activity_type }}">
+                                        <span class="log-timestamp">[{{ activity.created_at.strftime('%Y-%m-%d %H:%M:%S') }}]</span>
+                                        <span class="log-level log-level-{{ 'info' if activity.activity_type in ['created', 'assigned', 'submitted_for_approval'] else 'warn' if activity.activity_type in ['updated', 'edited'] else 'error' if activity.activity_type in ['deleted', 'rejected'] else 'success' if activity.activity_type == 'approved' else 'info' }}">
+                                            {% if activity.activity_type in ['created', 'assigned', 'submitted_for_approval'] %}INFO{% endif %}
+                                            {% if activity.activity_type in ['updated', 'edited'] %}WARN{% endif %}
+                                            {% if activity.activity_type in ['deleted', 'rejected'] %}ERROR{% endif %}
+                                            {% if activity.activity_type == 'approved' %}SUCCESS{% endif %}
+                                            {% if activity.activity_type.startswith('document_') %}INFO{% endif %}
                                         </span>
-                                        <span class="log-user">[{{ history.performed_by.username if history.performed_by else 'system' }}]</span>
-                                        <span class="log-action">{{ history.action_type }}</span>
-                                        <span class="log-message">{{ history.action_description }}</span>
-                                        {% if history.ip_address %}
-                                        <span class="log-ip">from {{ history.ip_address }}</span>
+                                        <span class="log-user">[{{ activity.user.username if activity.user else 'system' }}]</span>
+                                        <span class="log-action">{{ activity.activity_type.upper().replace('_', ' ') }}</span>
+                                        <span class="log-message">{{ activity.description }}</span>
+                                        {% if activity.ip_address %}
+                                        <span class="log-ip">from {{ activity.ip_address }}</span>
                                         {% endif %}
                                     </div>
-                                    
-                                    {% if history.details %}
-                                    <div class="terminal-details">
-                                        <span class="details-marker">├─ Details:</span>
-                                        {% for key, value in history.details.items() %}
-                                        <div class="detail-line">
-                                            <span class="details-marker">│  </span>
-                                            <span class="detail-key">{{ key }}:</span>
-                                            <span class="detail-value">
-                                                {% if value is string and value|length > 100 %}
-                                                    {{ value[:100] }}...
-                                                {% else %}
-                                                    {{ value }}
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                        {% endfor %}
-                                        <div class="detail-separator">
-                                            <span class="details-marker">└─</span>
-                                        </div>
-                                    </div>
-                                    {% endif %}
                                     {% endfor %}
                                 {% else %}
                                     <div class="terminal-log-entry">
@@ -262,15 +306,15 @@
                                 <div class="terminal-stats">
                                     <span class="stat-item">
                                         <i class="fas fa-list"></i> 
-                                        {{ tender.history_entries|length if tender.history_entries else 0 }} entries
+                                        {{ tender_activities|length if tender_activities else 0 }} entries
                                     </span>
                                     <span class="stat-item">
                                         <i class="fas fa-clock"></i> 
-                                        Last: {{ tender.history_entries[0].created_at.strftime('%H:%M:%S') if tender.history_entries else 'N/A' }}
+                                        Last: {{ tender_activities[0].created_at.strftime('%H:%M:%S') if tender_activities else 'N/A' }}
                                     </span>
                                     <span class="stat-item">
                                         <i class="fas fa-user"></i> 
-                                        {{ tender.history_entries|map(attribute='performed_by.username')|unique|list|length if tender.history_entries else 0 }} users
+                                        {{ tender_activities|map(attribute='user.username')|unique|list|length if tender_activities else 0 }} users
                                     </span>
                                 </div>
                                 <div class="terminal-controls-right">
@@ -287,6 +331,7 @@
                             </div>
                         </div>
                     </div>
+                    {% endif %}
                 </div>  
             </div>
         </div>

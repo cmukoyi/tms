@@ -491,3 +491,51 @@ def has_all_permissions(*permissions):
         return False
     user_id = session['user_id']
     return all(RoleService.check_user_permission(user_id, perm) for perm in permissions)
+
+
+# ============================================================================
+# WORKFLOW PERMISSION HELPERS
+# ============================================================================
+
+def user_has_workflow_permission(permission_name):
+    """
+    Check if current user has a specific workflow permission
+    Uses the new PermissionsService
+    """
+    if 'user_id' not in session:
+        return False
+    
+    # Super admins always have permission
+    if session.get('is_super_admin'):
+        return True
+    
+    from services.permissions_service import PermissionsService
+    return PermissionsService.user_has_permission(
+        user_id=session['user_id'],
+        permission_name=permission_name,
+        company_id=session.get('company_id')
+    )
+
+
+def get_user_workflow_permissions():
+    """Get all workflow permissions for current user"""
+    if 'user_id' not in session:
+        return []
+    
+    from services.permissions_service import PermissionsService
+    return PermissionsService.get_user_permissions(
+        user_id=session['user_id'],
+        company_id=session.get('company_id')
+    )
+
+
+def get_user_workflow_roles():
+    """Get all roles for current user"""
+    if 'user_id' not in session:
+        return []
+    
+    from services.permissions_service import PermissionsService
+    return PermissionsService.get_user_roles(
+        user_id=session['user_id'],
+        company_id=session.get('company_id')
+    )

@@ -2,277 +2,70 @@
 {% block title %}{{ report_title }} - Tender Management System{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2>{{ report_title }}</h2>
-        <p class="text-muted mb-0">{{ report_description }}</p>
-        {% if not is_super_admin and user.company %}
-        <small class="text-muted">
-            <i class="fas fa-building"></i> {{ user.company.name }}
-        </small>
-        {% endif %}
-    </div>
-    <div class="d-flex gap-2">
-        <!-- Export Buttons -->
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>{{ report_title }}</h2>
+            <p class="text-muted">{{ report_description }}</p>
+        </div>
         <div class="btn-group">
-            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="fas fa-download"></i> Export
-            </button>
-            <ul class="dropdown-menu">
-                <li>
-                    <a class="dropdown-item" href="?export=pdf">
-                        <i class="fas fa-file-pdf text-danger me-2"></i> Export to PDF
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item" href="?export=excel">
-                        <i class="fas fa-file-excel text-success me-2"></i> Export to Excel
-                    </a>
-                </li>
-            </ul>
-        </div>
-        <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left"></i> Back to Reports
-        </a>
-    </div>
-</div>
-
-<!-- Summary Cards -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card border-primary">
-            <div class="card-body text-center">
-                <i class="fas fa-clipboard-list fa-2x text-primary mb-2"></i>
-                <h4 class="text-primary">
-                    {% if grouped_by_category %}
-                        {% set total_tenders = namespace(count=0) %}
-                        {% for category_tenders in categories.values() %}
-                            {% set total_tenders.count = total_tenders.count + (category_tenders|length) %}
-                        {% endfor %}
-                        {{ total_tenders.count }}
-                    {% else %}
-                        {{ tenders|length }}
-                    {% endif %}
-                </h4>
-                <p class="text-muted mb-0">
-                    {% if grouped_by_category %}
-                        Total Tenders
-                    {% else %}
-                        Total Tenders
-                    {% endif %}
-                </p>
-            </div>
-        </div>
-    </div>
-    
-    {% if show_overdue_info %}
-    <div class="col-md-3">
-        <div class="card border-danger">
-            <div class="card-body text-center">
-                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
-                <h4 class="text-danger">{{ tenders|length }}</h4>
-                <p class="text-muted mb-0">Overdue Tenders</p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-    
-    <div class="col-md-3">
-        <div class="card border-info">
-            <div class="card-body text-center">
-                <i class="fas fa-calendar fa-2x text-info mb-2"></i>
-                <h4 class="text-info">{{ current_date.strftime('%b %Y') }}</h4>
-                <p class="text-muted mb-0">Report Month</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-success">
-            <div class="card-body text-center">
-                <i class="fas fa-clock fa-2x text-success mb-2"></i>
-                <h4 class="text-success">{{ current_date.strftime('%H:%M') }}</h4>
-                <p class="text-muted mb-0">Generated Time</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% if grouped_by_category %}
-<!-- Tenders by Category View -->
-{% for category_name, category_tenders in categories.items() %}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">
-            <i class="fas fa-tag"></i> {{ category_name }}
-            <span class="badge bg-primary ms-2">{{ category_tenders|length }}</span>
-        </h5>
-        <small class="text-muted">{{ category_tenders|length }} tender(s)</small>
-    </div>
-    <div class="card-body">
-        {% if category_tenders %}
-        <div class="table-responsive">
-            {% include 'components/tender_list_table_1.html' %}
-        </div>
-        {% else %}
-        <div class="text-center py-3">
-            <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
-            <p class="text-muted">No tenders in this category</p>
-        </div>
-        {% endif %}
-    </div>
-</div>
-{% endfor %}
-
-{% else %}
-<!-- Regular Tender List View -->
-<div class="card">
-    <div class="card-header">
-        <h5 class="mb-0">
-            <i class="fas fa-list"></i> {{ report_title }}
-        </h5>
-    </div>
-    <div class="card-body">
-        {% if tenders %}
-        <div class="table-responsive">
-            {% include 'components/tender_list_table_2.html' %}
-        </div>
-        
-        <!-- Pagination if needed -->
-        {% if tenders|length > 50 %}
-        <nav aria-label="Tender pagination">
-            <ul class="pagination justify-content-center">
-                <li class="page-item disabled">
-                    <span class="page-link">Showing all {{ tenders|length }} results</span>
-                </li>
-            </ul>
-        </nav>
-        {% endif %}
-        
-        {% else %}
-        <div class="text-center py-5">
-            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-            <h5 class="text-muted">No Tenders Found</h5>
-            <p class="text-muted">{{ report_description }} - No results match the criteria.</p>
-            <a href="{{ url_for('create_tender') }}" class="btn btn-primary">
-                <i class="fas fa-plus"></i> Create First Tender
+            <a href="{{ request.path }}?export=excel" class="btn btn-success">
+                <i class="fas fa-file-excel"></i> Export Excel
+            </a>
+            <a href="{{ request.path }}?export=pdf" class="btn btn-danger">
+                <i class="fas fa-file-pdf"></i> Export PDF
             </a>
         </div>
-        {% endif %}
     </div>
-</div>
-{% endif %}
 
-<!-- Report Summary -->
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="card border-light">
-            <div class="card-body">
-                <h6 class="card-title">
-                    <i class="fas fa-info-circle"></i> Report Summary
-                </h6>
-                <ul class="list-unstyled mb-0">
-                    <li><strong>Report Type:</strong> {{ report_title }}</li>
-                    <li><strong>Generated:</strong> {{ current_date.strftime('%Y-%m-%d %H:%M:%S') }}</li>
-                    <li><strong>Total Records:</strong> 
-                        {% if grouped_by_category %}
-                            {% set total_tenders = namespace(count=0) %}
-                            {% for category_tenders in categories.values() %}
-                                {% set total_tenders.count = total_tenders.count + (category_tenders|length) %}
-                            {% endfor %}
-                            {{ total_tenders.count }} tenders in {{ categories|length }} categories
-                        {% else %}
-                            {{ tenders|length }} tenders
-                        {% endif %}
-                    </li>
-                    {% if not is_super_admin %}
-                    <li><strong>Company:</strong> {{ user.company.name }}</li>
-                    {% endif %}
-                </ul>
+    {% if tenders %}
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Reference</th>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th>Value</th>
+                            <th>Submission Date</th>
+                            <th>Company</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tender in tenders %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('view_tender', tender_id=tender.id) }}">
+                                    {{ tender.reference_number }}
+                                </a>
+                            </td>
+                            <td>{{ tender.title }}</td>
+                            <td>
+                                <span class="badge" style="background-color: {{ tender.status.color if tender.status else '#6c757d' }};">
+                                    {{ tender.status.name if tender.status else 'Unknown' }}
+                                </span>
+                            </td>
+                            <td>R {{ "{:,.2f}".format(tender.estimated_value) if tender.estimated_value else 'N/A' }}</td>
+                            <td>{{ tender.submission_deadline.strftime('%Y-%m-%d') if tender.submission_deadline else 'N/A' }}</td>
+                            <td>{{ tender.company.name if tender.company else 'N/A' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer">
+            <div class="text-muted">
+                Total: {{ tenders|length }} tender(s)
             </div>
         </div>
     </div>
-    
-    <div class="col-md-6">
-        <div class="card border-light">
-            <div class="card-body">
-                <h6 class="card-title">
-                    <i class="fas fa-download"></i> Export Options
-                </h6>
-                <div class="d-grid gap-2">
-                    <a href="?export=pdf" class="btn btn-outline-danger">
-                        <i class="fas fa-file-pdf"></i> Download PDF Report
-                    </a>
-                    <a href="?export=excel" class="btn btn-outline-success">
-                        <i class="fas fa-file-excel"></i> Download Excel Report
-                    </a>
-                </div>
-            </div>
-        </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> No tenders found for this report.
     </div>
+    {% endif %}
 </div>
-
-<style>
-.border-primary { border-color: #007bff !important; }
-.border-success { border-color: #28a745 !important; }
-.border-info { border-color: #17a2b8 !important; }
-.border-warning { border-color: #ffc107 !important; }
-.border-danger { border-color: #dc3545 !important; }
-
-.card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    border: 1px solid rgba(0, 0, 0, 0.125);
-}
-
-.card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.table td {
-    vertical-align: middle;
-}
-
-.table-danger {
-    background-color: rgba(220, 53, 69, 0.1);
-}
-
-.btn-group-sm > .btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-}
-
-.badge {
-    font-size: 0.75em;
-}
-
-code {
-    color: #e83e8c;
-    background-color: #f8f9fa;
-    padding: 0.2rem 0.4rem;
-    border-radius: 0.25rem;
-}
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-refresh functionality (optional)
-    const refreshBtn = document.createElement('button');
-    refreshBtn.className = 'btn btn-outline-info btn-sm';
-    refreshBtn.innerHTML = '<i class="fas fa-sync"></i> Refresh';
-    refreshBtn.onclick = () => window.location.reload();
-    
-    // Add refresh button to header if needed
-    const headerDiv = document.querySelector('.d-flex.justify-content-between.align-items-center .d-flex.gap-2');
-    if (headerDiv) {
-        headerDiv.insertBefore(refreshBtn, headerDiv.firstChild);
-    }
-    
-    // Highlight overdue rows
-    const overdueRows = document.querySelectorAll('.table-danger');
-    overdueRows.forEach(row => {
-        row.style.transition = 'background-color 0.3s ease';
-    });
-});
-</script>
 {% endblock %}

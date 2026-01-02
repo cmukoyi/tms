@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Accounting Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="fas fa-calculator me-2"></i>Accounting Dashboard</h2>
+            <p class="text-muted">Financial overview and key metrics</p>
+        </div>
+    </div>
+
+    <!-- Financial Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-arrow-up me-2"></i>Revenue</h6>
+                    <h3 class="mb-0">R {{ "{:,.2f}".format(revenue) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-arrow-down me-2"></i>Expenses</h6>
+                    <h3 class="mb-0">R {{ "{:,.2f}".format(expenses) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card {% if net_income >= 0 %}bg-primary{% else %}bg-warning{% endif %} text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-chart-line me-2"></i>Net Income</h6>
+                    <h3 class="mb-0">R {{ "{:,.2f}".format(net_income) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-wallet me-2"></i>Total Assets</h6>
+                    <h3 class="mb-0">R {{ "{:,.2f}".format(assets) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Balance Sheet Summary -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-coins me-2"></i>Assets</h5>
+                </div>
+                <div class="card-body">
+                    <h3>R {{ "{:,.2f}".format(assets) }}</h3>
+                    {% for name, data in balances_by_type.items() %}
+                        {% if data.category == 'asset' %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>{{ name }}</span>
+                            <strong>R {{ "{:,.2f}".format(data.total) }}</strong>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-file-invoice me-2"></i>Liabilities</h5>
+                </div>
+                <div class="card-body">
+                    <h3>R {{ "{:,.2f}".format(liabilities) }}</h3>
+                    {% for name, data in balances_by_type.items() %}
+                        {% if data.category == 'liability' %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>{{ name }}</span>
+                            <strong>R {{ "{:,.2f}".format(data.total) }}</strong>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Equity</h5>
+                </div>
+                <div class="card-body">
+                    <h3>R {{ "{:,.2f}".format(equity) }}</h3>
+                    {% for name, data in balances_by_type.items() %}
+                        {% if data.category == 'equity' %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>{{ name }}</span>
+                            <strong>R {{ "{:,.2f}".format(data.total) }}</strong>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Journal Entries -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-book me-2"></i>Recent Journal Entries</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_entries %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Entry #</th>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Debits</th>
+                                    <th>Credits</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in recent_entries %}
+                                <tr>
+                                    <td><a href="{{ url_for('journal_entries') }}">{{ entry.entry_number }}</a></td>
+                                    <td>{{ entry.entry_date.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ entry.description }}</td>
+                                    <td>R {{ "{:,.2f}".format(entry.get_total_debits()) }}</td>
+                                    <td>R {{ "{:,.2f}".format(entry.get_total_credits()) }}</td>
+                                    <td>
+                                        {% if entry.is_posted %}
+                                        <span class="badge bg-success">Posted</span>
+                                        {% else %}
+                                        <span class="badge bg-warning">Draft</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted">No journal entries yet.</p>
+                    {% endif %}
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('create_journal_entry') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>New Journal Entry
+                        </a>
+                        <a href="{{ url_for('journal_entries') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-list me-2"></i>View All
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-link me-2"></i>Quick Links</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('chart_of_accounts') }}" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-list d-block mb-2" style="font-size: 2rem;"></i>
+                                Chart of Accounts
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('create_journal_entry') }}" class="btn btn-outline-success w-100">
+                                <i class="fas fa-plus-circle d-block mb-2" style="font-size: 2rem;"></i>
+                                New Entry
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('income_statement') }}" class="btn btn-outline-info w-100">
+                                <i class="fas fa-chart-line d-block mb-2" style="font-size: 2rem;"></i>
+                                Income Statement
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('balance_sheet') }}" class="btn btn-outline-warning w-100">
+                                <i class="fas fa-balance-scale d-block mb-2" style="font-size: 2rem;"></i>
+                                Balance Sheet
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

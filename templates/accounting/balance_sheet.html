@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Balance Sheet{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="card">
+        <div class="card-header bg-info text-white text-center">
+            <h3 class="mb-0">Balance Sheet</h3>
+            <p class="mb-0">As of {{ report_date.strftime('%B %d, %Y') if report_date else 'Current Date' }}</p>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5 class="mb-3"><i class="fas fa-coins me-2 text-primary"></i>Assets</h5>
+                    <table class="table">
+                        {% for item in assets %}
+                        <tr>
+                            <td>{{ item.account.account_name }}</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(item.balance) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="table-active fw-bold">
+                            <td>Total Assets</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(total_assets) }}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="col-md-6">
+                    <h5 class="mb-3"><i class="fas fa-file-invoice me-2 text-warning"></i>Liabilities</h5>
+                    <table class="table">
+                        {% for item in liabilities %}
+                        <tr>
+                            <td>{{ item.account.account_name }}</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(item.balance) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="table-active fw-bold">
+                            <td>Total Liabilities</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(total_liabilities) }}</td>
+                        </tr>
+                    </table>
+
+                    <h5 class="mb-3 mt-4"><i class="fas fa-balance-scale me-2 text-success"></i>Equity</h5>
+                    <table class="table">
+                        {% for item in equity_accounts %}
+                        <tr>
+                            <td>{{ item.account.account_name }}</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(item.balance) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="table-active fw-bold">
+                            <td>Total Equity</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(total_equity) }}</td>
+                        </tr>
+                    </table>
+
+                    <table class="table table-info mt-3">
+                        <tr class="fs-5 fw-bold">
+                            <td>Total Liabilities + Equity</td>
+                            <td class="text-end">R {{ "{:,.2f}".format(total_liabilities + total_equity) }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <a href="{{ url_for('accounting_dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+                </a>
+                <button class="btn btn-primary" onclick="window.print()">
+                    <i class="fas fa-print me-2"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
