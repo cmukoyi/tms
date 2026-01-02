@@ -119,7 +119,7 @@ stages:
                       echo "=== Updating dependencies ===" && \
                       cd /var/www/tms && \
                       [ ! -d "venv" ] && echo "Creating virtualenv..." && sudo -u www-data python3 -m venv venv || true && \
-                      sudo -u www-data bash -c 'source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt' && \
+                      sudo -H -u www-data bash -c 'source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt' && \
                       echo "=== Setting permissions ===" && \
                       sudo chown -R www-data:www-data /var/www/tms && \
                       sudo chmod -R 755 /var/www/tms && \
