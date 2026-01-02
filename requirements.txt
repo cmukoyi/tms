@@ -28,8 +28,16 @@ XlsxWriter==3.2.3
 # Timezone Support
 tzlocal==5.3.1
 
-# Production WSGI Server (for PythonAnywhere)
-gunicorn==21.2.0
-
+# Job Scheduling & Background Tasks
 APScheduler==3.10.4
-openai>=0.27.0
+
+# AI & Chatbot Integration
+openai>=1.0.0
+
+# Web Scraping (if needed for municipal tenders)
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Production WSGI Server
+gunicorn==21.2.0
