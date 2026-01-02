@@ -14,13 +14,13 @@ import sys
 if sys.version_info >= (3, 9):
     from zoneinfo import ZoneInfo
 else:
-    import pytz
-    # Create ZoneInfo compatibility wrapper for older Python
-    class ZoneInfo:
-        def __init__(self, key):
-            self.key = key
-        def __call__(self):
-            return pytz.timezone(self.key)
+    try:
+        from backports.zoneinfo import ZoneInfo
+    except ImportError:
+        # Fallback to pytz wrapper if backports.zoneinfo not available
+        import pytz
+        def ZoneInfo(key):
+            return pytz.timezone(key)
 
 import tzlocal  # pip install tzlocal
 
