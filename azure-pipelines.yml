@@ -1,5 +1,4 @@
 # Azure DevOps CI/CD Pipeline for TMS Flask Application
-# Deploys to Staging on push to main, then to Production after approval
 
 trigger:
   branches:
