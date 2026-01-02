@@ -493,23 +493,15 @@ If the user asks about specific data, provide concrete numbers from the context.
             
             if openai:
                 try:
-                    # Use new API (openai >= 1.0.0)
-                    from openai import OpenAI
-                    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-                    response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": "You are TenderBot, a helpful AI assistant for tender management."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        max_tokens=250,
-                        temperature=0.7
-                    )
-                    ai_response = response.choices[0].message.content.strip()
-                except ImportError:
-                    # Fallback for old API (openai < 1.0.0) - only if OpenAI class doesn't exist
-                    try:
-                        response = openai.ChatCompletion.create(
+                    # Check OpenAI version and use appropriate API
+                    import openai as openai_module
+                    openai_version = getattr(openai_module, '__version__', '0.0.0')
+                    
+                    # OpenAI v1.0.0+ uses new API
+                    if hasattr(openai_module, 'OpenAI'):
+                        from openai import OpenAI
+                        client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+                        response = client.chat.completions.create(
                             model="gpt-3.5-turbo",
                             messages=[
                                 {"role": "system", "content": "You are TenderBot, a helpful AI assistant for tender management."},
@@ -519,9 +511,16 @@ If the user asks about specific data, provide concrete numbers from the context.
                             temperature=0.7
                         )
                         ai_response = response.choices[0].message.content.strip()
-                    except Exception as old_api_error:
-                        logger.error(f"Old OpenAI API error: {str(old_api_error)}")
-                        raise
+                    else:
+                        # OpenAI v0.x uses old API (Completion.create)
+                        response = openai.Completion.create(
+                            engine="text-davinci-003",
+                            prompt=f"You are TenderBot, a helpful AI assistant for tender management.\n\nUser: {prompt}\n\nAssistant:",
+                            max_tokens=250,
+                            temperature=0.7
+                        )
+                        ai_response = response.choices[0].text.strip()
+                
                 except Exception as api_error:
                     logger.error(f"OpenAI API error: {str(api_error)}")
                     raise
