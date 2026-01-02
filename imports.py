@@ -98,7 +98,13 @@ from apscheduler.triggers.cron import CronTrigger  # Add this line
 
 
 from sqlalchemy import text, func
-import openai  # pip install openai
+
+# Optional: OpenAI for AI-powered chatbot (requires Python 3.7+)
+try:
+    import openai
+except ImportError:
+    openai = None  # Will use rule-based chatbot instead
+
 import logging
 
 
