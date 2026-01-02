@@ -1,45 +1,57 @@
-# Clean Requirements.txt for PythonAnywhere Deployment
+# Clean Requirements.txt for Deployment
 # Tender Management System
+# Compatible with Python 3.6+
 
-# Core Flask Framework
-Flask==3.1.1
-Werkzeug==3.1.3
+# Core Flask Framework (Python 3.6 compatible versions)
+Flask==2.0.3
+Werkzeug==2.0.3
 
-# Database & ORM
-SQLAlchemy==2.0.36
-Flask-SQLAlchemy==3.1.1
-PyMySQL==1.1.1
+# Database & ORM (Python 3.6 compatible versions)
+SQLAlchemy==1.4.54
+Flask-SQLAlchemy==2.5.1
+PyMySQL==1.0.2
 
 # Database Migrations
-Flask-Migrate==4.1.0
+Flask-Migrate==3.1.0
+alembic==1.7.7
 
 # Authentication
-Flask-Login==0.6.3
+Flask-Login==0.5.0
 
 # Configuration
-python-dotenv==1.1.0
+python-dotenv==0.20.0
 
-# PDF Generation
-reportlab==4.4.1
+# PDF Generation (Python 3.6 compatible)
+reportlab==3.6.12
 
 # Excel File Generation
-XlsxWriter==3.2.3
+XlsxWriter==3.0.3
 
-# Timezone Support
-tzlocal==5.3.1
+# Timezone Support (Python 3.6 compatibility)
+tzlocal==4.3
 pytz==2024.1
-backports.zoneinfo>=0.2.1;python_version<"3.9"
+backports.zoneinfo==0.2.1;python_version<"3.9"
 
-# Job Scheduling & Background Tasks
-APScheduler==3.10.4
+# Job Scheduling & Background Tasks (Python 3.6 compatible)
+APScheduler==3.9.1
 
-# AI & Chatbot Integration
-openai>=1.0.0
+# AI & Chatbot Integration (Python 3.6 compatible)
+openai==0.28.1
 
-# Web Scraping (if needed for municipal tenders)
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
+# Web Scraping (Python 3.6 compatible)
+requests==2.27.1
+beautifulsoup4==4.11.1
+lxml==4.9.1
 
-# Production WSGI Server
-gunicorn==21.2.0
+# Production WSGI Server (Python 3.6 compatible)
+gunicorn==20.1.0
+
+# Additional dependencies
+MarkupSafe==2.0.1
+Jinja2==3.0.3
+itsdangerous==2.0.1
+click==8.0.4
+greenlet==1.1.3
+Mako==1.1.6
+importlib-resources==5.4.0
+dataclasses==0.8;python_version<"3.7"
