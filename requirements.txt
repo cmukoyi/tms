@@ -27,6 +27,8 @@ XlsxWriter==3.2.3
 
 # Timezone Support
 tzlocal==5.3.1
+pytz==2024.1
+backports.zoneinfo>=0.2.1;python_version<"3.9"
 
 # Job Scheduling & Background Tasks
 APScheduler==3.10.4

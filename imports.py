@@ -8,7 +8,20 @@ import calendar
 from decimal import Decimal
 from datetime import datetime, timedelta
 from functools import wraps
-from zoneinfo import ZoneInfo
+import sys
+
+# Python 3.9+ uses zoneinfo, older versions use pytz
+if sys.version_info >= (3, 9):
+    from zoneinfo import ZoneInfo
+else:
+    import pytz
+    # Create ZoneInfo compatibility wrapper for older Python
+    class ZoneInfo:
+        def __init__(self, key):
+            self.key = key
+        def __call__(self):
+            return pytz.timezone(self.key)
+
 import tzlocal  # pip install tzlocal
 
 # MySQL
